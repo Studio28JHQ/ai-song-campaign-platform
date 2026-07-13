@@ -50,6 +50,15 @@ See `PROJECT_MANIFEST.md` for the full stack. Key decisions:
 - **Prisma + Supabase** for a single, managed relational data store — no need for polyglot persistence at this scale.
 - **Repository Pattern + Dependency Injection** to keep domain/application code decoupled from Prisma/Supabase specifics, without introducing a heavier framework.
 
+## Lead Persistence Flow
+
+The first concrete Repository Pattern implementation lives at `src/infrastructure/persistence/prisma/lead/`:
+
+- **`PrismaLeadRepository`** implements the domain's `LeadRepository` interface (`src/domain/lead/repositories/LeadRepository.ts`) — the application layer depends only on that interface and is unaware a Prisma implementation exists.
+- **`LeadMapper`** translates between the Prisma `Lead` model and the `Lead` domain entity in both directions. No Prisma type is ever returned from the repository — every method returns a domain `Lead` (or `null`/`boolean`). Because the persistence-layer `LeadStatus` enum is more granular than the domain's (it also encodes lyrics/song sub-states that don't have their own aggregates yet), the mapper collapses every "in progress" persistence value to the domain's single `GENERATING` status on read, and rejects writing the domain's `FAILED` status outright rather than silently mis-storing it as a different persistence value — see the mapper's source comments and `docs/Architecture/Domain_Model.md`.
+- **`src/infrastructure/persistence/prisma/client.ts`** holds a single, `globalThis`-cached `PrismaClient`, constructed with the `@prisma/adapter-pg` driver adapter (required by the generated client in this Prisma version) using `appConfig.database.url` — never a direct `process.env` read.
+- Prisma exceptions (`PrismaClientKnownRequestError`, etc.) are caught inside the repository and re-thrown as the shared error types from `src/shared/errors` (a unique-constraint violation on email becomes a `BusinessRuleError`; everything else becomes a `DatabaseError`). No Prisma-specific exception crosses the repository boundary.
+
 ## Why This Project Intentionally Avoids
 
 - **Microservices** — the campaign has a fixed, modest scale (≤3,000 songs, one month). Splitting into services would add deployment, networking, and operational overhead with no corresponding benefit.
