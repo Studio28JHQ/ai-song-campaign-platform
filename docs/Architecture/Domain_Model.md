@@ -29,6 +29,29 @@ REGISTERED ──▶ GENERATING ──▶ COMPLETED
 
 **Relationships** — One Lead has one associated email (unique). One Lead has one Campaign context (referenced by `campaignId`; the Campaign's maximum-attempts value is supplied to the Lead rather than looked up by it, keeping the two aggregates decoupled). One Lead has many GenerationAttempts. One Lead has, at most, one accepted Lyrics and one final Song. The persistence contract for this aggregate is `LeadRepository` (`src/domain/lead/repositories/LeadRepository.ts`) — interface only, no implementation yet.
 
+## Application Layer — Lead
+
+The Application layer (`src/application/lead/`) orchestrates the `Lead` aggregate. It contains use cases, DTOs, and small application-level contracts — never persistence, HTTP, or infrastructure validation. It depends on the domain layer (entities, value objects, `LeadRepository`); the domain layer never depends back on it.
+
+**Responsibilities of this layer:**
+
+- Translate boundary-facing DTOs (`CreateLeadRequest`) into calls against the domain (`Lead.create`) and the `LeadRepository` contract.
+- Enforce cross-cutting rules that need a repository lookup — the domain entity alone cannot know whether an email is already registered (that requires a query), so the use case checks `LeadRepository.existsByEmail` before creating anything.
+- Supply configuration the domain needs but shouldn't reach for itself. `Lead.create` requires a `maxAttempts` value; the use case obtains it from a small `LeadCampaignConfig` port (`getMaxLyricAttempts()`) rather than importing `@/config` directly, so the use case stays testable with a fake and swappable without touching this layer.
+- Return DTOs (`CreateLeadResponse`, carrying a `LeadSnapshot`) — never the `Lead` entity itself — so nothing outside the application layer can call domain methods directly.
+
+### CreateLeadUseCase
+
+`src/application/lead/use-cases/CreateLeadUseCase.ts`. Given a `CreateLeadRequest`:
+
+1. Validates the email's structural format via the `Email` value object (fails fast, before any repository call).
+2. Calls `LeadRepository.existsByEmail` — if the email is already registered, the use case rejects with a business-rule error. This is the enforcement point for "one email address can participate only once" at the application level (the database-level uniqueness constraint in `docs/Architecture/Database_Model.md` is the final backstop).
+3. Reads the campaign's maximum lyric attempts from `LeadCampaignConfig` and passes it to `Lead.create`, so a new lead's `remainingAttempts` — and its initial `status` of `REGISTERED` — come entirely from the domain entity's own construction logic, not from ad hoc application code.
+4. Persists the new `Lead` via `LeadRepository.create`.
+5. Returns a `CreateLeadResponse` wrapping the persisted lead's snapshot.
+
+No Prisma/Supabase repository, API route, controller, or UI exists yet — `LeadRepository` remains an interface, satisfied only by a test double until the Infrastructure layer implements it.
+
 ## Song
 
 **Purpose** — Represents the final, generated audio deliverable for a Lead.
