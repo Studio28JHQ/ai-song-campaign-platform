@@ -62,11 +62,43 @@ No Prisma/Supabase repository, API route, controller, or UI exists yet — `Lead
 
 ## Lyrics
 
-**Purpose** — Represents a generated set of lyrics produced for a Lead's personalization input.
+**Purpose** — Represents one generated lyrics version produced for a Lead's personalization input. Implemented as an aggregate root at `src/domain/lyrics/entities/Lyrics.ts`. This aggregate manages lyrics _versions_ only — it does not generate lyrics text itself; the actual generation (Claude) is a separate, not-yet-implemented concern that will call into this module with already-generated content.
 
-**Responsibilities** — Holds the generated text, its moderation outcome, and whether it was accepted, rejected, or superseded by a regeneration.
+**Responsibilities** — Holds the generated text, the prompt it was generated from, its mood, and whether it has been accepted, rejected, or is still pending. Enforces its own invariants rather than trusting callers to.
 
-**Relationships** — Belongs to one Lead. Produced within the context of one GenerationAttempt. At most one Lyrics per Lead is ever "accepted"; that accepted Lyrics is what a Song is generated from.
+**Invariants** (enforced by the entity itself, not by infrastructure):
+
+- `leadId`, `moodId`, `prompt`, and `content` are mandatory — construction fails otherwise.
+- `version` must be a positive integer.
+- A version cannot be approved twice (`approve()` throws if `approved` is already `true`).
+- A rejected version can never be approved, and an approved version can never be rejected — `approved` and a set `rejectionReason` are mutually exclusive terminal outcomes for a given version.
+
+**Lifecycle / Approval Process** — Each generation attempt for a Lead produces a new Lyrics version (a Lead may have multiple). A version starts pending (`approved: false`, `rejectionReason: null`) and ends in exactly one of two terminal states: **approved** (via `approve()` — the only version a Song may later be generated from) or **rejected** (via `reject(reason)` — e.g. moderation, or superseded by the user requesting a regeneration). "Only one Lyrics record can be marked as approved" is a _cross-record_ rule the entity cannot enforce alone (it would need to know about its siblings); that check belongs to `ApproveLyricsUseCase`, backstopped by a database constraint (see `docs/Architecture/Database_Model.md`) as the final guarantee.
+
+**Relationships** — Belongs to one Lead (a Lead may have many Lyrics — one per generation attempt). Produced within the context of one GenerationAttempt (not yet implemented). References one Mood. At most one Lyrics per Lead is ever approved; that approved Lyrics is the only one a Song may later be generated from — enforcing that link is the future Song module's responsibility, not this one's. The persistence contract for this aggregate is `LyricsRepository` (`src/domain/lyrics/repositories/LyricsRepository.ts`) — interface only, no implementation yet.
+
+## Application Layer — Lyrics
+
+The Application layer (`src/application/lyrics/`) orchestrates the `Lyrics` aggregate. Like the Lead application layer, it depends only on the domain (entities, `LyricsRepository`) and never the other way around.
+
+### GenerateLyricsUseCase
+
+`src/application/lyrics/use-cases/GenerateLyricsUseCase.ts`. Given a `GenerateLyricsRequest` (`leadId`, `moodId`, `prompt`, already-generated `content`):
+
+1. Looks up how many Lyrics versions already exist for the lead (`LyricsRepository.findAllByLead`) and derives the next `version` number — version numbering is bookkeeping the use case owns, not something the caller has to track.
+2. Builds a new `Lyrics` via `Lyrics.create` and persists it via `LyricsRepository.create`.
+3. Returns a `GenerateLyricsResponse` wrapping the persisted version's snapshot.
+
+### ApproveLyricsUseCase
+
+`src/application/lyrics/use-cases/ApproveLyricsUseCase.ts`. Given an `ApproveLyricsRequest` (`lyricsId`):
+
+1. Looks up the Lyrics by id (`LyricsRepository.findById`); rejects with a business-rule error if not found.
+2. Checks whether the lead already has a different approved version (`LyricsRepository.findApprovedByLead`) — this is the application-level enforcement point for "only one Lyrics record can be approved per lead," since the entity itself has no visibility into its siblings.
+3. Calls `lyrics.approve()` (the entity's own "cannot be approved twice" / "cannot approve a rejected version" invariants apply here too).
+4. Persists via `LyricsRepository.approve` and returns an `ApproveLyricsResponse`.
+
+No Claude client, moderation, Prisma/Supabase repository, API route, or UI exists yet — `LyricsRepository` remains an interface, satisfied only by test doubles until the Infrastructure layer implements it.
 
 ## Campaign
 
