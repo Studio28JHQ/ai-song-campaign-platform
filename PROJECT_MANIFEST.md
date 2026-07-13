@@ -179,3 +179,19 @@ Do not prepare multiple AI providers.
 Do not implement Version 2 features.
 
 Every future improvement must be documented only in BACKLOG files.
+
+# Engineering Principles
+
+Keep the solution simple.
+
+Avoid overengineering.
+
+Campaign-first architecture.
+
+Single music provider.
+
+Single AI provider.
+
+Documentation-driven development.
+
+Small incremental delivery.
