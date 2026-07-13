@@ -9,15 +9,41 @@ This document describes every external integration used by the platform: purpose
 - Content moderation
 - Lyrics generation
 
-**Purpose** — Ensures personalization input is safe before generating creative content, and produces the personalized lyrics shown to the user.
+**Purpose** — Ensures personalization input is safe before generating creative content, and produces the personalized lyrics shown to the user. Implemented at `src/infrastructure/ai/claude/`.
 
-**Expected Inputs** — Personalization input (e.g. baby's name, selected mood, any free-text detail) for moderation; validated, moderated input plus mood context for lyrics generation.
+**Single-Request Design** — Moderation and lyrics generation are **one Claude request**, not two. The prompt (built by `PromptBuilder`) asks Claude to moderate the parent's message against a fixed set of campaign/safety rules and, only if approved, generate the lyrics in the same response. This avoids a second round-trip (and a second cost/latency hit) for the common case where the input is safe.
 
-**Expected Outputs** — A moderation verdict (approved/rejected, with reason where applicable) for moderation calls; generated lyrics text for lyrics generation calls.
+**Classes:**
 
-**Failure Scenarios** — Request timeout, rate limiting, malformed/empty response, service outage.
+- **`ClaudeClient`** — minimal HTTP client for Anthropic's Messages API, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the project's "no unnecessary abstractions" principle. Adds the `x-api-key` (from `appConfig.claude.apiKey`) and `anthropic-version` headers and posts the model/prompt.
+- **`PromptBuilder`** — assembles the system prompt (fixed campaign rules, safety/moderation rules, writing instructions, and the required JSON response format) and the user message (baby name, parent message, selected mood, language). This is the only place those rules are defined.
+- **`ResponseParser`** — extracts the text content block from Claude's response, parses it as JSON, and validates it against the expected shape with Zod, including the invariant that an approved result has non-empty lyrics and a rejected result has a non-empty reason.
+- **`ClaudeLyricsService`** — orchestrates the three above: build prompt → send message → parse response. Not yet wired into any Application use case; that wiring is a future task.
 
-**Retry Policy** — Retry transient failures (timeout, rate limit) a limited number of times with backoff; on persistent failure, surface a user-friendly error without consuming a lyric attempt (see `docs/Development/Error_Handling.md`).
+**Request Flow:**
+
+1. `ClaudeLyricsService.generateAndModerate(input)` calls `PromptBuilder.build` with the baby's name, the parent's message, the selected mood, and the language.
+2. `ClaudeClient.sendMessage` posts the resulting system/user prompt to Anthropic's Messages API.
+3. `ResponseParser.parse` extracts and validates the response.
+4. The caller receives `{ approved, reason, lyrics }` — never a raw Claude payload.
+
+**Response Format** — The prompt requires Claude to return a single JSON object and nothing else (no free text, no markdown fences):
+
+```json
+{ "approved": true, "reason": null, "lyrics": "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus" }
+```
+
+or
+
+```json
+{ "approved": false, "reason": "...moderation reason...", "lyrics": null }
+```
+
+When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Verse 2, Final Chorus) sized for roughly 2–3 minutes of music, as plain text.
+
+**Failure Scenarios** — Network errors and timeouts are retried transparently by the shared `httpRequest` helper; once retries are exhausted, or on a non-ok HTTP status, an invalid response body, missing text content, invalid JSON, or a response that doesn't match the expected schema, `ClaudeClient`/`ResponseParser` throw the shared `ExternalApiError` (`src/shared/errors/`) — no raw Claude exception, payload, or stack trace ever escapes the infrastructure layer.
+
+**Retry Policy** — Transient failures (timeout, connection errors, repeated 5xx) are retried a limited number of times with backoff by `httpRequest` (see `src/config/constants.ts`); a non-retryable failure (4xx, malformed JSON, schema mismatch) fails immediately rather than retrying, since retrying the same malformed request would not help. Whether a given failure consumes a lyric attempt is an Application-layer decision, not this layer's (see `docs/Development/Error_Handling.md`).
 
 ## Suno API
 
