@@ -54,6 +54,8 @@ Low coupling.
 
 No microservices.
 
+No event-driven architecture.
+
 No unnecessary abstractions.
 
 # Technology Stack

@@ -26,6 +26,7 @@ Marketing needs a high-conversion, low-friction campaign asset that turns a land
 ## Explicitly Forbidden
 
 - Microservices architecture.
+- Event-driven architecture (queues, event buses, pub/sub) for the core business flow.
 - Multiple AI provider integrations (only the providers named in `PROJECT_MANIFEST.md`).
 - Implementing Version 2 or Version 3 features inside Version 1 scope.
 - Speculative scalability work — this is a temporary campaign, not a long-lived SaaS.
