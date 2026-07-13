@@ -1,7 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma schema for the AI Song Campaign Platform.
+// See docs/Architecture/Database_Model.md for entity documentation,
+// relationships, constraints, and the reasoning behind them.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +9,209 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+
+  @@map("campaign_status")
+}
+
+enum LeadStatus {
+  REGISTERED
+  MODERATION_REJECTED
+  LYRICS_GENERATED
+  LYRICS_APPROVED
+  SONG_GENERATING
+  SONG_READY
+  COMPLETED
+  ATTEMPTS_EXHAUSTED
+
+  @@map("lead_status")
+}
+
+enum GenerationAttemptResult {
+  SUCCESS
+  MODERATION_REJECTED
+  FAILED
+
+  @@map("generation_attempt_result")
+}
+
+enum SongStatus {
+  PENDING
+  GENERATING
+  READY
+  DELIVERED
+  FAILED
+
+  @@map("song_status")
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id                  String         @id @default(uuid()) @db.Uuid
+  name                String
+  status              CampaignStatus @default(DRAFT)
+  maximumSongs        Int
+  songsGenerated      Int            @default(0)
+  startsAt            DateTime
+  endsAt              DateTime
+  isGenerationEnabled Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  leads Lead[]
+
+  @@index([status])
+  @@map("campaigns")
+}
+
+model Lead {
+  id                String     @id @default(uuid()) @db.Uuid
+  campaignId        String     @db.Uuid
+  parentName        String
+  babyName          String
+  babyAge           Int?
+  city              String?
+  email             String     @unique
+  phone             String?
+  remainingAttempts Int        @default(5)
+  status            LeadStatus @default(REGISTERED)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  campaign           Campaign            @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  lyrics             Lyrics[]
+  song               Song?
+  generationAttempts GenerationAttempt[]
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+model Mood {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  description  String?
+  sunoPrompt   String
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lyrics Lyrics[]
+  songs  Song[]
+
+  @@index([active])
+  @@map("moods")
+}
+
+model Lyrics {
+  id              String   @id @default(uuid()) @db.Uuid
+  leadId          String   @db.Uuid
+  moodId          String   @db.Uuid
+  prompt          String
+  content         String
+  approved        Boolean  @default(false)
+  rejectionReason String?
+  version         Int
+  createdAt       DateTime @default(now())
+
+  lead              Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  mood              Mood               @relation(fields: [moodId], references: [id], onDelete: Restrict)
+  generationAttempt GenerationAttempt?
+  songs             Song[]
+
+  @@unique([leadId, version])
+  @@index([leadId])
+  @@index([approved])
+  @@map("lyrics")
+}
+
+model GenerationAttempt {
+  id            String                  @id @default(uuid()) @db.Uuid
+  leadId        String                  @db.Uuid
+  lyricsId      String?                 @unique @db.Uuid
+  attemptNumber Int
+  result        GenerationAttemptResult
+  failureReason String?
+  createdAt     DateTime                @default(now())
+
+  lead   Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lyrics Lyrics? @relation(fields: [lyricsId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId, attemptNumber])
+  @@index([leadId])
+  @@index([result])
+  @@index([createdAt])
+  @@map("generation_attempts")
+}
+
+model Song {
+  id             String     @id @default(uuid()) @db.Uuid
+  leadId         String     @unique @db.Uuid
+  lyricsId       String     @db.Uuid
+  moodId         String     @db.Uuid
+  provider       String     @default("suno")
+  providerSongId String?
+  audioUrl       String?
+  duration       Int?
+  status         SongStatus @default(PENDING)
+  generatedAt    DateTime?
+  emailedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lyrics Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Restrict)
+  mood   Mood   @relation(fields: [moodId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("songs")
+}
+
+model AdminUser {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String    @unique
+  name      String
+  role      String    @default("admin")
+  active    Boolean   @default(true)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  adminId   String   @db.Uuid
+  action    String
+  entity    String
+  entityId  String?  @db.Uuid
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
