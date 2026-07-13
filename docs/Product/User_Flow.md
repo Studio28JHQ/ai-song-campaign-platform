@@ -82,6 +82,41 @@ Campaign Finished
 
 **Campaign Finished** — The user's journey is complete; no further songs can be generated for that email.
 
+## Lead Registration Endpoint
+
+`POST /api/leads` implements the **Lead Registration** step of the happy path above. It is the first public API of the application — there is no Landing Page UI calling it yet.
+
+**Request body:**
+
+| Field        | Required | Notes                                  |
+| ------------ | -------- | -------------------------------------- |
+| `campaignId` | yes      | Which campaign the lead registers for. |
+| `parentName` | yes      |                                        |
+| `babyName`   | yes      |                                        |
+| `babyAge`    | no       | In months.                             |
+| `city`       | no       |                                        |
+| `email`      | yes      | Must be unique across all leads.       |
+| `phone`      | no       |                                        |
+
+**Success — `201 Created`:**
+
+```json
+{ "leadId": "...", "remainingAttempts": 5, "status": "REGISTERED" }
+```
+
+Only these three fields are returned — no internal identifiers (campaign ID, timestamps, etc.) or persistence details are exposed.
+
+**Errors:**
+
+| Status | When                                                                                                                      |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | The request body is malformed, missing a required field, or fails domain-level validation (e.g. an invalid email format). |
+| `409`  | The email has already been used to register a lead (see `docs/Product/Business_Rules.md` — Email Rules).                  |
+| `422`  | Any other business rule violation.                                                                                        |
+| `500`  | An unexpected/infrastructure error. The response never includes a stack trace or a raw database error.                    |
+
+The endpoint only validates input and maps the result of `CreateLeadUseCase` to an HTTP response — email uniqueness and every other business rule are enforced by the Application and Domain layers, not by the endpoint itself.
+
 ## Failure Scenarios
 
 - **Duplicate email**: Registration is rejected because the email has already generated a final song.

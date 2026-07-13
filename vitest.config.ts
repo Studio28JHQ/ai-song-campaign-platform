@@ -7,6 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Next.js swaps this for a no-op at build time via webpack aliasing;
+      // Vitest needs the same treatment or any module importing it throws.
+      "server-only": path.resolve(__dirname, "./tests/stubs/server-only.ts"),
     },
   },
   test: {

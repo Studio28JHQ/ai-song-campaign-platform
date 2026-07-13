@@ -59,6 +59,18 @@ The first concrete Repository Pattern implementation lives at `src/infrastructur
 - **`src/infrastructure/persistence/prisma/client.ts`** holds a single, `globalThis`-cached `PrismaClient`, constructed with the `@prisma/adapter-pg` driver adapter (required by the generated client in this Prisma version) using `appConfig.database.url` — never a direct `process.env` read.
 - Prisma exceptions (`PrismaClientKnownRequestError`, etc.) are caught inside the repository and re-thrown as the shared error types from `src/shared/errors` (a unique-constraint violation on email becomes a `BusinessRuleError`; everything else becomes a `DatabaseError`). No Prisma-specific exception crosses the repository boundary.
 
+## Lead Registration Request Flow
+
+`POST /api/leads` (`app/api/leads/route.ts`) is the first public API and the thinnest possible Presentation-layer wrapper around the layers below it:
+
+1. Parse the request body as JSON; malformed JSON short-circuits to `400` before anything else runs.
+2. Validate its shape with a Zod schema — presence, type, and basic non-emptiness only. This schema deliberately does **not** duplicate semantic validation (e.g. email format) that already lives in the domain's value objects; a failure here also returns `400`.
+3. Construct `CreateLeadUseCase` (from `src/application/lead/`) with a `PrismaLeadRepository` and a small inline adapter satisfying `LeadCampaignConfig` (backed by `appConfig.campaign.maxLyricAttempts`) and call `execute()`.
+4. Map the result to the public response shape (`leadId`, `remainingAttempts`, `status` only — no campaign ID, timestamps, or other persistence detail).
+5. Map any thrown error to an HTTP status by category: a domain `ValidationError` → `400`; a `BusinessRuleError` with code `lead.email_already_registered` → `409`; any other `BusinessRuleError` → `422`; anything else → `500`, logged server-side via `src/shared/logger`, with only a generic message returned to the client — never a stack trace or a raw Prisma/database error.
+
+No business rule is evaluated inside the route handler itself; it only translates between HTTP and the Application layer's existing `CreateLeadRequest`/`CreateLeadResponse` DTOs.
+
 ## Why This Project Intentionally Avoids
 
 - **Microservices** — the campaign has a fixed, modest scale (≤3,000 songs, one month). Splitting into services would add deployment, networking, and operational overhead with no corresponding benefit.
