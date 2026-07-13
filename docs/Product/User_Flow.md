@@ -123,7 +123,52 @@ The endpoint only validates input and maps the result of `CreateLeadUseCase` to 
 
 The form (`src/features/lead/components/RegistrationForm.tsx`) collects parent name, baby name, baby age, city, email, and phone, validates them client-side with React Hook Form + Zod (required fields, email format, positive baby age, trimmed strings) for instant feedback, then calls `POST /api/leads`. The submit button is disabled while the request is in flight.
 
-On success, the returned lead id is stored in `sessionStorage` and the user is navigated to `/generate` — a temporary placeholder page ("Generation module coming next.") until the generation flow is implemented. On failure, a duplicate email surfaces as a field-level error under the Email input; every other error (validation, business rule, unexpected server error) surfaces as a form-level banner with a user-friendly message.
+On success, the returned lead id, the submitted baby name, and the starting remaining-attempts count are stored in `sessionStorage`, and the user is navigated to `/generate` — now the Lyrics Review screen (see below). On failure, a duplicate email surfaces as a field-level error under the Email input; every other error (validation, business rule, unexpected server error) surfaces as a form-level banner with a user-friendly message.
+
+## Lyrics Generation Endpoints
+
+**`POST /api/lyrics/generate`** implements the **Song Personalization → Claude Moderation → Lyrics Generation** steps of the happy path in one call — see `docs/Architecture/External_Services.md` for why moderation and generation are a single Claude request. It also serves regeneration ("Generate Again"): the same endpoint is called again, and the backend determines whether this is a first attempt or a regeneration by checking whether the lead already has any lyrics versions, rather than trusting a client-supplied flag.
+
+**Request body:** `leadId`, `moodId`, `moodName`, `moodDescription` (optional), `parentMessage`.
+
+**Response — always `200 OK`, whether approved or rejected** (a moderation rejection is a normal, expected outcome, not an HTTP error — see `docs/Product/Business_Rules.md`):
+
+```json
+{
+  "lyrics": { "id": "...", "content": "...", "version": 1, "approved": false },
+  "approved": true,
+  "reason": null,
+  "remainingAttempts": 5,
+  "leadStatus": "GENERATING"
+}
+```
+
+or, when rejected:
+
+```json
+{
+  "lyrics": null,
+  "approved": false,
+  "reason": "...moderation reason...",
+  "remainingAttempts": 4,
+  "leadStatus": "GENERATING"
+}
+```
+
+**Attempt consumption** (see `docs/Product/Business_Rules.md` — Attempts Rules): a lead's first-ever generation costs nothing if approved. Every other case — a rejection (first attempt or later) or an explicit regeneration (approved or not) — consumes exactly one attempt. A Claude/network failure never consumes an attempt and is surfaced as `503 claude_unavailable`.
+
+**Other errors:** `400 invalid_request`, `404 lead_not_found`, `422 no_remaining_attempts` / `business_rule_violation`, `500 internal_error`.
+
+**`POST /api/lyrics/approve`** — given `lyricsId`, marks that version approved (rejecting if the lead already has a different approved version, or if this version was already approved/rejected). Response: `{ "lyrics": {...} }`. Errors: `400 invalid_request`, `404 lyrics_not_found`, `422 business_rule_violation`, `500 internal_error`.
+
+## Lyrics Review Screen
+
+`/generate` (`app/generate/page.tsx`) hosts the full generate → review → regenerate → approve loop, orchestrated client-side by `LyricsWorkflow` (`src/features/lyrics/components/`):
+
+1. **Generation form** — shows the baby's name and starting remaining-attempts count (both read from the `sessionStorage` written at registration — there is no separate "fetch lead" endpoint), a mood selector, a message textarea, and a "Generate Lyrics" button. V1 has exactly four predefined moods with no Mood-management UI yet, so the four options are a fixed, documented placeholder list (see the component's source comment) — the same kind of simplification as the campaign id placeholder in the registration form.
+2. On submit, `POST /api/lyrics/generate` is called. An **approved** result switches the screen to the **review panel** (song title extracted from the first line of the lyrics, the full lyrics text, the updated remaining-attempts count, and "Approve Lyrics" / "Generate Again" buttons). A **rejected** result stays on the generation form with the moderation reason shown as a friendly banner and the remaining-attempts count updated.
+3. **Generate Again** re-submits the same endpoint with the same mood/message; the previous version is never deleted — every version remains queryable via `LyricsRepository.findAllByLead`.
+4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — a temporary placeholder page ("Song generation module coming next.") until song generation is implemented.
 
 ## Failure Scenarios
 

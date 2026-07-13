@@ -71,6 +71,23 @@ The first concrete Repository Pattern implementation lives at `src/infrastructur
 
 No business rule is evaluated inside the route handler itself; it only translates between HTTP and the Application layer's existing `CreateLeadRequest`/`CreateLeadResponse` DTOs.
 
+## Lyrics Generation Request Sequence
+
+`POST /api/lyrics/generate` (`app/api/lyrics/generate/route.ts`) is another thin Presentation-layer wrapper, this time around a new orchestration use case, `GenerateLyricsForLeadUseCase` (`src/application/lyrics/use-cases/`), added specifically because the existing `GenerateLyricsUseCase` was deliberately scoped to "lyrics version bookkeeping only" (see `docs/Architecture/Domain_Model.md`) and cannot, by itself, validate a lead, consume attempts, or call Claude.
+
+1. The route parses and Zod-validates the request body (`leadId`, `moodId`, `moodName`, `moodDescription`, `parentMessage`) — shape only, same convention as `/api/leads`.
+2. `GenerateLyricsForLeadUseCase.execute`:
+   - Loads the `Lead` via `LeadRepository.findById`; not found → `BusinessRuleError` (`404`).
+   - Checks `remainingAttempts > 0`; none left → `BusinessRuleError` (`422`).
+   - Checks `LyricsRepository.findAllByLead` to determine whether this is the lead's first generation or a regeneration — this, not a client-supplied flag, is what the attempt-consumption rule keys on (see `docs/Product/Business_Rules.md`).
+   - Transitions the lead `REGISTERED → GENERATING` on the very first call only.
+   - Makes the **single** Claude request via the `LyricsGenerator` port (`src/application/lyrics/contracts/`), satisfied by `ClaudeLyricsService` (`src/infrastructure/ai/claude/`) — the application layer depends only on the port, never on the concrete Claude classes.
+   - Consumes one attempt if this was a regeneration, or if the result was rejected (never both, never for a first-time approval) and persists the lead via `LeadRepository.update`.
+   - On approval, delegates to the existing `GenerateLyricsUseCase` to persist the new version (reused unmodified); on rejection, no Lyrics record is created — there is no generated content to store.
+3. The route maps the response 1:1 to JSON, and maps thrown errors to HTTP status by category — notably, `ExternalApiError` (a Claude failure) maps to `503`, distinct from the generic `500` bucket, since "the AI provider is down" is a meaningfully different, and separately documented (see `docs/Architecture/External_Services.md`), failure mode from "something unexpected broke."
+
+`POST /api/lyrics/approve` (`app/api/lyrics/approve/route.ts`) needed no new use case — the existing `ApproveLyricsUseCase` already fully covers "approve this version, reject if the lead already has a different one approved," so the route is a direct, unmodified wrapper around it, backed by a new `PrismaLyricsRepository`/`LyricsMapper` (`src/infrastructure/persistence/prisma/lyrics/`) mirroring the Lead module's persistence pattern exactly.
+
 ## Why This Project Intentionally Avoids
 
 - **Microservices** — the campaign has a fixed, modest scale (≤3,000 songs, one month). Splitting into services would add deployment, networking, and operational overhead with no corresponding benefit.

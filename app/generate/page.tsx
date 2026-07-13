@@ -2,20 +2,31 @@ import type { Metadata } from "next";
 import { ContentWrapper } from "@/components/layout/ContentWrapper";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/layout/Section";
+import { LyricsWorkflow } from "@/features/lyrics/components/LyricsWorkflow";
 
 export const metadata: Metadata = {
-  title: "Generating your song — AI Song Campaign",
+  title: "Review your lyrics — AI Song Campaign",
 };
 
-/** Temporary placeholder — the generation flow is implemented in a later task. */
 export default function GeneratePage() {
   return (
     <PageContainer>
       <Section spacing="lg">
         <ContentWrapper>
-          <p className="text-center text-body text-muted-foreground">
-            Generation module coming next.
-          </p>
+          <div className="flex flex-col items-center gap-6">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <h1 className="text-heading font-bold text-foreground">
+                Generate your song&apos;s lyrics
+              </h1>
+              <p className="max-w-prose text-body text-muted-foreground">
+                Tell us a little more and we&apos;ll write personalized lyrics for your baby.
+              </p>
+            </div>
+
+            <div className="w-full max-w-sm">
+              <LyricsWorkflow />
+            </div>
+          </div>
         </ContentWrapper>
       </Section>
     </PageContainer>
