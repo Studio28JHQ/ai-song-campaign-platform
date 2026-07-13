@@ -51,15 +51,24 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 - Audio generation
 
-**Purpose** — Generates the final song audio from the accepted lyrics and the fixed prompt for the selected Mood.
+**Purpose** — Generates the one final song audio file from the already-approved lyrics and the selected Mood's fixed prompt. Implemented at `src/infrastructure/suno/`. Never regenerates or edits the lyrics — they are passed through exactly as approved.
 
-**Expected Inputs** — Accepted Lyrics text and the Mood's fixed Suno prompt.
+**Single-Song Design** — Exactly one song is ever generated per call, and — per `Song.leadId` being unique — at most once successfully per lead (see `docs/Product/Business_Rules.md`). No variations, no batch generation.
 
-**Expected Outputs** — Generated audio file (or a reference/URL to retrieve it).
+**Classes:**
 
-**Failure Scenarios** — Request timeout, rate limiting, generation failure, service outage.
+- **`SunoClient`** — minimal HTTP client for Suno's generation endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than a vendor SDK, consistent with the Claude integration and the project's "no unnecessary abstractions" principle. Adds a bearer token (from `appConfig.suno.apiKey`).
+- **`PromptBuilder`** — builds the request payload from the approved lyrics text, the mood's name, and the mood's fixed Suno prompt; derives a title from the lyrics' first line (the same convention the Lyrics Review UI uses).
+- **`ResponseParser`** — validates Suno's response with Zod into `{ providerSongId, audioUrl, duration }`.
+- **`SunoSongService`** — orchestrates the three above: build payload → call Suno → parse response.
 
-**Retry Policy** — Retry transient failures with backoff; on persistent failure, surface a user-friendly error. Song generation failures never consume a lyric attempt.
+**Request Format** — `{ prompt, lyrics, tags, title }`, where `prompt` is the mood's fixed Suno prompt (not a general "describe the song" field), `lyrics` is the approved text verbatim, and `tags` carries the mood name. Suno does not publish a single canonical, versioned public API the way Anthropic does; this shape follows the commonly documented "custom mode" generation contract and should be verified against Suno's own current API documentation before this integration is pointed at production traffic.
+
+**Response Format** — `{ id: string, audio_url: string, duration?: number }`, mapped to the domain's `{ providerSongId, audioUrl, duration }`.
+
+**Failure Handling** — Network errors and timeouts are retried transparently by the shared `httpRequest` helper; once retries are exhausted, or on a non-ok HTTP status, an invalid response body, or a response that doesn't match the expected schema, `SunoClient`/`ResponseParser` throw the shared `ExternalApiError` — no raw Suno exception, payload, or stack trace ever escapes the infrastructure layer. At the Application layer, a Suno failure marks the `Song` `FAILED` (not stuck `GENERATING`) so the _same_ row can be retried later without ever creating a second row for that lead.
+
+**Retry Policy** — Transient failures (timeout, connection errors, repeated 5xx) are retried a limited number of times with backoff by `httpRequest`; a non-retryable failure (4xx, malformed response) fails immediately. Song generation failures never consume a lyric attempt (that budget only governs lyrics generation — see `docs/Product/Business_Rules.md`).
 
 ## Supabase
 

@@ -168,7 +168,23 @@ or, when rejected:
 1. **Generation form** — shows the baby's name and starting remaining-attempts count (both read from the `sessionStorage` written at registration — there is no separate "fetch lead" endpoint), a mood selector, a message textarea, and a "Generate Lyrics" button. V1 has exactly four predefined moods with no Mood-management UI yet, so the four options are a fixed, documented placeholder list (see the component's source comment) — the same kind of simplification as the campaign id placeholder in the registration form.
 2. On submit, `POST /api/lyrics/generate` is called. An **approved** result switches the screen to the **review panel** (song title extracted from the first line of the lyrics, the full lyrics text, the updated remaining-attempts count, and "Approve Lyrics" / "Generate Again" buttons). A **rejected** result stays on the generation form with the moderation reason shown as a friendly banner and the remaining-attempts count updated.
 3. **Generate Again** re-submits the same endpoint with the same mood/message; the previous version is never deleted — every version remains queryable via `LyricsRepository.findAllByLead`.
-4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — a temporary placeholder page ("Song generation module coming next.") until song generation is implemented.
+4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — a temporary placeholder page ("Song generation module coming next.") until the Song Generation UI is implemented; the backend endpoint below already exists.
+
+## Song Generation Endpoint
+
+**`POST /api/song/generate`** implements the **Suno Song Generation** step of the happy path. Given just `leadId`, the backend looks up everything else server-side — the lead's approved lyrics, and through it the selected mood and its fixed Suno prompt — so the client never needs to resend any of that.
+
+A song can only be generated if, in order: the lead exists; the lead has not already generated a final (successfully `READY`) song; the campaign is active and generation is enabled; and the lead has exactly one approved lyrics version. Exactly one Suno request is made — never multiple variations (see `docs/Product/Business_Rules.md` — Song Rules).
+
+**Success — `201 Created`:**
+
+```json
+{ "songId": "...", "status": "READY", "audioUrl": "https://..." }
+```
+
+Only these three fields are returned — the provider name, the provider's own song id, and any other Suno-internal detail are never exposed.
+
+**Errors:** `400 invalid_request`, `404 lead_not_found`, `409 song_already_exists`, `422 lyrics_not_approved` / `campaign_disabled` / `business_rule_violation`, `503 suno_unavailable`, `500 internal_error`. A Suno failure marks the song `FAILED` (not stuck `GENERATING`) so the same lead can retry — see `docs/Architecture/External_Services.md` — without ever being able to generate a second, separate song.
 
 ## Failure Scenarios
 
