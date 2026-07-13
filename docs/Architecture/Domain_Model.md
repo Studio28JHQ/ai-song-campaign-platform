@@ -4,11 +4,30 @@ This document describes the initial domain model at a conceptual level only. It 
 
 ## Lead
 
-**Purpose** — Represents a person (parent) who registered on the Landing Page to generate a song.
+**Purpose** — Represents a person (parent) who registered on the Landing Page to generate a song. Implemented as an aggregate root at `src/domain/lead/entities/Lead.ts`.
 
-**Responsibilities** — Holds the registrant's email and personalization inputs; is the anchor record tying together attempts, lyrics, and the final song.
+**Responsibilities** — Holds the registrant's identity (parent name, baby name, baby age, city, email, phone) and personalization inputs; is the anchor record tying together attempts, lyrics, and the final song. Enforces its own invariants rather than trusting callers to — nothing outside the entity can put a `Lead` into an invalid state.
 
-**Relationships** — One Lead has one associated email (unique). One Lead has one Campaign context. One Lead has many GenerationAttempts. One Lead has, at most, one accepted Lyrics and one final Song.
+**Invariants** (enforced by the entity itself, not by infrastructure):
+
+- `parentName`, `babyName`, and `email` are mandatory — construction fails otherwise.
+- `email`, `phone`, and `babyAge` are represented by self-validating value objects (`Email`, `PhoneNumber`, `BabyAge` in `src/domain/lead/value-objects/`) that reject malformed input. This is _structural_ validation only (is the string shaped like an email/phone? is the age a plausible integer?) — uniqueness of email and any deliverability/carrier checks are infrastructure/application concerns handled elsewhere.
+- `remainingAttempts` can never be negative, and can never exceed the campaign's configured maximum (passed in at creation/rehydration — not stored redundantly on the Lead itself, since it belongs to the `Campaign` aggregate).
+- Attempts can only be consumed while the lead is in the `GENERATING` state; consuming the last attempt automatically transitions the lead to `BLOCKED` so that invariant can't be forgotten by a caller.
+- Status transitions are only ever performed through explicit methods (`startGenerating`, `complete`, `block`, `fail`) — there is no public setter for status.
+
+**State Transitions** — `LeadStatus` (`src/domain/lead/types/index.ts`) is intentionally coarser than the persistence-layer `LeadStatus` enum in `prisma/schema.prisma`: the domain-level status only tracks the Lead aggregate's own lifecycle, while the finer-grained states (moderation rejected, lyrics approved, song ready, ...) will belong to the `Lyrics`/`Song` aggregates once they're implemented.
+
+```
+REGISTERED ──▶ GENERATING ──▶ COMPLETED
+                   │
+                   ├──▶ BLOCKED   (attempts exhausted)
+                   └──▶ FAILED    (unrecoverable error)
+```
+
+`COMPLETED`, `BLOCKED`, and `FAILED` are terminal — no further transitions are allowed out of them.
+
+**Relationships** — One Lead has one associated email (unique). One Lead has one Campaign context (referenced by `campaignId`; the Campaign's maximum-attempts value is supplied to the Lead rather than looked up by it, keeping the two aggregates decoupled). One Lead has many GenerationAttempts. One Lead has, at most, one accepted Lyrics and one final Song. The persistence contract for this aggregate is `LeadRepository` (`src/domain/lead/repositories/LeadRepository.ts`) — interface only, no implementation yet.
 
 ## Song
 
