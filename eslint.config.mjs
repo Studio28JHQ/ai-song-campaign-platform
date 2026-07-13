@@ -25,6 +25,20 @@ const eslintConfig = [
       "test-results/**",
     ],
   },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/config/env.ts"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "process",
+          property: "env",
+          message: "Import environment variables from `@/config/env` (or `@/config/app`) instead of reading `process.env` directly.",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
