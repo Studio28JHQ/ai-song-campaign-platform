@@ -117,6 +117,14 @@ Only these three fields are returned — no internal identifiers (campaign ID, t
 
 The endpoint only validates input and maps the result of `CreateLeadUseCase` to an HTTP response — email uniqueness and every other business rule are enforced by the Application and Domain layers, not by the endpoint itself.
 
+## Lead Registration Screen
+
+`/` (`app/page.tsx`) is the registration screen — the first, minimal version of the Landing Page. It shows only a campaign logo placeholder, a page title, a short subtitle, and the registration form; no storytelling sections, images, or marketing content exist yet.
+
+The form (`src/features/lead/components/RegistrationForm.tsx`) collects parent name, baby name, baby age, city, email, and phone, validates them client-side with React Hook Form + Zod (required fields, email format, positive baby age, trimmed strings) for instant feedback, then calls `POST /api/leads`. The submit button is disabled while the request is in flight.
+
+On success, the returned lead id is stored in `sessionStorage` and the user is navigated to `/generate` — a temporary placeholder page ("Generation module coming next.") until the generation flow is implemented. On failure, a duplicate email surfaces as a field-level error under the Email input; every other error (validation, business rule, unexpected server error) surfaces as a form-level banner with a user-friendly message.
+
 ## Failure Scenarios
 
 - **Duplicate email**: Registration is rejected because the email has already generated a final song.
