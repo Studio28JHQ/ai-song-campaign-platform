@@ -30,7 +30,7 @@ Dependency Injection is plain constructor injection at each route's composition 
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22.23.1 (pinned in `.nvmrc` and `package.json`'s `engines.node` — use `nvm use` to match it locally)
 - npm
 - A PostgreSQL database (e.g. a Supabase project)
 - API keys for Anthropic Claude, Suno, and Resend
@@ -40,9 +40,8 @@ Dependency Injection is plain constructor injection at each route's composition 
 ```bash
 git clone <repository-url>
 cd ai-song-campaign-platform
-npm install
+npm install   # also generates the Prisma Client automatically (postinstall)
 cp .env.example .env   # then fill in real values — see Environment Variables below
-npx prisma generate
 npx prisma migrate deploy   # applies existing migrations to your database
 ```
 
@@ -95,11 +94,13 @@ npm run test:e2e        # Playwright end-to-end tests
 ## Production Deployment
 
 ```bash
-npx prisma generate
-npm run build           # next build --turbopack
-npm run start           # next start
+npm install              # runs `prisma generate` automatically (postinstall)
+npm run build             # next build --turbopack
+npm run start              # next start
 ```
 
+- The Node.js version is pinned (`.nvmrc`, `package.json`'s `engines.node`) so the hosting provider (e.g. Vercel) uses the same runtime as development, rather than an implicit platform default.
+- Prisma Client generation is guaranteed by the repository itself (a `postinstall` script), not by relying on the hosting provider's automatic framework detection.
 - Environment variables are configured in the hosting provider's project settings (e.g. Vercel), not committed to the repository — see `docs/Development/Environment.md`.
 - Apply any pending Prisma migrations (`npx prisma migrate deploy`) against the production database before starting the new build.
 - Security headers (frame/content-type protections, HSTS, referrer/permissions policy) are configured in `next.config.ts` and apply to every route.
