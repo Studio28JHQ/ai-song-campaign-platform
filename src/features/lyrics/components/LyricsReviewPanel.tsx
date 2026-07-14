@@ -1,10 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { LyricsContent } from "./LyricsContent";
 
 interface LyricsReviewPanelProps {
   content: string;
   version: number;
+  maxAttempts: number;
   remainingAttempts: number;
   isGenerating: boolean;
   isApproving: boolean;
@@ -13,14 +15,10 @@ interface LyricsReviewPanelProps {
   onGenerateAgain: () => void;
 }
 
-function extractTitle(content: string): string {
-  const [firstLine] = content.split("\n");
-  return firstLine?.trim() || "Your song";
-}
-
 export function LyricsReviewPanel({
   content,
   version,
+  maxAttempts,
   remainingAttempts,
   isGenerating,
   isApproving,
@@ -39,14 +37,11 @@ export function LyricsReviewPanel({
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-1">
-        <span className="text-label text-muted-foreground">Version {version}</span>
-        <h2 className="text-title font-semibold text-foreground">{extractTitle(content)}</h2>
-      </div>
+      <span className="text-label text-muted-foreground">
+        Attempt {version} / {maxAttempts}
+      </span>
 
-      <pre className="whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-4 text-body text-foreground">
-        {content}
-      </pre>
+      <LyricsContent content={content} />
 
       <p className="text-caption text-muted-foreground">Remaining attempts: {remainingAttempts}</p>
 

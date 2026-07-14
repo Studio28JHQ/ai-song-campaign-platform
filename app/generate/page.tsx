@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ContentWrapper } from "@/components/layout/ContentWrapper";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/layout/Section";
+import { appConfig } from "@/config/app";
 import { LyricsWorkflow } from "@/features/lyrics/components/LyricsWorkflow";
 
 export const metadata: Metadata = {
@@ -24,7 +25,10 @@ export default function GeneratePage() {
             </div>
 
             <div className="w-full max-w-sm">
-              <LyricsWorkflow />
+              <LyricsWorkflow
+                maxAttempts={appConfig.campaign.maxLyricAttempts}
+                supportEmail={appConfig.admin.email}
+              />
             </div>
           </div>
         </ContentWrapper>
