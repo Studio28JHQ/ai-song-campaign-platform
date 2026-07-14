@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   GetLeadDetailError,
   type LeadDetailResult,
@@ -12,19 +12,23 @@ export interface LeadDetailState {
   isLoading: boolean;
   notFound: boolean;
   errorMessage: string | null;
+  /** Re-fetches the detail data — used after a Retry/Resend action changes it. */
+  refetch: () => void;
 }
 
-/** Loads the read-only Lead Detail screen data once on mount. */
+/** Loads the read-only Lead Detail screen data on mount, and on demand via `refetch`. */
 export function useLeadDetail(leadId: string): LeadDetailState {
-  const [state, setState] = useState<LeadDetailState>({
+  const [state, setState] = useState<Omit<LeadDetailState, "refetch">>({
     detail: null,
     isLoading: true,
     notFound: false,
     errorMessage: null,
   });
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState((prev) => ({ ...prev, isLoading: true }));
 
     getLeadDetail(leadId)
       .then((detail) => {
@@ -40,7 +44,9 @@ export function useLeadDetail(leadId: string): LeadDetailState {
     return () => {
       cancelled = true;
     };
-  }, [leadId]);
+  }, [leadId, version]);
 
-  return state;
+  const refetch = useCallback(() => setVersion((prev) => prev + 1), []);
+
+  return { ...state, refetch };
 }

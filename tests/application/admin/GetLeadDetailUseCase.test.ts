@@ -9,6 +9,7 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
+import type { ExecutionHistoryItem } from "@/application/admin/dto/ExecutionHistoryItem";
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -107,6 +108,13 @@ function createLead(): Lead {
   );
 }
 
+function findEvent(
+  history: ExecutionHistoryItem[],
+  type: ExecutionHistoryItem["type"],
+): ExecutionHistoryItem | undefined {
+  return history.find((item) => item.type === type);
+}
+
 describe("GetLeadDetailUseCase", () => {
   let leadRepository: InMemoryLeadRepository;
   let lyricsRepository: InMemoryLyricsRepository;
@@ -191,7 +199,7 @@ describe("GetLeadDetailUseCase", () => {
     expect(result.lyricsHistory).toEqual([]);
   });
 
-  it("records a view_lead audit entry for the viewing admin, and returns it in the audit history", async () => {
+  it("records a view_lead audit entry for the viewing admin, and surfaces it as a lead_viewed event", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
 
@@ -204,24 +212,201 @@ describe("GetLeadDetailUseCase", () => {
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-42" });
 
-    expect(result.auditHistory).toHaveLength(1);
-    expect(result.auditHistory[0]).toMatchObject({
-      adminId: "admin-42",
-      action: "view_lead",
-      entity: "Lead",
-      entityId: lead.id,
-    });
+    const viewed = findEvent(result.executionHistory, "lead_viewed");
+    expect(viewed).toMatchObject({ actor: "admin-42", label: "Lead viewed" });
   });
 
-  it("includes prior audit entries for this lead alongside the new view entry", async () => {
+  it("includes a lead_created event using the lead's own createdAt", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
+
+    const useCase = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
+
+    const created = findEvent(result.executionHistory, "lead_created");
+    expect(created).toMatchObject({ actor: null, timestamp: lead.createdAt });
+  });
+
+  it("includes lyrics_generated and lyrics_approved events only for the approved version", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const v1 = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    const v2 = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "New Title\nVerse 1",
+      version: 2,
+    });
+    v2.approve();
+    lyricsRepository.seed(v1);
+    lyricsRepository.seed(v2);
+
+    const useCase = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
+
+    const generatedEvents = result.executionHistory.filter((e) => e.type === "lyrics_generated");
+    const approvedEvents = result.executionHistory.filter((e) => e.type === "lyrics_approved");
+
+    expect(generatedEvents).toHaveLength(2);
+    expect(approvedEvents).toHaveLength(1);
+    expect(approvedEvents[0].label).toContain("v2");
+  });
+
+  it("includes song_requested and song_completed events for a READY song, but not song_failed", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const lyrics = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    lyrics.approve();
+    lyricsRepository.seed(lyrics);
+
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
+    song.markGenerating();
+    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    songRepository.seed(song);
+
+    const useCase = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
+
+    expect(findEvent(result.executionHistory, "song_requested")).toMatchObject({
+      timestamp: song.createdAt,
+    });
+    expect(findEvent(result.executionHistory, "song_completed")).toMatchObject({
+      timestamp: song.generatedAt,
+    });
+    expect(findEvent(result.executionHistory, "song_failed")).toBeUndefined();
+  });
+
+  it("includes a song_failed event (and not song_completed) for a currently-FAILED song", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const lyrics = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    lyrics.approve();
+    lyricsRepository.seed(lyrics);
+
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
+    song.markGenerating();
+    song.markFailed();
+    songRepository.seed(song);
+
+    const useCase = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
+
+    expect(findEvent(result.executionHistory, "song_failed")).toBeDefined();
+    expect(findEvent(result.executionHistory, "song_completed")).toBeUndefined();
+  });
+
+  it("includes an email_sent_automatic event only once the song has an emailedAt timestamp", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const lyrics = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    lyrics.approve();
+    lyricsRepository.seed(lyrics);
+
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
+    song.markGenerating();
+    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    songRepository.seed(song);
+
+    const useCaseBeforeEmail = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+    const beforeEmail = await useCaseBeforeEmail.execute({
+      leadId: lead.id,
+      viewingAdminId: "admin-1",
+    });
+    expect(findEvent(beforeEmail.executionHistory, "email_sent_automatic")).toBeUndefined();
+  });
+
+  it("includes song_retried and email_resent_manual events sourced from real audit entries, with the reason attached", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const lyrics = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    lyrics.approve();
+    lyricsRepository.seed(lyrics);
+
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
+    song.markGenerating();
+    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    songRepository.seed(song);
+
     await auditLogRepository.create(
       AuditLogEntry.create({
-        adminId: "admin-1",
-        action: "view_lead",
-        entity: "Lead",
-        entityId: lead.id,
+        adminId: "admin-7",
+        action: "retry_song",
+        entity: "Song",
+        entityId: song.id,
+      }),
+    );
+    await auditLogRepository.create(
+      AuditLogEntry.create({
+        adminId: "admin-8",
+        action: "resend_email",
+        entity: "Song",
+        entityId: song.id,
+        metadata: { reason: "Parent said they never received it." },
       }),
     );
 
@@ -232,8 +417,45 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
     );
 
-    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-2" });
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
 
-    expect(result.auditHistory).toHaveLength(2);
+    expect(findEvent(result.executionHistory, "song_retried")).toMatchObject({ actor: "admin-7" });
+    expect(findEvent(result.executionHistory, "email_resent_manual")).toMatchObject({
+      actor: "admin-8",
+      detail: "Parent said they never received it.",
+    });
+  });
+
+  it("sorts the execution history newest first", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const lyrics = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1",
+      version: 1,
+    });
+    lyrics.approve();
+    lyricsRepository.seed(lyrics);
+
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
+    song.markGenerating();
+    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    songRepository.seed(song);
+
+    const useCase = new GetLeadDetailUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      auditLogRepository,
+    );
+
+    const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
+
+    const timestamps = result.executionHistory.map((item) => item.timestamp.getTime());
+    const sorted = [...timestamps].sort((a, b) => b - a);
+    expect(timestamps).toEqual(sorted);
   });
 });

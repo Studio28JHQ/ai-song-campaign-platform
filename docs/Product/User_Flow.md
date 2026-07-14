@@ -231,12 +231,27 @@ The Administration module is a separate, minimal operational surface for campaig
 2. **Every other `/admin` page, and every `/api/admin` route, is protected** by `middleware.ts`. An unauthenticated visit to a page redirects to `/admin/login`; an unauthenticated API call returns `401`. See docs/Architecture/System_Architecture.md — Authentication Flow.
 3. **Dashboard** — `/admin/dashboard` shows four summary cards (Total Leads, Songs Completed, Songs Pending, Songs Failed — no charts) above a searchable, sortable, paginated participants table (columns: Created, Parent, Baby, Email, Song Status, Email Status, Actions).
 4. **Search** — typing in the search box filters by parent name, baby name, email, or phone (case-insensitive, partial match); any column header can be clicked to sort by it (toggling direction on a repeat click). Both reset back to page 1.
-5. **Lead Detail** — clicking "View" on a row opens `/admin/leads/{leadId}` (`src/features/admin/components/LeadDetailView.tsx`): the lead's information, its full lyrics history, the approved version, the song's status/audio player/download button/duration, generation and email-delivery timestamps, and the audit history for this lead (including the "view_lead" entry this very visit just created — see below). Every field here is read-only; there is no edit control anywhere on this screen.
+5. **Lead Detail** — clicking "View" on a row opens `/admin/leads/{leadId}` (`src/features/admin/components/LeadDetailView.tsx`): the lead's information, its full lyrics history, the approved version, the song's status/audio player/download button/duration, generation and email-delivery timestamps, the two operational recovery actions below (only ever shown when applicable), and the complete execution history for this lead. Every other field here is read-only; there is no edit control anywhere else on this screen.
 6. **Sign out** — a "Log out" button (present on the dashboard) calls `POST /api/admin/logout`, which clears the session cookie.
 
-**Audit history.** Two actions are recorded automatically as the operator uses the module: a successful login (`action: "login"`, against the `AdminUser`), and viewing a lead's detail page (`action: "view_lead"`, against that `Lead`). There is no UI to create, edit, or delete an audit entry — they exist purely as the read-only trail shown on the Lead Detail screen.
+**Audit history.** Actions are recorded automatically as the operator uses the module: a successful login (`action: "login"`, against the `AdminUser`), viewing a lead's detail page (`action: "view_lead"`, against that `Lead`), and the two operational recovery actions below (`retry_song`/`resend_email`, against the `Song`). There is no UI to create, edit, or delete an audit entry — they exist purely as the read-only trail shown on the Lead Detail screen.
 
 **Provisioning.** There is no sign-up or account-creation flow — admin accounts are provisioned directly in the database (see docs/Architecture/System_Architecture.md — Authentication Flow), consistent with "no user management" being out of scope for this module.
+
+## Operational Recovery
+
+Two manual actions let an operator recover a campaign execution that got stuck, without ever touching lyrics, attempts, or creating a duplicate record. Both live on the Lead Detail screen, only ever appear when applicable, require an explicit confirmation step before doing anything, disable their own trigger for the whole in-flight duration (so a duplicate click can't start the action twice), and show a plain-language success or error notification when they finish. Every use is recorded in the execution history below.
+
+**Retry Generation** — shown only when the song's status is `FAILED`. Confirming it resets the existing `Song` row back to `PENDING` (the same starting state a brand-new song has) and re-runs the exact same background generation workflow used the first time: the lead's already-approved lyrics and mood are reused untouched, no lyrics are ever regenerated, no lyric attempt is ever consumed, and no second `Song` row is ever created — the same `songId` is updated throughout. If it succeeds this time, the one-time automatic email still fires normally, exactly as it would for a song that succeeded on the first try.
+
+**Resend Email** — shown only once the song is `COMPLETED` _and_ the automatic email has already been sent. The operator must type a reason (e.g. "parent said they never received it") before confirming; each confirmation sends exactly one additional copy of the same song-ready email and records who requested it, when, and why. This is entirely separate from the automatic, exactly-once delivery — resending never re-arms it and can never cause a second _automatic_ email to go out.
+
+## Execution History
+
+The Lead Detail screen's history section is a single, chronological (newest-first), read-only timeline built from two kinds of events:
+
+- **System events**, synthesized from timestamps already on the Lead/Lyrics/Song records — no admin attached: Lead created, Lyrics generated (per version), Lyrics approved (the approved version only), Song requested, Song completed, Song failed (shown only while the song's current status is still `FAILED` — a later successful retry naturally stops showing it, since the song is no longer failed), and Automatic email sent.
+- **Admin-attributed events**, one row per real action taken in this module: Lead viewed, Retry executed, and Manual email resent (with its reason shown alongside).
 
 ## Failure Scenarios
 

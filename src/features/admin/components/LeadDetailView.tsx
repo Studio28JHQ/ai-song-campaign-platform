@@ -2,12 +2,13 @@
 
 import { buttonVariants } from "@/components/ui/button";
 import { useLeadDetail } from "../hooks/useLeadDetail";
+import { ResendEmailAction } from "./ResendEmailAction";
+import { RetrySongAction } from "./RetrySongAction";
 
 interface LeadDetailViewProps {
   leadId: string;
 }
 
-/** Maps the domain's internal `READY` status to the same public vocabulary parents see (see docs/Product/User_Flow.md), for display only. */
 function displaySongStatus(status: string): string {
   return status === "READY" ? "COMPLETED" : status;
 }
@@ -27,11 +28,14 @@ function formatTimestamp(value: string | null): string {
  * The read-only Lead Detail screen (see docs/Product/User_Flow.md):
  * lead information, lyrics history, the approved version, song
  * status/audio/download, generation timestamps, email delivery status,
- * and audit history. There is no editing capability anywhere on this
- * screen.
+ * and the complete execution history. The only interactive controls are
+ * the two operational recovery actions — Retry Generation (only for a
+ * `FAILED` song) and Resend Email (only for a `COMPLETED` song whose
+ * automatic email has already gone out) — everything else on this screen
+ * is strictly read-only.
  */
 export function LeadDetailView({ leadId }: LeadDetailViewProps) {
-  const { detail, isLoading, notFound, errorMessage } = useLeadDetail(leadId);
+  const { detail, isLoading, notFound, errorMessage, refetch } = useLeadDetail(leadId);
 
   if (isLoading) {
     return <p className="text-body text-muted-foreground">Loading...</p>;
@@ -53,7 +57,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
     );
   }
 
-  const { lead, lyricsHistory, approvedLyrics, song, auditHistory } = detail;
+  const { lead, lyricsHistory, approvedLyrics, song, executionHistory } = detail;
 
   return (
     <div className="flex flex-col gap-8">
@@ -155,6 +159,14 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
                 </a>
               </>
             ) : null}
+
+            {song.status === "FAILED" ? (
+              <RetrySongAction songId={song.id} onSuccess={refetch} />
+            ) : null}
+
+            {song.status === "READY" && song.emailedAt ? (
+              <ResendEmailAction songId={song.id} onSuccess={refetch} />
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No song generated yet.</p>
@@ -162,15 +174,26 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Audit History</h2>
-        {auditHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No audit entries yet.</p>
+        <h2 className="text-title font-semibold text-foreground">Execution History</h2>
+        {executionHistory.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No history yet.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
-            {auditHistory.map((entry) => (
-              <li key={entry.id} className="flex justify-between border-b border-border py-1">
-                <span>{entry.action}</span>
-                <span className="text-muted-foreground">{formatTimestamp(entry.createdAt)}</span>
+            {executionHistory.map((item, index) => (
+              <li
+                key={`${item.type}-${item.timestamp}-${index}`}
+                className="flex flex-col gap-0.5 border-b border-border py-1 last:border-0"
+              >
+                <div className="flex justify-between">
+                  <span>
+                    {item.label}
+                    {item.actor ? (
+                      <span className="text-muted-foreground"> — by {item.actor}</span>
+                    ) : null}
+                  </span>
+                  <span className="text-muted-foreground">{formatTimestamp(item.timestamp)}</span>
+                </div>
+                {item.detail ? <span className="text-muted-foreground">{item.detail}</span> : null}
               </li>
             ))}
           </ul>

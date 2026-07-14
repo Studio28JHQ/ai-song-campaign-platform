@@ -41,14 +41,24 @@ export interface LeadDetailSong {
   updatedAt: string;
 }
 
-export interface LeadDetailAuditEntry {
-  id: string;
-  adminId: string;
-  action: string;
-  entity: string;
-  entityId: string | null;
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
+export type ExecutionHistoryEventType =
+  | "lead_created"
+  | "lyrics_generated"
+  | "lyrics_approved"
+  | "song_requested"
+  | "song_completed"
+  | "song_failed"
+  | "email_sent_automatic"
+  | "email_resent_manual"
+  | "song_retried"
+  | "lead_viewed";
+
+export interface LeadDetailExecutionHistoryItem {
+  type: ExecutionHistoryEventType;
+  label: string;
+  timestamp: string;
+  actor: string | null;
+  detail?: string | null;
 }
 
 export interface LeadDetailResult {
@@ -56,7 +66,7 @@ export interface LeadDetailResult {
   lyricsHistory: LeadDetailLyrics[];
   approvedLyrics: LeadDetailLyrics | null;
   song: LeadDetailSong | null;
-  auditHistory: LeadDetailAuditEntry[];
+  executionHistory: LeadDetailExecutionHistoryItem[];
 }
 
 export class GetLeadDetailError extends Error {

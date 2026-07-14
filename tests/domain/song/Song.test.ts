@@ -54,6 +54,34 @@ describe("Song status transitions", () => {
     expect(song.status).toBe(SongStatus.GENERATING);
   });
 
+  it("allows an admin retry to reset FAILED back to PENDING, then resume normally", () => {
+    const song = Song.create(validInput);
+    song.markGenerating();
+    song.markFailed();
+    expect(song.status).toBe(SongStatus.FAILED);
+
+    song.retryFromFailure();
+    expect(song.status).toBe(SongStatus.PENDING);
+
+    song.markGenerating();
+    song.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    expect(song.status).toBe(SongStatus.READY);
+  });
+
+  it("rejects retryFromFailure from any status other than FAILED", () => {
+    const pending = Song.create(validInput);
+    expect(() => pending.retryFromFailure()).toThrow();
+
+    const generating = Song.create(validInput);
+    generating.markGenerating();
+    expect(() => generating.retryFromFailure()).toThrow();
+
+    const ready = Song.create(validInput);
+    ready.markGenerating();
+    ready.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    expect(() => ready.retryFromFailure()).toThrow();
+  });
+
   it("rejects skipping straight to READY", () => {
     const song = Song.create(validInput);
     expect(() =>

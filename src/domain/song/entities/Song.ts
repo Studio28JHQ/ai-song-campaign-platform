@@ -15,11 +15,18 @@ const DEFAULT_PROVIDER = "suno";
  * level (see docs/Architecture/Database_Model.md), so a failed attempt
  * must not permanently occupy a lead's one-song slot. Only a `READY` song
  * counts as the lead's "final song" — see docs/Product/Business_Rules.md.
+ *
+ * `FAILED -> PENDING` is the one additional transition, used exclusively
+ * by a manual admin retry (see `retryFromFailure`): it resets the row to
+ * the same starting state a brand-new Song is created in, so the
+ * existing generation workflow (`ProcessSongGenerationUseCase`) picks it
+ * up identically either way — see docs/Architecture/System_Architecture.md
+ * — Operational Recovery.
  */
 const ALLOWED_TRANSITIONS: Record<SongStatus, ReadonlyArray<SongStatus>> = {
   [SongStatus.PENDING]: [SongStatus.GENERATING],
   [SongStatus.GENERATING]: [SongStatus.READY, SongStatus.FAILED],
-  [SongStatus.FAILED]: [SongStatus.GENERATING],
+  [SongStatus.FAILED]: [SongStatus.PENDING, SongStatus.GENERATING],
   [SongStatus.READY]: [],
 };
 
@@ -106,6 +113,17 @@ export class Song {
   /** Records a failed generation attempt. Not terminal — see `ALLOWED_TRANSITIONS`. */
   markFailed(): void {
     this.transitionTo(SongStatus.FAILED);
+  }
+
+  /**
+   * Resets a `FAILED` song back to `PENDING` for a manual admin retry
+   * (see docs/Product/User_Flow.md — Operational Recovery). Only ever
+   * valid from `FAILED` — a lead's approved lyrics, mood, and Suno
+   * provider are always reused unchanged; this method never touches
+   * them, only the status.
+   */
+  retryFromFailure(): void {
+    this.transitionTo(SongStatus.PENDING);
   }
 
   get id(): string {
