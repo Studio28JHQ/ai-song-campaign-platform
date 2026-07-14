@@ -9,11 +9,6 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
 import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
-import type { MoodSunoPromptProvider } from "@/application/song/contracts/MoodSunoPromptProvider";
-import type {
-  SunoGenerator,
-  SunoGenerationResult,
-} from "@/application/song/contracts/SunoGenerator";
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -70,6 +65,9 @@ class InMemoryLyricsRepository implements LyricsRepository {
 
 class InMemorySongRepository implements SongRepository {
   private readonly records = new Map<string, Song>();
+  seed(song: Song): void {
+    this.records.set(song.id, song);
+  }
   async create(song: Song): Promise<Song> {
     this.records.set(song.id, song);
     return song;
@@ -88,29 +86,6 @@ class InMemorySongRepository implements SongRepository {
 
 function fakeCampaignGate(allowed = true): CampaignGate {
   return { isActiveAndGenerationEnabled: vi.fn().mockResolvedValue(allowed) };
-}
-
-function fakeMoodProvider(): MoodSunoPromptProvider {
-  return {
-    getMoodDetails: vi
-      .fn()
-      .mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" }),
-  };
-}
-
-function fakeSunoGenerator(
-  result: SunoGenerationResult | Error = {
-    providerSongId: "suno-123",
-    audioUrl: "https://cdn.example.com/song.mp3",
-    duration: 120,
-  },
-): SunoGenerator {
-  return {
-    generateSong:
-      result instanceof Error
-        ? vi.fn().mockRejectedValue(result)
-        : vi.fn().mockResolvedValue(result),
-  };
 }
 
 function createLead(): Lead {
@@ -154,8 +129,6 @@ describe("GenerateSongUseCase", () => {
       lyricsRepository,
       songRepository,
       fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
     );
 
     await expect(useCase.execute({ leadId: "missing" })).rejects.toThrow();
@@ -169,52 +142,43 @@ describe("GenerateSongUseCase", () => {
       lyricsRepository,
       songRepository,
       fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
     );
 
     await expect(useCase.execute({ leadId: lead.id })).rejects.toThrow();
     expect(await songRepository.findByLead(lead.id)).toBeNull();
   });
 
-  it("rejects when the campaign is disabled, before ever checking lyrics or calling Suno", async () => {
+  it("rejects when the campaign is disabled, before ever checking lyrics", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
-    const suno = fakeSunoGenerator();
     const useCase = new GenerateSongUseCase(
       leadRepository,
       lyricsRepository,
       songRepository,
       fakeCampaignGate(false),
-      fakeMoodProvider(),
-      suno,
     );
 
     await expect(useCase.execute({ leadId: lead.id })).rejects.toThrow();
-    expect(suno.generateSong).not.toHaveBeenCalled();
+    expect(await songRepository.findByLead(lead.id)).toBeNull();
   });
 
-  it("generates exactly one song on success", async () => {
+  it("persists a new song as PENDING and returns immediately, without calling Suno", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);
     lyricsRepository.seed(lyrics);
-    const suno = fakeSunoGenerator();
     const useCase = new GenerateSongUseCase(
       leadRepository,
       lyricsRepository,
       songRepository,
       fakeCampaignGate(),
-      fakeMoodProvider(),
-      suno,
     );
 
     const response = await useCase.execute({ leadId: lead.id });
 
-    expect(response.song.status).toBe(SongStatus.READY);
-    expect(response.song.audioUrl).toBe("https://cdn.example.com/song.mp3");
-    expect(response.song.provider).toBe("suno");
-    expect(suno.generateSong).toHaveBeenCalledTimes(1);
+    expect(response.song.status).toBe(SongStatus.PENDING);
+    expect(response.song.audioUrl).toBeNull();
+    expect(response.song.providerSongId).toBeNull();
   });
 
   it("rejects a second generation once a song is already READY", async () => {
@@ -222,85 +186,41 @@ describe("GenerateSongUseCase", () => {
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);
     lyricsRepository.seed(lyrics);
+    const readySong = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: lyrics.moodId });
+    readySong.markGenerating();
+    readySong.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/a.mp3" });
+    songRepository.seed(readySong);
+
     const useCase = new GenerateSongUseCase(
       leadRepository,
       lyricsRepository,
       songRepository,
       fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
-    );
-
-    await useCase.execute({ leadId: lead.id });
-
-    const suno = fakeSunoGenerator();
-    const retryUseCase = new GenerateSongUseCase(
-      leadRepository,
-      lyricsRepository,
-      songRepository,
-      fakeCampaignGate(),
-      fakeMoodProvider(),
-      suno,
-    );
-
-    await expect(retryUseCase.execute({ leadId: lead.id })).rejects.toThrow();
-    expect(suno.generateSong).not.toHaveBeenCalled();
-
-    const songs = await songRepository.findByLead(lead.id);
-    expect(songs?.status).toBe(SongStatus.READY);
-  });
-
-  it("marks the song FAILED and re-throws on a provider failure, without leaving it stuck in GENERATING", async () => {
-    const lead = createLead();
-    leadRepository.seed(lead);
-    const lyrics = createApprovedLyrics(lead.id);
-    lyricsRepository.seed(lyrics);
-    const useCase = new GenerateSongUseCase(
-      leadRepository,
-      lyricsRepository,
-      songRepository,
-      fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(new Error("Suno API responded with status 503.")),
     );
 
     await expect(useCase.execute({ leadId: lead.id })).rejects.toThrow();
-
-    const song = await songRepository.findByLead(lead.id);
-    expect(song?.status).toBe(SongStatus.FAILED);
   });
 
-  it("allows retrying the same song after a provider failure, reusing the same row", async () => {
+  it("reuses the same row for a manual retry after a previous failure, instead of creating a duplicate", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);
     lyricsRepository.seed(lyrics);
+    const failedSong = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: lyrics.moodId });
+    failedSong.markGenerating();
+    failedSong.markFailed();
+    songRepository.seed(failedSong);
 
-    const failingUseCase = new GenerateSongUseCase(
+    const useCase = new GenerateSongUseCase(
       leadRepository,
       lyricsRepository,
       songRepository,
       fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(new Error("Suno API responded with status 503.")),
     );
-    await expect(failingUseCase.execute({ leadId: lead.id })).rejects.toThrow();
 
-    const failedSong = await songRepository.findByLead(lead.id);
-    expect(failedSong?.status).toBe(SongStatus.FAILED);
-    const failedSongId = failedSong?.id;
+    const response = await useCase.execute({ leadId: lead.id });
 
-    const succeedingUseCase = new GenerateSongUseCase(
-      leadRepository,
-      lyricsRepository,
-      songRepository,
-      fakeCampaignGate(),
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
-    );
-    const response = await succeedingUseCase.execute({ leadId: lead.id });
-
-    expect(response.song.status).toBe(SongStatus.READY);
-    expect(response.song.id).toBe(failedSongId);
+    expect(response.song.id).toBe(failedSong.id);
+    expect(response.song.status).toBe(SongStatus.FAILED);
   });
 });

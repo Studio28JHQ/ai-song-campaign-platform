@@ -170,21 +170,38 @@ or, when rejected:
 3. **Generate Again** re-submits the same endpoint with the same mood/message; the previous version is never deleted — every version remains queryable via `LyricsRepository.findAllByLead`.
 4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — a temporary placeholder page ("Song generation module coming next.") until the Song Generation UI is implemented; the backend endpoint below already exists.
 
-## Song Generation Endpoint
+## Song Generation Endpoints
 
-**`POST /api/song/generate`** implements the **Suno Song Generation** step of the happy path. Given just `leadId`, the backend looks up everything else server-side — the lead's approved lyrics, and through it the selected mood and its fixed Suno prompt — so the client never needs to resend any of that.
+The **Suno Song Generation** step of the happy path is asynchronous: the client is never made to wait for Suno to finish. It starts with `POST /api/song/generate` and finishes with the client polling `GET /api/song/{songId}` — there is no WebSocket or Server-Sent Events push; the frontend polls every 5 seconds until the song reaches a final status. See `docs/Architecture/System_Architecture.md` for the full sequence and state machine.
 
-A song can only be generated if, in order: the lead exists; the lead has not already generated a final (successfully `READY`) song; the campaign is active and generation is enabled; and the lead has exactly one approved lyrics version. Exactly one Suno request is made — never multiple variations (see `docs/Product/Business_Rules.md` — Song Rules).
+**`POST /api/song/generate`** — given just `leadId`, the backend looks up everything else server-side (the lead's approved lyrics, and through it the selected mood and its fixed Suno prompt), persists a new `Song` as `PENDING`, and returns immediately — the actual Suno call happens afterward, in the background.
 
-**Success — `201 Created`:**
+A song can only be started if, in order: the lead exists; the lead has not already generated a final (successfully `COMPLETED`) song; the campaign is active and generation is enabled; and the lead has exactly one approved lyrics version. Exactly one Suno request is made per attempt — never multiple variations (see `docs/Product/Business_Rules.md` — Song Rules).
+
+**Success — `202 Accepted`:**
 
 ```json
-{ "songId": "...", "status": "READY", "audioUrl": "https://..." }
+{
+  "songId": "...",
+  "status": "PENDING",
+  "estimatedNextAction": "Poll GET /api/song/{songId} every 5 seconds until status is COMPLETED or FAILED."
+}
 ```
 
-Only these three fields are returned — the provider name, the provider's own song id, and any other Suno-internal detail are never exposed.
+**Errors:** `400 invalid_request`, `404 lead_not_found`, `409 song_already_exists`, `422 lyrics_not_approved` / `campaign_disabled` / `business_rule_violation`, `500 internal_error`. These are all synchronous validation failures — nothing has been sent to Suno yet, so none of them touch a `Song` row.
 
-**Errors:** `400 invalid_request`, `404 lead_not_found`, `409 song_already_exists`, `422 lyrics_not_approved` / `campaign_disabled` / `business_rule_violation`, `503 suno_unavailable`, `500 internal_error`. A Suno failure marks the song `FAILED` (not stuck `GENERATING`) so the same lead can retry — see `docs/Architecture/External_Services.md` — without ever being able to generate a second, separate song.
+**`GET /api/song/{songId}`** — the polling endpoint. Returns only the current status while generation is in progress; once the song reaches `COMPLETED`, the response also includes the `audioUrl`. The provider name, the provider's own song id, and any other Suno-internal detail are never exposed.
+
+```json
+{ "songId": "...", "status": "PENDING" }
+{ "songId": "...", "status": "GENERATING" }
+{ "songId": "...", "status": "COMPLETED", "audioUrl": "https://..." }
+{ "songId": "...", "status": "FAILED" }
+```
+
+**Errors:** `400 invalid_request` (missing `songId`), `404 song_not_found`, `500 internal_error`.
+
+A Suno failure — a timeout, the provider being unavailable, or an unexpected response — is always persisted as `FAILED` (never left stuck on `GENERATING`) so the same lead can retry by calling `POST /api/song/generate` again; retries are never automatic (see `docs/Product/Business_Rules.md` — Song Rules).
 
 ## Failure Scenarios
 
@@ -194,7 +211,7 @@ Only these three fields are returned — the provider name, the provider's own s
 - **Attempts exhausted**: User has used all five lyric attempts (via regenerations and/or moderation rejections) without accepting lyrics; the flow ends without a song.
 - **Lyrics generation failure**: Claude API call fails or times out; user is shown an error and may retry without consuming an attempt.
 - **Lyrics regeneration requested**: User rejects the previewed lyrics and requests a new version; an attempt is consumed.
-- **Song generation failure**: Suno API call fails or times out; the system retries or surfaces an error without consuming a lyric attempt.
+- **Song generation failure**: Suno API call times out, is unavailable, or returns an unexpected response; the song is persisted as `FAILED` (discovered by the client via polling), is never retried automatically, and does not consume a lyric attempt — the same lead can trigger a fresh attempt via `POST /api/song/generate`.
 - **Audio storage failure**: Upload to Supabase Storage fails; the system retries before proceeding to email delivery.
 - **Email delivery failure**: Resend fails to deliver the final email; the system retries or logs the failure for admin follow-up.
 - **Campaign capacity reached**: The 3,000 song cap is reached; new registrations are declined or queued per campaign rules.

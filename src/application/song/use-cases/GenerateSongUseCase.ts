@@ -5,28 +5,30 @@ import { SongStatus } from "@/domain/song/types";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { BusinessRuleError } from "@/shared/errors";
 import type { CampaignGate } from "../contracts/CampaignGate";
-import type { MoodSunoPromptProvider } from "../contracts/MoodSunoPromptProvider";
-import type { SunoGenerator } from "../contracts/SunoGenerator";
 import type { GenerateSongRequest } from "../dto/GenerateSongRequest";
 import type { GenerateSongResponse } from "../dto/GenerateSongResponse";
 
 /**
- * Generates the one final song a lead may ever have, from their already
- * approved Lyrics. Enforces every rule in docs/Product/Business_Rules.md
- * that requires a repository lookup (the Song entity alone cannot know
- * about the lead, the campaign, or the approved lyrics):
+ * Synchronous intake for song generation: validates every rule in
+ * docs/Product/Business_Rules.md that requires a repository lookup (the
+ * Song entity alone cannot know about the lead, the campaign, or the
+ * approved lyrics), then persists the Song as `PENDING` and returns
+ * immediately — it never calls Suno itself.
  *
  * - The Lead exists.
  * - The Lead has not already generated a final (READY) song. A `FAILED`
  *   attempt does not count — see `Song`'s transition map — so a
  *   transient Suno failure never permanently blocks a lead, without
  *   ever allowing a second row (the DB's `Song.leadId` unique constraint
- *   only ever sees one row per lead).
+ *   only ever sees one row per lead). Calling this again after a
+ *   failure reuses the same row, which is how a manual retry works.
  * - The campaign is active and generation is enabled.
  * - The Lead has exactly one approved Lyrics version.
  *
- * Only one Suno request is ever made per call — never multiple
- * variations (see docs/Architecture/External_Services.md).
+ * The actual Suno call happens in `ProcessSongGenerationUseCase`, run in
+ * the background by the API route (see `app/api/song/generate/route.ts`)
+ * — this split is what makes the endpoint respond immediately (see
+ * docs/Architecture/System_Architecture.md).
  */
 export class GenerateSongUseCase {
   constructor(
@@ -34,8 +36,6 @@ export class GenerateSongUseCase {
     private readonly lyricsRepository: LyricsRepository,
     private readonly songRepository: SongRepository,
     private readonly campaignGate: CampaignGate,
-    private readonly moodProvider: MoodSunoPromptProvider,
-    private readonly sunoGenerator: SunoGenerator,
   ) {}
 
   async execute(request: GenerateSongRequest): Promise<GenerateSongResponse> {
@@ -75,16 +75,7 @@ export class GenerateSongUseCase {
       });
     }
 
-    const mood = await this.moodProvider.getMoodDetails(approvedLyrics.moodId);
-
-    if (!mood) {
-      throw new BusinessRuleError("The mood for these lyrics could not be found.", {
-        code: "song.mood_not_found",
-        context: { moodId: approvedLyrics.moodId },
-      });
-    }
-
-    let song =
+    const song =
       existingSong ??
       (await this.songRepository.create(
         Song.create({
@@ -93,24 +84,6 @@ export class GenerateSongUseCase {
           moodId: approvedLyrics.moodId,
         }),
       ));
-
-    song.markGenerating();
-    song = await this.songRepository.update(song);
-
-    try {
-      const result = await this.sunoGenerator.generateSong({
-        lyrics: approvedLyrics.content,
-        moodName: mood.name,
-        sunoPrompt: mood.sunoPrompt,
-      });
-
-      song.markReady(result);
-      song = await this.songRepository.update(song);
-    } catch (error) {
-      song.markFailed();
-      await this.songRepository.update(song);
-      throw error;
-    }
 
     return { song: song.toSnapshot() };
   }

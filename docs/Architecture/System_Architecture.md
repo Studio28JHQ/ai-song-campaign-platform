@@ -88,9 +88,31 @@ No business rule is evaluated inside the route handler itself; it only translate
 
 `POST /api/lyrics/approve` (`app/api/lyrics/approve/route.ts`) needed no new use case — the existing `ApproveLyricsUseCase` already fully covers "approve this version, reject if the lead already has a different one approved," so the route is a direct, unmodified wrapper around it, backed by a new `PrismaLyricsRepository`/`LyricsMapper` (`src/infrastructure/persistence/prisma/lyrics/`) mirroring the Lead module's persistence pattern exactly.
 
+## Asynchronous Song Generation
+
+Song generation is the one step of the pipeline that runs in the background rather than synchronously within the request, because a Suno generation call takes far longer than a client should be made to wait on an HTTP response. There is still no queue or worker fleet (see "Why This Project Intentionally Avoids" below) — "background" means an in-process callback scheduled via Next.js's `after()`, not a separate deployable.
+
+**State machine.** `Song.status` moves through `PENDING → GENERATING → READY | FAILED`, with one additional transition, `FAILED → GENERATING`, allowed specifically to support manual retry (`Song.leadId` is a unique DB constraint, so a failed attempt must not permanently occupy a lead's one-song slot). The public API translates the domain's internal `READY` to `COMPLETED`; `PENDING`, `GENERATING`, and `FAILED` pass through unchanged (see `app/api/song/publicSongStatus.ts`).
+
+**Two use cases, one workflow.** The single synchronous use case from the previous version was split in two:
+
+- **`GenerateSongUseCase`** (`src/application/song/use-cases/`) — the synchronous intake. It runs every rule that requires a repository lookup (lead exists, no existing `READY` song, campaign active, exactly one approved lyrics version), persists the `Song` as `PENDING` (or reuses the existing row on a retry after `FAILED`), and returns immediately. It never calls Suno.
+- **`ProcessSongGenerationUseCase`** (`src/application/song/use-cases/`) — the background half. Given just a `songId`, it re-fetches the lyrics and mood itself, transitions the song to `GENERATING`, makes the single Suno request, and persists the outcome as `READY` (with the audio URL) or `FAILED`. It is self-sufficient given only the `songId` so it works the same way regardless of how "background" execution is wired today vs. in the future.
+
+**Request sequence.** `POST /api/song/generate` (`app/api/song/generate/route.ts`):
+
+1. Parses and Zod-validates the request body (`leadId` only) — shape only, same convention as every other route.
+2. Calls `GenerateSongUseCase.execute` and awaits it — this is fast (no external call) and is what the client actually waits on.
+3. Schedules `ProcessSongGenerationUseCase.execute({ songId })` via `after()`, wrapped in its own `try/catch` — a rejection here is logged and never crashes the request, because every failure path inside `ProcessSongGenerationUseCase` already persists `FAILED` itself before rethrowing.
+4. Responds immediately with `202 Accepted` and `{ songId, status: "PENDING", estimatedNextAction }`. Steps 3 and 4 are not ordered by a wait — `after()` guarantees the callback keeps running after the response is sent, not that it runs before it.
+
+`GET /api/song/[songId]` (`app/api/song/[songId]/route.ts`) is the polling endpoint: a thin read of the current `Song` row, translated to the public status vocabulary, with `audioUrl` included only once `status` is `COMPLETED`. The frontend polls this every 5 seconds (see `docs/Product/User_Flow.md`); there is deliberately no WebSocket or Server-Sent Events channel.
+
+**Error handling.** A provider timeout, an unavailable provider, or an unexpected/malformed Suno response are all just exceptions from the `SunoGenerator` port as far as `ProcessSongGenerationUseCase` is concerned — every one of them is caught, persisted as `FAILED`, and rethrown (so the background-scheduling `catch` in the route can log it). None of them are retried automatically; a `FAILED` song is simply left available for a future manual call to `POST /api/song/generate`, which reuses the same row instead of creating a duplicate.
+
 ## Why This Project Intentionally Avoids
 
 - **Microservices** — the campaign has a fixed, modest scale (≤3,000 songs, one month). Splitting into services would add deployment, networking, and operational overhead with no corresponding benefit.
-- **Event-driven architecture** — the business flow is a linear, synchronous-enough pipeline (moderate → generate lyrics → accept → generate song → email). Introducing queues/event buses would add infrastructure and failure modes disproportionate to the task.
+- **Event-driven architecture** — the business flow is a linear, synchronous-enough pipeline (moderate → generate lyrics → accept → generate song → email). Introducing queues/event buses would add infrastructure and failure modes disproportionate to the task; where a step (Suno generation) is slow enough to need to run in the background, an in-process `after()` callback plus client polling (see "Asynchronous Song Generation" above) is enough, without standing up a queue or worker fleet.
 - **Multiple AI providers** — Claude and Suno are each used for a single, well-defined responsibility (moderation/lyrics, and song generation, respectively). Supporting alternate providers would add abstraction and testing surface for a temporary campaign that will not be maintained long-term.
 - **Unnecessary abstractions** — the codebase favors direct, evolvable implementations over speculative interfaces or plugin systems, since the system has one deployment target, one campaign, and a known, bounded lifetime.

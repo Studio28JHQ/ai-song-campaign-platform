@@ -6,7 +6,6 @@ import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
-import { ExternalApiError } from "@/shared/errors";
 
 const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn> } = {
   findById: vi.fn(),
@@ -35,6 +34,23 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 const mockIsActiveAndGenerationEnabled = vi.fn();
 const mockGetMoodDetails = vi.fn();
 const mockGenerateSong = vi.fn();
+
+// `after()` throws when called outside a real Next.js request scope (see
+// node_modules/next/dist/server/after/after.js), which is exactly the
+// situation when a route handler is invoked directly in a test. Capturing
+// the scheduled callback here lets us both avoid that crash and
+// explicitly await the "background" work to assert on it.
+const capturedAfterCallbacks: Array<() => Promise<void>> = [];
+
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return {
+    ...actual,
+    after: vi.fn((callback: () => Promise<void>) => {
+      capturedAfterCallbacks.push(callback);
+    }),
+  };
+});
 
 vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
   PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
@@ -106,20 +122,58 @@ function postRequest(body: unknown): Request {
   });
 }
 
+async function runScheduledBackgroundWork(): Promise<void> {
+  const callback = capturedAfterCallbacks.pop();
+  if (callback) await callback();
+}
+
 describe("POST /api/song/generate", () => {
+  let createdSong: Song | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedAfterCallbacks.length = 0;
+    createdSong = undefined;
     mockSongRepository.findByLead.mockResolvedValue(null);
-    mockSongRepository.create.mockImplementation(async (song: Song) => song);
-    mockSongRepository.update.mockImplementation(async (song: Song) => song);
+    mockSongRepository.create.mockImplementation(async (song: Song) => {
+      createdSong = song;
+      return song;
+    });
+    // ProcessSongGenerationUseCase re-fetches the song by id once the
+    // background callback runs, so the fake repository must hand back the
+    // same instance that GenerateSongUseCase just persisted.
+    mockSongRepository.findById.mockImplementation(async () => createdSong ?? null);
+    mockSongRepository.update.mockImplementation(async (song: Song) => {
+      createdSong = song;
+      return song;
+    });
     mockIsActiveAndGenerationEnabled.mockResolvedValue(true);
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
   });
 
-  it("returns 201 with the song id, status, and audio url on success", async () => {
+  it("returns 202 immediately with PENDING status, without waiting for Suno", async () => {
     const lead = buildLead();
     mockLeadRepository.findById.mockResolvedValue(lead);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(buildApprovedLyrics(lead.id));
+    const lyrics = buildApprovedLyrics(lead.id);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
+
+    const response = await POST(postRequest({ leadId: lead.id }));
+    const body = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(body.status).toBe("PENDING");
+    expect(typeof body.songId).toBe("string");
+    expect(body.estimatedNextAction).toContain(`/api/song/${body.songId}`);
+    // Suno must never be called synchronously as part of the request.
+    expect(mockGenerateSong).not.toHaveBeenCalled();
+  });
+
+  it("schedules background processing that eventually completes the song", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    const lyrics = buildApprovedLyrics(lead.id);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
+    mockLyricsRepository.findById.mockResolvedValue(lyrics);
     mockGenerateSong.mockResolvedValue({
       providerSongId: "suno-123",
       audioUrl: "https://cdn.example.com/song.mp3",
@@ -127,15 +181,32 @@ describe("POST /api/song/generate", () => {
     });
 
     const response = await POST(postRequest({ leadId: lead.id }));
-    const body = await response.json();
+    expect(response.status).toBe(202);
+    expect(capturedAfterCallbacks).toHaveLength(1);
 
-    expect(response.status).toBe(201);
-    expect(body.status).toBe("READY");
-    expect(body.audioUrl).toBe("https://cdn.example.com/song.mp3");
-    expect(typeof body.songId).toBe("string");
-    // Provider internals must never be exposed.
-    expect(body.provider).toBeUndefined();
-    expect(body.providerSongId).toBeUndefined();
+    await runScheduledBackgroundWork();
+
+    expect(mockGenerateSong).toHaveBeenCalledTimes(1);
+    expect(mockSongRepository.update).toHaveBeenCalled();
+    const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
+    expect(lastUpdateCall.status).toBe("READY");
+  });
+
+  it("persists a FAILED status when Suno fails in the background, without crashing", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    const lyrics = buildApprovedLyrics(lead.id);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
+    mockLyricsRepository.findById.mockResolvedValue(lyrics);
+    mockGenerateSong.mockRejectedValue(new Error("Suno API responded with status 503."));
+
+    const response = await POST(postRequest({ leadId: lead.id }));
+    expect(response.status).toBe(202);
+
+    await expect(runScheduledBackgroundWork()).resolves.toBeUndefined();
+
+    const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
+    expect(lastUpdateCall.status).toBe("FAILED");
   });
 
   it("returns 404 when the lead is not found", async () => {
@@ -146,6 +217,7 @@ describe("POST /api/song/generate", () => {
 
     expect(response.status).toBe(404);
     expect(body.error).toBe("lead_not_found");
+    expect(capturedAfterCallbacks).toHaveLength(0);
   });
 
   it("returns 422 when the lead has no approved lyrics", async () => {
@@ -158,7 +230,7 @@ describe("POST /api/song/generate", () => {
 
     expect(response.status).toBe(422);
     expect(body.error).toBe("lyrics_not_approved");
-    expect(mockGenerateSong).not.toHaveBeenCalled();
+    expect(capturedAfterCallbacks).toHaveLength(0);
   });
 
   it("returns 409 when the lead already generated a song", async () => {
@@ -172,7 +244,7 @@ describe("POST /api/song/generate", () => {
 
     expect(response.status).toBe(409);
     expect(body.error).toBe("song_already_exists");
-    expect(mockGenerateSong).not.toHaveBeenCalled();
+    expect(capturedAfterCallbacks).toHaveLength(0);
   });
 
   it("returns 422 when the campaign is disabled", async () => {
@@ -185,22 +257,7 @@ describe("POST /api/song/generate", () => {
 
     expect(response.status).toBe(422);
     expect(body.error).toBe("campaign_disabled");
-    expect(mockGenerateSong).not.toHaveBeenCalled();
-  });
-
-  it("returns 503 when Suno is unavailable", async () => {
-    const lead = buildLead();
-    mockLeadRepository.findById.mockResolvedValue(lead);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(buildApprovedLyrics(lead.id));
-    mockGenerateSong.mockRejectedValue(
-      new ExternalApiError("Suno API responded with status 503.", { code: "suno.api_error" }),
-    );
-
-    const response = await POST(postRequest({ leadId: lead.id }));
-    const body = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(body.error).toBe("suno_unavailable");
+    expect(capturedAfterCallbacks).toHaveLength(0);
   });
 
   it("returns 400 for an invalid payload without calling the use case", async () => {
