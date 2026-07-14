@@ -18,7 +18,7 @@ const COLUMNS: Array<{ field: LeadSortField; label: string }> = [
 
 const SONG_STATUS_OPTIONS = [
   { value: "", label: "Any song status" },
-  { value: "PENDING", label: "Pending" },
+  { value: "QUEUED", label: "Queued" },
   { value: "GENERATING", label: "Generating" },
   { value: "COMPLETED", label: "Completed" },
   { value: "FAILED", label: "Failed" },

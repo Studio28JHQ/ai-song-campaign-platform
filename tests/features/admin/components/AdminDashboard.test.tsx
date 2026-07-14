@@ -18,6 +18,8 @@ const summaryBody = {
   lyricsGenerated: 15,
   lyricsApproved: 10,
   songsRequested: 8,
+  songsQueued: 1,
+  songsGenerating: 1,
   songsCompleted: 5,
   songsFailed: 3,
   emailsSent: 5,
@@ -47,7 +49,7 @@ describe("AdminDashboard", () => {
     vi.clearAllMocks();
   });
 
-  it("loads and displays the nine summary indicators", async () => {
+  it("loads and displays the summary indicators", async () => {
     global.fetch = vi.fn((url: string) => {
       if (url.startsWith("/api/admin/dashboard")) return Promise.resolve(jsonResponse(summaryBody));
       return Promise.resolve(jsonResponse(searchBody));
@@ -62,6 +64,8 @@ describe("AdminDashboard", () => {
     expect(screen.getByText("Lyrics Generated")).toBeInTheDocument();
     expect(screen.getByText("Lyrics Approved")).toBeInTheDocument();
     expect(screen.getByText("Songs Requested")).toBeInTheDocument();
+    expect(screen.getByText("Songs Queued")).toBeInTheDocument();
+    expect(screen.getByText("Songs Generating")).toBeInTheDocument();
     expect(screen.getByText("Songs Completed")).toBeInTheDocument();
     expect(screen.getByText("Songs Failed")).toBeInTheDocument();
     expect(screen.getByText("Emails Sent")).toBeInTheDocument();

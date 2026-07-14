@@ -7,7 +7,7 @@ import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsReposi
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
-import { ProcessSongGenerationUseCase } from "@/application/song/use-cases/ProcessSongGenerationUseCase";
+import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
 import type { EmailDeliveryTracker } from "@/application/song/contracts/EmailDeliveryTracker";
 import type { MoodSunoPromptProvider } from "@/application/song/contracts/MoodSunoPromptProvider";
 import type {
@@ -15,9 +15,9 @@ import type {
   SongReadyEmailInput,
 } from "@/application/song/contracts/SongEmailSender";
 import type {
-  SunoGenerationResult,
-  SunoGenerator,
-} from "@/application/song/contracts/SunoGenerator";
+  SongGenerationProvider,
+  SongGenerationResult,
+} from "@/application/song/contracts/SongGenerationProvider";
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -87,6 +87,16 @@ class InMemorySongRepository implements SongRepository {
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.records.values()].find((s) => s.leadId === leadId) ?? null;
   }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.records.values()].find((s) => s.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.records.values()]
+        .filter((s) => s.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
+  }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
     return song;
@@ -112,13 +122,13 @@ function fakeMoodProvider(
   return { getMoodDetails: vi.fn().mockResolvedValue(details) };
 }
 
-function fakeSunoGenerator(
-  result: SunoGenerationResult | Error = {
+function fakeSongGenerator(
+  result: SongGenerationResult | Error = {
     providerSongId: "suno-123",
     audioUrl: "https://cdn.example.com/song.mp3",
     duration: 120,
   },
-): SunoGenerator {
+): SongGenerationProvider {
   return {
     generateSong:
       result instanceof Error
@@ -159,7 +169,7 @@ function createLead(): Lead {
   );
 }
 
-describe("ProcessSongGenerationUseCase", () => {
+describe("SongGenerationWorker", () => {
   let lyricsRepository: InMemoryLyricsRepository;
   let songRepository: InMemorySongRepository;
   let leadRepository: InMemoryLeadRepository;
@@ -175,26 +185,26 @@ describe("ProcessSongGenerationUseCase", () => {
     leadRepository.seed(lead);
   });
 
-  function buildUseCase(
+  function buildWorker(
     options: {
       moodProvider?: MoodSunoPromptProvider;
-      sunoGenerator?: SunoGenerator;
+      songGenerator?: SongGenerationProvider;
       emailSender?: SongEmailSender;
       deliveryTracker?: EmailDeliveryTracker;
     } = {},
-  ): ProcessSongGenerationUseCase {
-    return new ProcessSongGenerationUseCase(
+  ): SongGenerationWorker {
+    return new SongGenerationWorker(
       songRepository,
       lyricsRepository,
       options.moodProvider ?? fakeMoodProvider(),
-      options.sunoGenerator ?? fakeSunoGenerator(),
+      options.songGenerator ?? fakeSongGenerator(),
       leadRepository,
       options.emailSender ?? fakeEmailSender(),
       options.deliveryTracker ?? deliveryTracker,
     );
   }
 
-  function seedSong(): Song {
+  function seedQueuedSong(): Song {
     const lyrics = createApprovedLyrics();
     lyricsRepository.seed(lyrics);
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: lyrics.moodId });
@@ -202,34 +212,51 @@ describe("ProcessSongGenerationUseCase", () => {
     return song;
   }
 
-  it("rejects an unknown song id", async () => {
-    const useCase = buildUseCase();
+  it("returns null when there is no queued song", async () => {
+    const worker = buildWorker();
 
-    await expect(useCase.execute({ songId: "missing" })).rejects.toThrow();
+    const result = await worker.execute();
+
+    expect(result).toBeNull();
   });
 
-  it("moves a PENDING song through GENERATING to READY on success, making exactly one Suno request", async () => {
-    const song = seedSong();
-    const suno = fakeSunoGenerator();
-    const useCase = buildUseCase({ sunoGenerator: suno });
+  it("skips this run and does not touch any song when a generation is already in flight", async () => {
+    const generatingSong = seedQueuedSong();
+    generatingSong.markGenerating();
+    songRepository.seed(generatingSong);
+    const queuedSong = seedQueuedSong();
+    const songGenerator = fakeSongGenerator();
+    const worker = buildWorker({ songGenerator });
 
-    const response = await useCase.execute({ songId: song.id });
+    const result = await worker.execute();
 
-    expect(response.song.status).toBe(SongStatus.READY);
-    expect(response.song.audioUrl).toBe("https://cdn.example.com/song.mp3");
-    expect(suno.generateSong).toHaveBeenCalledTimes(1);
+    expect(result).toBeNull();
+    expect(songGenerator.generateSong).not.toHaveBeenCalled();
+    expect((await songRepository.findById(queuedSong.id))?.status).toBe(SongStatus.QUEUED);
+  });
+
+  it("moves the oldest QUEUED song through GENERATING to COMPLETED on success, making exactly one provider request", async () => {
+    const song = seedQueuedSong();
+    const songGenerator = fakeSongGenerator();
+    const worker = buildWorker({ songGenerator });
+
+    const response = await worker.execute();
+
+    expect(response?.song.status).toBe(SongStatus.COMPLETED);
+    expect(response?.song.audioUrl).toBe("https://cdn.example.com/song.mp3");
+    expect(songGenerator.generateSong).toHaveBeenCalledTimes(1);
 
     const persisted = await songRepository.findById(song.id);
-    expect(persisted?.status).toBe(SongStatus.READY);
+    expect(persisted?.status).toBe(SongStatus.COMPLETED);
   });
 
-  it("marks the song FAILED and re-throws on a Suno failure", async () => {
-    const song = seedSong();
-    const useCase = buildUseCase({
-      sunoGenerator: fakeSunoGenerator(new Error("Suno API responded with status 503.")),
+  it("marks the song FAILED and re-throws on a provider failure", async () => {
+    const song = seedQueuedSong();
+    const worker = buildWorker({
+      songGenerator: fakeSongGenerator(new Error("Suno API responded with status 503.")),
     });
 
-    await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
+    await expect(worker.execute()).rejects.toThrow();
 
     const persisted = await songRepository.findById(song.id);
     expect(persisted?.status).toBe(SongStatus.FAILED);
@@ -239,43 +266,47 @@ describe("ProcessSongGenerationUseCase", () => {
     const song = Song.create({ leadId: lead.id, lyricsId: "missing-lyrics", moodId: "mood-1" });
     songRepository.seed(song);
 
-    const useCase = buildUseCase();
+    const worker = buildWorker();
 
-    await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
+    await expect(worker.execute()).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
   });
 
   it("marks the song FAILED when the mood can no longer be found", async () => {
-    const song = seedSong();
-    const useCase = buildUseCase({ moodProvider: fakeMoodProvider(null) });
+    const song = seedQueuedSong();
+    const worker = buildWorker({ moodProvider: fakeMoodProvider(null) });
 
-    await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
+    await expect(worker.execute()).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
   });
 
-  it("allows retrying the same song after a failure, succeeding on the second attempt", async () => {
-    const song = seedSong();
+  it("allows retrying the same song after a failure, succeeding on the next run", async () => {
+    const song = seedQueuedSong();
 
-    const failingUseCase = buildUseCase({
-      sunoGenerator: fakeSunoGenerator(new Error("timeout")),
+    const failingWorker = buildWorker({
+      songGenerator: fakeSongGenerator(new Error("timeout")),
     });
-    await expect(failingUseCase.execute({ songId: song.id })).rejects.toThrow();
+    await expect(failingWorker.execute()).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
 
-    const succeedingUseCase = buildUseCase();
-    const response = await succeedingUseCase.execute({ songId: song.id });
+    const requeued = await songRepository.findById(song.id);
+    requeued?.retryFromFailure();
+    if (requeued) await songRepository.update(requeued);
 
-    expect(response.song.status).toBe(SongStatus.READY);
-    expect(response.song.id).toBe(song.id);
+    const succeedingWorker = buildWorker();
+    const response = await succeedingWorker.execute();
+
+    expect(response?.song.status).toBe(SongStatus.COMPLETED);
+    expect(response?.song.id).toBe(song.id);
   });
 
   describe("email delivery", () => {
     it("sends exactly one song-ready email when the song completes", async () => {
-      const song = seedSong();
+      seedQueuedSong();
       const emailSender = fakeEmailSender();
-      const useCase = buildUseCase({ emailSender });
+      const worker = buildWorker({ emailSender });
 
-      await useCase.execute({ songId: song.id });
+      await worker.execute();
 
       expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
       const input = (emailSender.sendSongReadyEmail as ReturnType<typeof vi.fn>).mock
@@ -288,42 +319,42 @@ describe("ProcessSongGenerationUseCase", () => {
     });
 
     it("never sends an email when generation fails", async () => {
-      const song = seedSong();
+      seedQueuedSong();
       const emailSender = fakeEmailSender();
-      const useCase = buildUseCase({
+      const worker = buildWorker({
         emailSender,
-        sunoGenerator: fakeSunoGenerator(new Error("timeout")),
+        songGenerator: fakeSongGenerator(new Error("timeout")),
       });
 
-      await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
+      await expect(worker.execute()).rejects.toThrow();
 
       expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
     });
 
     it("never sends a duplicate email once delivery has already been claimed", async () => {
-      const song = seedSong();
+      const song = seedQueuedSong();
       const emailSender = fakeEmailSender();
       // Simulate the claim already having been made by a prior run.
       await deliveryTracker.claimDelivery(song.id);
 
-      const useCase = buildUseCase({ emailSender });
-      await useCase.execute({ songId: song.id });
+      const worker = buildWorker({ emailSender });
+      await worker.execute();
 
       expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
     });
 
     it("does not fail the use case, and does not retry, when the email itself fails to send", async () => {
-      const song = seedSong();
+      seedQueuedSong();
       const emailSender = fakeEmailSender(new Error("Resend API responded with status 500."));
-      const useCase = buildUseCase({ emailSender });
+      const worker = buildWorker({ emailSender });
 
-      const response = await useCase.execute({ songId: song.id });
+      const response = await worker.execute();
 
-      expect(response.song.status).toBe(SongStatus.READY);
+      expect(response?.song.status).toBe(SongStatus.COMPLETED);
       expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
       // The claim was already made before the send attempt, so a
       // subsequent run (e.g. a manual retry) must not send again either.
-      expect(await deliveryTracker.claimDelivery(song.id)).toBe(false);
+      expect(await deliveryTracker.claimDelivery(response!.song.id)).toBe(false);
     });
   });
 });

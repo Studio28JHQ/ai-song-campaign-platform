@@ -7,55 +7,55 @@ import { logger } from "@/shared/logger/logger";
 import type { EmailDeliveryTracker } from "../contracts/EmailDeliveryTracker";
 import type { MoodSunoPromptProvider } from "../contracts/MoodSunoPromptProvider";
 import type { SongEmailSender } from "../contracts/SongEmailSender";
-import type { SunoGenerator } from "../contracts/SunoGenerator";
-import type { ProcessSongGenerationRequest } from "../dto/ProcessSongGenerationRequest";
-import type { ProcessSongGenerationResponse } from "../dto/ProcessSongGenerationResponse";
+import type { SongGenerationProvider } from "../contracts/SongGenerationProvider";
+import type { SongGenerationWorkerResponse } from "../dto/SongGenerationWorkerResponse";
 
 /**
- * Performs the actual song generation for an already-persisted, `PENDING`
- * (or retried `FAILED`) Song: moves it to `GENERATING`, makes the single
- * Suno request, and records the outcome as `READY` or `FAILED`.
+ * The Song Queue's worker (see PROJECT_MANIFEST.md — Architecture
+ * exception, Sprint 7.5): takes the oldest `QUEUED` Song, marks it
+ * `GENERATING`, calls the injected `SongGenerationProvider`, persists the
+ * result, and delivers the "song ready" email. Depends only on
+ * application-layer ports — no provider-specific type or logic appears
+ * here; that lives entirely in `src/infrastructure/` (e.g. `SunoSongService`
+ * today, a future `MurekaSongService` later, with zero changes to this
+ * file).
  *
- * This is the background half of the asynchronous workflow (see
- * docs/Architecture/System_Architecture.md) — the API route invokes it
- * without awaiting completion, after already responding to the client
- * from `GenerateSongUseCase`. It is deliberately self-sufficient given
- * just a `songId`: it re-fetches the lyrics and mood itself rather than
- * receiving them from the caller, so it works the same way regardless of
- * how "background" execution is wired (an in-process callback today, a
- * real queue/worker later).
+ * Enforces the provider's one-concurrent-generation limit itself: if a
+ * Song is already `GENERATING`, this run does nothing and returns `null`
+ * — it never starts a second generation in parallel. This is what makes
+ * the queue a real queue rather than just a renamed status field: no
+ * matter how many requests concurrently create `QUEUED` rows (see
+ * `GenerateSongUseCase`), at most one of them is ever being generated at
+ * a time.
  *
- * Every failure — a missing lyrics/mood record, a Suno timeout, an
- * unavailable provider, or a malformed response — is persisted as
- * `FAILED`; it is never retried automatically (see
- * docs/Product/Business_Rules.md), leaving the row available for a
- * future manual retry via `GenerateSongUseCase`.
- *
- * On the one transition that ever reaches `READY` (`GENERATING ->
- * READY`), it also delivers the one-time "song ready" email — see
- * docs/Architecture/External_Services.md. A failure to send that email
- * never fails the use case itself (generation already succeeded); it is
- * only logged.
+ * How this gets invoked is deliberately not this class's concern: today
+ * it is scheduled via Next.js's `after()` right after a Song is queued
+ * (see `app/api/lyrics/approve/route.ts`), with no persistent worker
+ * process or message broker — see PROJECT_MANIFEST.md. A future sprint
+ * could invoke the exact same `execute()` from a scheduled job instead,
+ * with no change to this class.
  */
-export class ProcessSongGenerationUseCase {
+export class SongGenerationWorker {
   constructor(
     private readonly songRepository: SongRepository,
     private readonly lyricsRepository: LyricsRepository,
     private readonly moodProvider: MoodSunoPromptProvider,
-    private readonly sunoGenerator: SunoGenerator,
+    private readonly songGenerator: SongGenerationProvider,
     private readonly leadRepository: LeadRepository,
     private readonly emailSender: SongEmailSender,
     private readonly deliveryTracker: EmailDeliveryTracker,
   ) {}
 
-  async execute(request: ProcessSongGenerationRequest): Promise<ProcessSongGenerationResponse> {
-    const song = await this.songRepository.findById(request.songId);
+  async execute(): Promise<SongGenerationWorkerResponse | null> {
+    const alreadyGenerating = await this.songRepository.findGenerating();
+    if (alreadyGenerating) {
+      logger.info("Song generation worker: a generation is already in flight, skipping this run");
+      return null;
+    }
 
+    const song = await this.songRepository.findOldestQueued();
     if (!song) {
-      throw new BusinessRuleError("Song not found.", {
-        code: "song.not_found",
-        context: { songId: request.songId },
-      });
+      return null;
     }
 
     song.markGenerating();
@@ -80,13 +80,13 @@ export class ProcessSongGenerationUseCase {
         });
       }
 
-      const result = await this.sunoGenerator.generateSong({
+      const result = await this.songGenerator.generateSong({
         lyrics: lyrics.content,
         moodName: mood.name,
         sunoPrompt: mood.sunoPrompt,
       });
 
-      song.markReady(result);
+      song.markCompleted(result);
       const updated = await this.songRepository.update(song);
 
       await this.deliverReadyEmail(updated);
@@ -101,10 +101,10 @@ export class ProcessSongGenerationUseCase {
 
   /**
    * Claims delivery before sending: the claim is atomic at the database
-   * level (see `EmailDeliveryTracker`), so even if this use case somehow
+   * level (see `EmailDeliveryTracker`), so even if this worker somehow
    * ran twice for the same song, only one caller ever sends. Never
    * rethrows — an email failure must not undo an otherwise-successful
-   * generation, and `READY -> FAILED` isn't a transition `Song` allows.
+   * generation, and `COMPLETED -> FAILED` isn't a transition `Song` allows.
    */
   private async deliverReadyEmail(song: Song): Promise<void> {
     try {

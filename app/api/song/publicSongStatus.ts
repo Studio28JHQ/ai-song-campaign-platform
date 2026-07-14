@@ -1,13 +1,13 @@
 import { SongStatus } from "@/domain/song/types";
 
 /**
- * Translates the domain's `SongStatus` into the public API vocabulary
- * requested for this workflow (`PENDING`, `GENERATING`, `COMPLETED`,
- * `FAILED`). The domain keeps `READY` internally — renaming it would
- * cascade into the Prisma mapper, which is out of scope for this task —
- * so this is the one place that translation happens, shared by both
- * `POST /api/song/generate` and `GET /api/song/[songId]`.
+ * The domain's `SongStatus` (`QUEUED`/`GENERATING`/`COMPLETED`/`FAILED`)
+ * is now itself the public vocabulary (see PROJECT_MANIFEST.md —
+ * Architecture exception, Sprint 7.5) — this is a passthrough kept as
+ * the one seam where that could change again without touching every
+ * call site (`POST /api/song/generate`, `GET /api/song/[songId]`,
+ * `GET /api/leads/session`).
  */
 export function toPublicSongStatus(status: SongStatus): string {
-  return status === SongStatus.READY ? "COMPLETED" : status;
+  return status;
 }

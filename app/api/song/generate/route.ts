@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
-import { ProcessSongGenerationUseCase } from "@/application/song/use-cases/ProcessSongGenerationUseCase";
+import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
@@ -16,14 +16,20 @@ import { logger } from "@/shared/logger/logger";
 import { toPublicSongStatus } from "../publicSongStatus";
 
 /**
- * POST /api/song/generate — kicks off song generation for a lead
- * asynchronously. This file only validates input, invokes
- * `GenerateSongUseCase` (the synchronous intake), schedules
- * `ProcessSongGenerationUseCase` (the actual Suno call) to run in the
- * background via Next.js's `after()`, and responds immediately with
- * `202 Accepted` — it never waits for Suno. No business rule is
- * evaluated here; those live in the Application and Domain layers. See
- * docs/Architecture/System_Architecture.md for the full sequence.
+ * POST /api/song/generate — creates the queued Song job for a lead. This
+ * file only validates input, invokes `GenerateSongUseCase` (the
+ * synchronous, DB-only intake), schedules `SongGenerationWorker` to run
+ * in the background via Next.js's `after()`, and responds immediately
+ * with `202 Accepted` — it never waits for the music provider. No
+ * business rule is evaluated here; those live in the Application and
+ * Domain layers.
+ *
+ * As of Sprint 7.5, the parent-facing flow no longer calls this route
+ * directly — `POST /api/lyrics/approve` creates the queued job itself
+ * right after approval (see PROJECT_MANIFEST.md — Architecture
+ * exception). This endpoint is kept, unchanged in behavior, since
+ * `GenerateSongUseCase` is idempotent per lead (reuses an existing,
+ * non-`COMPLETED` row rather than erroring).
  */
 
 const leadRepository = new PrismaLeadRepository();
@@ -31,7 +37,7 @@ const lyricsRepository = new PrismaLyricsRepository();
 const songRepository = new PrismaSongRepository();
 const campaignGate = new PrismaCampaignGate();
 const moodProvider = new PrismaMoodSunoPromptProvider();
-const sunoGenerator = new SunoSongService();
+const songGenerator = new SunoSongService();
 const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 
@@ -42,11 +48,11 @@ const generateSongUseCase = new GenerateSongUseCase(
   campaignGate,
 );
 
-const processSongGenerationUseCase = new ProcessSongGenerationUseCase(
+const songGenerationWorker = new SongGenerationWorker(
   songRepository,
   lyricsRepository,
   moodProvider,
-  sunoGenerator,
+  songGenerator,
   leadRepository,
   emailSender,
   emailDeliveryTracker,
@@ -75,18 +81,16 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     const result = await generateSongUseCase.execute({ leadId });
-    const songId = result.song.id;
 
     // Scheduled with `after()` so it keeps running once the response has
     // been sent, without the caller ever waiting for it. Any failure is
-    // persisted as `FAILED` by the use case itself — nothing to do with
-    // the rejection here except log it; it must never crash the request.
+    // persisted as FAILED by the worker itself — nothing to do with the
+    // rejection here except log it; it must never crash the request.
     after(async () => {
       try {
-        await processSongGenerationUseCase.execute({ songId });
+        await songGenerationWorker.execute();
       } catch (error) {
-        logger.error("Background song generation failed", {
-          songId,
+        logger.error("Background song generation worker failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -94,9 +98,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     return NextResponse.json(
       {
-        songId,
+        songId: result.song.id,
         status: toPublicSongStatus(result.song.status),
-        estimatedNextAction: `Poll GET /api/song/${songId} every 5 seconds until status is COMPLETED or FAILED.`,
+        estimatedNextAction:
+          "The song has entered the generation queue. You will be notified by email once it is ready.",
       },
       { status: 202 },
     );

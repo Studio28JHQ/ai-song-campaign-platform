@@ -41,11 +41,11 @@ describe("GET /api/song/[songId]", () => {
     expect(mockFindById).not.toHaveBeenCalled();
   });
 
-  it("returns PENDING status only, without an audioUrl", async () => {
+  it("returns QUEUED status only, without an audioUrl", async () => {
     mockFindById.mockResolvedValue({
       id: "song-1",
       leadId: "lead-1",
-      status: "PENDING",
+      status: "QUEUED",
       audioUrl: null,
     });
 
@@ -53,7 +53,7 @@ describe("GET /api/song/[songId]", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ songId: "song-1", status: "PENDING" });
+    expect(body).toEqual({ songId: "song-1", status: "QUEUED" });
   });
 
   it("returns GENERATING status only, without an audioUrl", async () => {
@@ -71,11 +71,11 @@ describe("GET /api/song/[songId]", () => {
     expect(body).toEqual({ songId: "song-1", status: "GENERATING" });
   });
 
-  it("returns COMPLETED status with the audioUrl and duration when the song is READY", async () => {
+  it("returns COMPLETED status with the audioUrl and duration when the song is COMPLETED", async () => {
     mockFindById.mockResolvedValue({
       id: "song-1",
       leadId: "lead-1",
-      status: "READY",
+      status: "COMPLETED",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 120,
     });

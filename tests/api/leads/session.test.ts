@@ -26,6 +26,8 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
   create: vi.fn(),
   findById: vi.fn(),
   findByLead: vi.fn(),
+  findGenerating: vi.fn(),
+  findOldestQueued: vi.fn(),
   update: vi.fn(),
 };
 
@@ -100,7 +102,7 @@ describe("GET /api/leads/session", () => {
     expect(body.song).toBeNull();
   });
 
-  it("includes the approved lyrics and the current song, translating song status to the public vocabulary", async () => {
+  it("includes the approved lyrics and the current song, using the same public vocabulary", async () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
@@ -111,7 +113,7 @@ describe("GET /api/leads/session", () => {
     });
     mockSongRepository.findByLead.mockResolvedValue({
       id: "song-1",
-      status: "READY",
+      status: "COMPLETED",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 90,
     });

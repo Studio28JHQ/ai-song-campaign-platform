@@ -1,5 +1,5 @@
 /** Public song-status vocabulary (see `app/api/song/publicSongStatus.ts`), plus `NONE` for a lead with no song yet — used only for filtering. */
-export type AdminLeadSongStatusFilter = "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "NONE";
+export type AdminLeadSongStatusFilter = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED" | "NONE";
 
 export type AdminLeadEmailStatusFilter = "SENT" | "NOT_SENT";
 

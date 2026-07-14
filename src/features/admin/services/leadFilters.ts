@@ -1,4 +1,4 @@
-export type LeadSongStatusFilter = "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "NONE";
+export type LeadSongStatusFilter = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED" | "NONE";
 export type LeadEmailStatusFilter = "SENT" | "NOT_SENT";
 
 /** Filter criteria shared by the participants search table and the CSV export — see docs/Product/User_Flow.md — Filters. */

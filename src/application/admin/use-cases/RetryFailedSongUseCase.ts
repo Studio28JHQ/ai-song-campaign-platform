@@ -9,17 +9,17 @@ import type { RetryFailedSongResponse } from "../dto/RetryFailedSongResponse";
 /**
  * The manual "Retry" operational recovery action (see
  * docs/Product/User_Flow.md — Operational Recovery). Only ever available
- * for a `FAILED` Song. It resets the existing row back to `PENDING` —
+ * for a `FAILED` Song. It resets the existing row back to `QUEUED` —
  * the same state a brand-new Song starts in — and stops there: it never
  * creates a new Song, never touches the Lead's lyric attempts, and never
  * regenerates lyrics, because it never calls the Lyrics module at all.
  *
- * Resuming generation from `PENDING` is the existing background
- * workflow's job: the caller (an API route) is expected to schedule
- * `ProcessSongGenerationUseCase` for the same `songId` immediately after
- * this returns — this use case only performs the synchronous status
- * reset and the audit write, exactly mirroring how `GenerateSongUseCase`
- * only does the synchronous intake for a brand-new Song.
+ * Resuming generation from `QUEUED` is the Song Queue worker's job: the
+ * caller (an API route) is expected to schedule `SongGenerationWorker`
+ * immediately after this returns — this use case only performs the
+ * synchronous status reset and the audit write, exactly mirroring how
+ * `GenerateSongUseCase` only does the synchronous intake for a brand-new
+ * Song (see PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5).
  */
 export class RetryFailedSongUseCase {
   constructor(

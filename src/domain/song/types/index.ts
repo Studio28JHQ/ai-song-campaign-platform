@@ -1,13 +1,14 @@
 /**
- * Coarse lifecycle for the Song aggregate itself. Deliberately omits the
- * persistence-layer's `DELIVERED` value (see `prisma/schema.prisma`) —
- * that state belongs to a future email-delivery module, which isn't
- * implemented yet (see PROJECT_MANIFEST.md scope for this task).
+ * Coarse lifecycle for the Song aggregate itself — the only valid
+ * generation states (see PROJECT_MANIFEST.md — Architecture exception,
+ * Sprint 7.5). Deliberately omits the persistence-layer's `DELIVERED`
+ * value (see `prisma/schema.prisma`) — that state belongs to a future
+ * email-delivery module, which isn't implemented yet.
  */
 export enum SongStatus {
-  PENDING = "PENDING",
+  QUEUED = "QUEUED",
   GENERATING = "GENERATING",
-  READY = "READY",
+  COMPLETED = "COMPLETED",
   FAILED = "FAILED",
 }
 

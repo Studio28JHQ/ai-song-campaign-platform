@@ -6,6 +6,7 @@ import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { SongStatus } from "@/domain/song/types";
 import { GetLeadSessionStateUseCase } from "@/application/lead/use-cases/GetLeadSessionStateUseCase";
 
 class InMemoryLeadRepository implements LeadRepository {
@@ -78,6 +79,16 @@ class InMemorySongRepository implements SongRepository {
   }
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.songs.values()].find((song) => song.leadId === leadId) ?? null;
+  }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.songs.values()].find((song) => song.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.songs.values()]
+        .filter((song) => song.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
   }
   async update(song: Song): Promise<Song> {
     this.songs.set(song.id, song);
@@ -155,7 +166,7 @@ describe("GetLeadSessionStateUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: "lyrics-1", moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({
+    song.markCompleted({
       providerSongId: "suno-1",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 90,
@@ -166,7 +177,7 @@ describe("GetLeadSessionStateUseCase", () => {
 
     expect(result.song).toEqual({
       id: song.id,
-      status: "READY",
+      status: "COMPLETED",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 90,
     });

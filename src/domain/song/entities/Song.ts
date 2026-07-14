@@ -13,21 +13,21 @@ const DEFAULT_PROVIDER = "suno";
  * `FAILED -> GENERATING` is allowed so a transient provider failure can be
  * retried against the *same* row: `Song.leadId` is unique at the database
  * level (see docs/Architecture/Database_Model.md), so a failed attempt
- * must not permanently occupy a lead's one-song slot. Only a `READY` song
- * counts as the lead's "final song" — see docs/Product/Business_Rules.md.
+ * must not permanently occupy a lead's one-song slot. Only a `COMPLETED`
+ * song counts as the lead's "final song" — see docs/Product/Business_Rules.md.
  *
- * `FAILED -> PENDING` is the one additional transition, used exclusively
+ * `FAILED -> QUEUED` is the one additional transition, used exclusively
  * by a manual admin retry (see `retryFromFailure`): it resets the row to
  * the same starting state a brand-new Song is created in, so the
- * existing generation workflow (`ProcessSongGenerationUseCase`) picks it
- * up identically either way — see docs/Architecture/System_Architecture.md
- * — Operational Recovery.
+ * existing worker (`SongGenerationWorker`) picks it up identically either
+ * way — see docs/Architecture/System_Architecture.md — Operational
+ * Recovery.
  */
 const ALLOWED_TRANSITIONS: Record<SongStatus, ReadonlyArray<SongStatus>> = {
-  [SongStatus.PENDING]: [SongStatus.GENERATING],
-  [SongStatus.GENERATING]: [SongStatus.READY, SongStatus.FAILED],
-  [SongStatus.FAILED]: [SongStatus.PENDING, SongStatus.GENERATING],
-  [SongStatus.READY]: [],
+  [SongStatus.QUEUED]: [SongStatus.GENERATING],
+  [SongStatus.GENERATING]: [SongStatus.COMPLETED, SongStatus.FAILED],
+  [SongStatus.FAILED]: [SongStatus.QUEUED, SongStatus.GENERATING],
+  [SongStatus.COMPLETED]: [],
 };
 
 /**
@@ -54,7 +54,7 @@ export class Song {
       providerSongId: null,
       audioUrl: null,
       duration: null,
-      status: SongStatus.PENDING,
+      status: SongStatus.QUEUED,
       generatedAt: null,
       emailedAt: null,
       createdAt: now,
@@ -93,17 +93,17 @@ export class Song {
     this.props.updatedAt = new Date();
   }
 
-  /** Moves the song into the active generation call. Valid from `PENDING` or, on retry, `FAILED`. */
+  /** Moves the song into the active generation call. Valid from `QUEUED` or, on retry, `FAILED`. */
   markGenerating(): void {
     this.transitionTo(SongStatus.GENERATING);
   }
 
   /** Records a successful generation — the only state a Song may ever reach exactly once (see docs/Product/Business_Rules.md). */
-  markReady(details: SongGenerationDetails): void {
+  markCompleted(details: SongGenerationDetails): void {
     const providerSongId = Song.requireNonEmpty(details.providerSongId, "providerSongId");
     const audioUrl = Song.requireNonEmpty(details.audioUrl, "audioUrl");
 
-    this.transitionTo(SongStatus.READY);
+    this.transitionTo(SongStatus.COMPLETED);
     this.props.providerSongId = providerSongId;
     this.props.audioUrl = audioUrl;
     this.props.duration = details.duration ?? null;
@@ -116,14 +116,14 @@ export class Song {
   }
 
   /**
-   * Resets a `FAILED` song back to `PENDING` for a manual admin retry
+   * Resets a `FAILED` song back to `QUEUED` for a manual admin retry
    * (see docs/Product/User_Flow.md — Operational Recovery). Only ever
-   * valid from `FAILED` — a lead's approved lyrics, mood, and Suno
+   * valid from `FAILED` — a lead's approved lyrics, mood, and the music
    * provider are always reused unchanged; this method never touches
    * them, only the status.
    */
   retryFromFailure(): void {
-    this.transitionTo(SongStatus.PENDING);
+    this.transitionTo(SongStatus.QUEUED);
   }
 
   get id(): string {

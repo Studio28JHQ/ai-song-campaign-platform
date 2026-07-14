@@ -6,7 +6,7 @@ import type {
 
 /**
  * Translates the persistence-layer `SongStatus` into the same public
- * vocabulary (`PENDING`/`GENERATING`/`COMPLETED`/`FAILED`) the parent-facing
+ * vocabulary (`QUEUED`/`GENERATING`/`COMPLETED`/`FAILED`) the parent-facing
  * `GET /api/song/{songId}` endpoint uses (see `app/api/song/publicSongStatus.ts`),
  * so the admin table and export read consistently with the rest of the
  * app. Kept as a local mapping rather than importing from `app/` — that
@@ -14,9 +14,7 @@ import type {
  * must never depend on presentation).
  */
 export function toPublicSongStatus(status: PrismaSongStatus): string {
-  return status === PrismaSongStatus.READY || status === PrismaSongStatus.DELIVERED
-    ? "COMPLETED"
-    : status;
+  return status === PrismaSongStatus.DELIVERED ? "COMPLETED" : status;
 }
 
 function toPrismaSongStatuses(
@@ -24,9 +22,9 @@ function toPrismaSongStatuses(
 ): PrismaSongStatus[] {
   switch (filter) {
     case "COMPLETED":
-      return [PrismaSongStatus.READY, PrismaSongStatus.DELIVERED];
-    case "PENDING":
-      return [PrismaSongStatus.PENDING];
+      return [PrismaSongStatus.COMPLETED, PrismaSongStatus.DELIVERED];
+    case "QUEUED":
+      return [PrismaSongStatus.QUEUED];
     case "GENERATING":
       return [PrismaSongStatus.GENERATING];
     case "FAILED":

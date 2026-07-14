@@ -16,12 +16,14 @@ describe("GET /api/admin/dashboard", () => {
     vi.clearAllMocks();
   });
 
-  it("returns the nine summary indicators, including the computed success rate", async () => {
+  it("returns the summary indicators, including the computed success rate", async () => {
     mockGetSummary.mockResolvedValue({
       totalLeads: 12,
       lyricsGenerated: 15,
       lyricsApproved: 10,
       songsRequested: 8,
+      songsQueued: 1,
+      songsGenerating: 0,
       songsCompleted: 4,
       songsFailed: 3,
       emailsSent: 4,
@@ -37,6 +39,8 @@ describe("GET /api/admin/dashboard", () => {
       lyricsGenerated: 15,
       lyricsApproved: 10,
       songsRequested: 8,
+      songsQueued: 1,
+      songsGenerating: 0,
       songsCompleted: 4,
       songsFailed: 3,
       emailsSent: 4,

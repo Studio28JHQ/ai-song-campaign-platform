@@ -59,7 +59,7 @@ function buildDetailBody(overrides: { song?: Record<string, unknown> | null } = 
             providerSongId: "suno-123",
             audioUrl: "https://cdn.example.com/song.mp3",
             duration: 125,
-            status: "READY",
+            status: "COMPLETED",
             generatedAt: "2026-01-01T01:00:00.000Z",
             emailedAt: "2026-01-01T01:05:00.000Z",
             createdAt: "2026-01-01T00:00:00.000Z",
@@ -136,7 +136,7 @@ describe("LeadDetailView", () => {
     });
     const fetchMock = vi.fn((url: string) => {
       if (url.includes("/retry"))
-        return Promise.resolve(jsonResponse({ songId: "song-1", status: "PENDING" }));
+        return Promise.resolve(jsonResponse({ songId: "song-1", status: "QUEUED" }));
       return Promise.resolve(jsonResponse(detailBody));
     });
     global.fetch = fetchMock as unknown as typeof fetch;

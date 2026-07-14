@@ -28,6 +28,8 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
   create: vi.fn(),
   findById: vi.fn(),
   findByLead: vi.fn(),
+  findGenerating: vi.fn(),
+  findOldestQueued: vi.fn(),
   update: vi.fn(),
 };
 
@@ -159,10 +161,11 @@ describe("POST /api/song/generate", () => {
       createdSong = song;
       return song;
     });
-    // ProcessSongGenerationUseCase re-fetches the song by id once the
+    // SongGenerationWorker picks up the oldest QUEUED song itself once the
     // background callback runs, so the fake repository must hand back the
     // same instance that GenerateSongUseCase just persisted.
-    mockSongRepository.findById.mockImplementation(async () => createdSong ?? null);
+    mockSongRepository.findGenerating.mockResolvedValue(null);
+    mockSongRepository.findOldestQueued.mockImplementation(async () => createdSong ?? null);
     mockSongRepository.update.mockImplementation(async (song: Song) => {
       createdSong = song;
       return song;
@@ -184,7 +187,7 @@ describe("POST /api/song/generate", () => {
     expect(mockLeadRepository.findById).not.toHaveBeenCalled();
   });
 
-  it("returns 202 immediately with PENDING status, identifying the lead via the session only", async () => {
+  it("returns 202 immediately with QUEUED status, identifying the lead via the session only", async () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
@@ -195,9 +198,11 @@ describe("POST /api/song/generate", () => {
     const body = await response.json();
 
     expect(response.status).toBe(202);
-    expect(body.status).toBe("PENDING");
+    expect(body.status).toBe("QUEUED");
     expect(typeof body.songId).toBe("string");
-    expect(body.estimatedNextAction).toContain(`/api/song/${body.songId}`);
+    expect(body.estimatedNextAction).toBe(
+      "The song has entered the generation queue. You will be notified by email once it is ready.",
+    );
     expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
     // Suno must never be called synchronously as part of the request.
     expect(mockGenerateSong).not.toHaveBeenCalled();
@@ -225,7 +230,7 @@ describe("POST /api/song/generate", () => {
     expect(mockGenerateSong).toHaveBeenCalledTimes(1);
     expect(mockSongRepository.update).toHaveBeenCalled();
     const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
-    expect(lastUpdateCall.status).toBe("READY");
+    expect(lastUpdateCall.status).toBe("COMPLETED");
 
     // Exactly one email, sent to the lead, once the song completes.
     expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
@@ -307,7 +312,7 @@ describe("POST /api/song/generate", () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
-    const existingSong = { status: "READY" } as unknown as Song;
+    const existingSong = { status: "COMPLETED" } as unknown as Song;
     mockSongRepository.findByLead.mockResolvedValue(existingSong);
 
     const response = await POST(postRequest());

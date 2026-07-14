@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-14
+
+Sprint 7.5 — Async Song Generation Architecture. Replaces the synchronous song-generation assumption with a database-backed, provider-agnostic generation pipeline, in preparation for a future migration to Mureka (whose selected plan allows only one concurrent generation).
+
+### Added
+
+- `Song.status` now uses a `QUEUED → GENERATING → COMPLETED/FAILED` vocabulary (renamed from `PENDING`/`READY`) — the only valid generation states, enforced via a Postgres `ALTER TYPE ... RENAME VALUE` migration.
+- `SongGenerationWorker` (replaces `ProcessSongGenerationUseCase`): picks the oldest `QUEUED` song, guards against a second concurrent generation via `findGenerating()`, calls the injected `SongGenerationProvider` (replaces `SunoGenerator`), persists the result, and delivers the "song ready" email. Depends only on an application-layer port — no provider-specific logic outside `src/infrastructure/`.
+- `SongRepository.findGenerating()` and `findOldestQueued()` — the two new queries the worker needs.
+- Approving lyrics (`POST /api/lyrics/approve`) now synchronously creates the queued Song job (`GenerateSongUseCase`) and schedules `SongGenerationWorker` via Next.js's `after()` — it never generates the song inline.
+- The Song Result page (`/song`) is now a purely informational waiting page: a single fetch via `GET /api/leads/session` on mount, with no polling and no client-triggered generation. It shows "Your lyrics have been approved. Your song has entered production. We will notify you by email as soon as it is ready." while `QUEUED`/`GENERATING`.
+- Admin Dashboard now exposes `Songs Queued` and `Songs Generating` counts alongside the existing indicators.
+- `PROJECT_MANIFEST.md` documents a narrow, explicit Architecture exception: a database-backed generation pipeline (state machine + sequential, oldest-first processing) to satisfy the provider's one-concurrent-generation limit — not a message broker, event bus, or pub/sub system, and introduces no new infrastructure component.
+
+### Removed
+
+- `src/features/song/services/generateSong.ts` and `getSongStatus.ts` — dead code once the Result page stopped polling and stopped triggering generation client-side.
+- `ProcessSongGenerationUseCase` and the `SunoGenerator` contract (renamed/replaced, see Added).
+
 ## [1.0.0] - 2026-07-14
 
 Final Version 1 release. The complete campaign flow — Landing → Lead registration → Lyrics generation/approval → Song generation → Email delivery → Administrator monitoring — is implemented and validated end-to-end.

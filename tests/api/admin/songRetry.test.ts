@@ -6,6 +6,8 @@ import { SongStatus } from "@/domain/song/types";
 const mockGetAdminSession = vi.fn();
 const mockSongFindById = vi.fn();
 const mockSongUpdate = vi.fn();
+const mockSongFindGenerating = vi.fn();
+const mockSongFindOldestQueued = vi.fn();
 const mockAuditCreate = vi.fn();
 const mockGenerateSong = vi.fn();
 const mockLyricsFindById = vi.fn();
@@ -32,7 +34,12 @@ vi.mock("@/infrastructure/auth/getAdminSession", () => ({
 
 vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => ({
   PrismaSongRepository: vi.fn().mockImplementation(function PrismaSongRepository() {
-    return { findById: mockSongFindById, update: mockSongUpdate };
+    return {
+      findById: mockSongFindById,
+      update: mockSongUpdate,
+      findGenerating: mockSongFindGenerating,
+      findOldestQueued: mockSongFindOldestQueued,
+    };
   }),
 }));
 
@@ -108,22 +115,30 @@ function fakeFailedSong(): Song {
 }
 
 describe("POST /api/admin/songs/[songId]/retry", () => {
+  let updatedSong: Song | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     capturedAfterCallbacks.length = 0;
+    updatedSong = undefined;
     mockGetAdminSession.mockResolvedValue({ adminId: "admin-1", email: "admin@example.com" });
-    mockSongUpdate.mockImplementation(async (song: unknown) => song);
+    mockSongUpdate.mockImplementation(async (song: Song) => {
+      updatedSong = song;
+      return song;
+    });
     mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
+    mockSongFindGenerating.mockResolvedValue(null);
+    mockSongFindOldestQueued.mockImplementation(async () => updatedSong ?? null);
   });
 
-  it("returns 202 with PENDING status for a FAILED song, and schedules background regeneration", async () => {
+  it("returns 202 with QUEUED status for a FAILED song, and schedules background regeneration", async () => {
     mockSongFindById.mockResolvedValue(fakeFailedSong());
 
     const response = await POST(postRequest(), context("song-1"));
     const body = await response.json();
 
     expect(response.status).toBe(202);
-    expect(body).toEqual({ songId: "song-1", status: "PENDING" });
+    expect(body).toEqual({ songId: "song-1", status: "QUEUED" });
     expect(mockAuditCreate).toHaveBeenCalledTimes(1);
     expect(mockAuditCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -165,7 +180,7 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
   it("returns 422 when the song is not FAILED", async () => {
     mockSongFindById.mockResolvedValue({
       id: "song-1",
-      status: "READY",
+      status: "COMPLETED",
       retryFromFailure: vi.fn(() => {
         throw new Error("should not be called");
       }),

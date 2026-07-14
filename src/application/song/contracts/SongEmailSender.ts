@@ -1,8 +1,8 @@
 /**
- * What `ProcessSongGenerationUseCase` needs to deliver the "song ready"
- * email — nothing more. Keeps the use case decoupled from
- * `@/infrastructure/email` (a concrete Resend-backed adapter) so it can
- * be constructed with a fake in tests, same pattern as `SunoGenerator`.
+ * What `SongGenerationWorker` needs to deliver the "song ready" email —
+ * nothing more. Keeps the worker decoupled from `@/infrastructure/email`
+ * (a concrete Resend-backed adapter) so it can be constructed with a
+ * fake in tests, same pattern as `SongGenerationProvider`.
  */
 export interface SongReadyEmailInput {
   to: string;

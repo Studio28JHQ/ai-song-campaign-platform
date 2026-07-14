@@ -9,10 +9,6 @@ interface LeadDetailViewProps {
   leadId: string;
 }
 
-function displaySongStatus(status: string): string {
-  return status === "READY" ? "COMPLETED" : status;
-}
-
 function formatDuration(seconds: number | null): string | null {
   if (!seconds || seconds <= 0) return null;
   const minutes = Math.floor(seconds / 60);
@@ -133,7 +129,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
           <div className="flex flex-col gap-2 text-sm">
             <p>
               <span className="text-muted-foreground">Status: </span>
-              {displaySongStatus(song.status)}
+              {song.status}
             </p>
             <p>
               <span className="text-muted-foreground">Generated at: </span>
@@ -164,7 +160,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
               <RetrySongAction songId={song.id} onSuccess={refetch} />
             ) : null}
 
-            {song.status === "READY" && song.emailedAt ? (
+            {song.status === "COMPLETED" && song.emailedAt ? (
               <ResendEmailAction songId={song.id} onSuccess={refetch} />
             ) : null}
           </div>

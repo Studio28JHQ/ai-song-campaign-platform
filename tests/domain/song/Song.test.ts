@@ -5,10 +5,10 @@ import { SongStatus } from "@/domain/song/types";
 const validInput = { leadId: "lead-1", lyricsId: "lyrics-1", moodId: "mood-1" };
 
 describe("Song.create", () => {
-  it("creates a pending song with the default provider", () => {
+  it("creates a queued song with the default provider", () => {
     const song = Song.create(validInput);
 
-    expect(song.status).toBe(SongStatus.PENDING);
+    expect(song.status).toBe(SongStatus.QUEUED);
     expect(song.provider).toBe("suno");
     expect(song.providerSongId).toBeNull();
     expect(song.audioUrl).toBeNull();
@@ -27,24 +27,24 @@ describe("Song.create", () => {
 });
 
 describe("Song status transitions", () => {
-  it("allows PENDING -> GENERATING -> READY", () => {
+  it("allows QUEUED -> GENERATING -> COMPLETED", () => {
     const song = Song.create(validInput);
     song.markGenerating();
     expect(song.status).toBe(SongStatus.GENERATING);
 
-    song.markReady({
+    song.markCompleted({
       providerSongId: "suno-123",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 120,
     });
-    expect(song.status).toBe(SongStatus.READY);
+    expect(song.status).toBe(SongStatus.COMPLETED);
     expect(song.providerSongId).toBe("suno-123");
     expect(song.audioUrl).toBe("https://cdn.example.com/song.mp3");
     expect(song.duration).toBe(120);
     expect(song.generatedAt).not.toBeNull();
   });
 
-  it("allows PENDING -> GENERATING -> FAILED -> GENERATING (retry)", () => {
+  it("allows QUEUED -> GENERATING -> FAILED -> GENERATING (retry)", () => {
     const song = Song.create(validInput);
     song.markGenerating();
     song.markFailed();
@@ -54,64 +54,64 @@ describe("Song status transitions", () => {
     expect(song.status).toBe(SongStatus.GENERATING);
   });
 
-  it("allows an admin retry to reset FAILED back to PENDING, then resume normally", () => {
+  it("allows an admin retry to reset FAILED back to QUEUED, then resume normally", () => {
     const song = Song.create(validInput);
     song.markGenerating();
     song.markFailed();
     expect(song.status).toBe(SongStatus.FAILED);
 
     song.retryFromFailure();
-    expect(song.status).toBe(SongStatus.PENDING);
+    expect(song.status).toBe(SongStatus.QUEUED);
 
     song.markGenerating();
-    song.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
-    expect(song.status).toBe(SongStatus.READY);
+    song.markCompleted({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    expect(song.status).toBe(SongStatus.COMPLETED);
   });
 
   it("rejects retryFromFailure from any status other than FAILED", () => {
-    const pending = Song.create(validInput);
-    expect(() => pending.retryFromFailure()).toThrow();
+    const queued = Song.create(validInput);
+    expect(() => queued.retryFromFailure()).toThrow();
 
     const generating = Song.create(validInput);
     generating.markGenerating();
     expect(() => generating.retryFromFailure()).toThrow();
 
-    const ready = Song.create(validInput);
-    ready.markGenerating();
-    ready.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
-    expect(() => ready.retryFromFailure()).toThrow();
+    const completed = Song.create(validInput);
+    completed.markGenerating();
+    completed.markCompleted({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    expect(() => completed.retryFromFailure()).toThrow();
   });
 
-  it("rejects skipping straight to READY", () => {
+  it("rejects skipping straight to COMPLETED", () => {
     const song = Song.create(validInput);
     expect(() =>
-      song.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" }),
+      song.markCompleted({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" }),
     ).toThrow();
   });
 
-  it("rejects any transition out of READY (terminal)", () => {
+  it("rejects any transition out of COMPLETED (terminal)", () => {
     const song = Song.create(validInput);
     song.markGenerating();
-    song.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    song.markCompleted({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
 
     expect(() => song.markGenerating()).toThrow();
     expect(() => song.markFailed()).toThrow();
   });
 
-  it("rejects markReady with an empty providerSongId or audioUrl", () => {
+  it("rejects markCompleted with an empty providerSongId or audioUrl", () => {
     const song = Song.create(validInput);
     song.markGenerating();
 
     expect(() =>
-      song.markReady({ providerSongId: "", audioUrl: "https://cdn.example.com/a.mp3" }),
+      song.markCompleted({ providerSongId: "", audioUrl: "https://cdn.example.com/a.mp3" }),
     ).toThrow();
-    expect(() => song.markReady({ providerSongId: "id", audioUrl: "" })).toThrow();
+    expect(() => song.markCompleted({ providerSongId: "id", audioUrl: "" })).toThrow();
   });
 
   it("defaults duration to null when not provided", () => {
     const song = Song.create(validInput);
     song.markGenerating();
-    song.markReady({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
+    song.markCompleted({ providerSongId: "id", audioUrl: "https://cdn.example.com/a.mp3" });
 
     expect(song.duration).toBeNull();
   });

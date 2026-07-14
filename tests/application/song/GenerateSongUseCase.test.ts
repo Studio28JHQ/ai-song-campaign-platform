@@ -78,6 +78,16 @@ class InMemorySongRepository implements SongRepository {
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.records.values()].find((s) => s.leadId === leadId) ?? null;
   }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.records.values()].find((s) => s.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.records.values()]
+        .filter((s) => s.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
+  }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
     return song;
@@ -162,7 +172,7 @@ describe("GenerateSongUseCase", () => {
     expect(await songRepository.findByLead(lead.id)).toBeNull();
   });
 
-  it("persists a new song as PENDING and returns immediately, without calling Suno", async () => {
+  it("persists a new song as QUEUED and returns immediately, without calling Suno", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);
@@ -176,20 +186,27 @@ describe("GenerateSongUseCase", () => {
 
     const response = await useCase.execute({ leadId: lead.id });
 
-    expect(response.song.status).toBe(SongStatus.PENDING);
+    expect(response.song.status).toBe(SongStatus.QUEUED);
     expect(response.song.audioUrl).toBeNull();
     expect(response.song.providerSongId).toBeNull();
   });
 
-  it("rejects a second generation once a song is already READY", async () => {
+  it("rejects a second generation once a song is already COMPLETED", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);
     lyricsRepository.seed(lyrics);
-    const readySong = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: lyrics.moodId });
-    readySong.markGenerating();
-    readySong.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/a.mp3" });
-    songRepository.seed(readySong);
+    const completedSong = Song.create({
+      leadId: lead.id,
+      lyricsId: lyrics.id,
+      moodId: lyrics.moodId,
+    });
+    completedSong.markGenerating();
+    completedSong.markCompleted({
+      providerSongId: "suno-1",
+      audioUrl: "https://cdn.example.com/a.mp3",
+    });
+    songRepository.seed(completedSong);
 
     const useCase = new GenerateSongUseCase(
       leadRepository,

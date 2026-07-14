@@ -264,7 +264,7 @@ describe("LyricsWorkflow", () => {
         routedFetch({
           session: baseSession({
             approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
-            song: { songId: "song-1", status: "PENDING" },
+            song: { songId: "song-1", status: "QUEUED" },
           }),
         }),
       );
@@ -283,7 +283,7 @@ describe("LyricsWorkflow", () => {
         routedFetch({
           session: baseSession({
             approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
-            song: { songId: "song-1", status: "PENDING" },
+            song: { songId: "song-1", status: "QUEUED" },
           }),
         }),
       );
@@ -317,7 +317,7 @@ describe("LyricsWorkflow", () => {
         routedFetch({
           session: baseSession({
             approvedLyrics: { id: "lyrics-1", content: "Title\n...", version: 3 },
-            song: { songId: "song-1", status: "PENDING" },
+            song: { songId: "song-1", status: "QUEUED" },
           }),
         }),
       );
@@ -365,7 +365,7 @@ describe("LyricsWorkflow", () => {
         routedFetch({
           session: baseSession({
             approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
-            song: { songId: "song-1", status: "PENDING" },
+            song: { songId: "song-1", status: "QUEUED" },
           }),
         }),
       );

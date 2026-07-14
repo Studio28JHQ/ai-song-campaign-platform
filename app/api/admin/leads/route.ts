@@ -20,7 +20,7 @@ const searchParamsSchema = z.object({
   q: z.string().optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
-  songStatus: z.enum(["PENDING", "GENERATING", "COMPLETED", "FAILED", "NONE"]).optional(),
+  songStatus: z.enum(["QUEUED", "GENERATING", "COMPLETED", "FAILED", "NONE"]).optional(),
   emailStatus: z.enum(["SENT", "NOT_SENT"]).optional(),
   city: z.string().optional(),
   page: z.coerce.number().int().optional(),

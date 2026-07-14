@@ -4,7 +4,7 @@ export interface LeadSessionApprovedLyrics {
   version: number;
 }
 
-export type LeadSessionSongStatus = "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+export type LeadSessionSongStatus = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED";
 
 export interface LeadSessionSong {
   songId: string;

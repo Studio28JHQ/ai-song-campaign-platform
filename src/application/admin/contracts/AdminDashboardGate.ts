@@ -12,6 +12,8 @@ export interface DashboardSummaryCounts {
   lyricsGenerated: number;
   lyricsApproved: number;
   songsRequested: number;
+  songsQueued: number;
+  songsGenerating: number;
   songsCompleted: number;
   songsFailed: number;
   emailsSent: number;

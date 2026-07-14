@@ -15,15 +15,30 @@ function formatDuration(seconds: number | null): string | null {
 }
 
 /**
- * The Song Result page's full experience: kicks off + polls generation via
- * `useSongResult`, then renders the loading, completed, or failed view.
+ * The Song Result page's full experience: reads the current Song state
+ * once via `useSongResult`, then renders the waiting, completed, or
+ * failed view. Approving lyrics queues the song job server-side (see
+ * PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5) and the
+ * parent is notified by email once it's ready — this page never polls.
  * The user can only ever generate one final song (see
  * docs/Product/Business_Rules.md), so "Generate Another Song" is always
  * shown disabled rather than omitted.
  */
 export function SongResultView({ supportEmail }: SongResultViewProps) {
-  const { babyName, status, audioUrl, duration } = useSongResult();
+  const { babyName, status, audioUrl, duration, loading } = useSongResult();
   const title = babyName ? `${babyName}'s Song` : "Your Song";
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div
+          role="status"
+          aria-label="Loading"
+          className="size-10 animate-spin rounded-full border-4 border-muted border-t-primary"
+        />
+      </div>
+    );
+  }
 
   if (status === "FAILED") {
     return (
@@ -83,12 +98,12 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
       <h1 className="text-heading font-bold text-foreground">{title}</h1>
       <div
         role="status"
-        aria-label="Generating your song"
+        aria-label="Your song has entered production"
         className="size-10 animate-spin rounded-full border-4 border-muted border-t-primary"
       />
       <p className="text-body text-muted-foreground">
-        We&apos;re generating your personalized song. This usually takes a few minutes — feel free
-        to keep this page open, it will update automatically.
+        Your lyrics have been approved. Your song has entered production. We will notify you by
+        email as soon as it is ready.
       </p>
       <Button type="button" disabled className="w-full sm:w-auto">
         Generate Another Song

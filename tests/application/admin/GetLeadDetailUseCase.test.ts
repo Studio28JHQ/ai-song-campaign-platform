@@ -6,6 +6,7 @@ import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { SongStatus } from "@/domain/song/types";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
@@ -78,6 +79,16 @@ class InMemorySongRepository implements SongRepository {
   }
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.records.values()].find((s) => s.leadId === leadId) ?? null;
+  }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.records.values()].find((s) => s.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.records.values()]
+        .filter((s) => s.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
   }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
@@ -272,7 +283,7 @@ describe("GetLeadDetailUseCase", () => {
     expect(approvedEvents[0].label).toContain("v2");
   });
 
-  it("includes song_requested and song_completed events for a READY song, but not song_failed", async () => {
+  it("includes song_requested and song_completed events for a COMPLETED song, but not song_failed", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
 
@@ -288,7 +299,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
     songRepository.seed(song);
 
     const useCase = new GetLeadDetailUseCase(
@@ -357,7 +368,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
     songRepository.seed(song);
 
     const useCaseBeforeEmail = new GetLeadDetailUseCase(
@@ -389,7 +400,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
     songRepository.seed(song);
 
     await auditLogRepository.create(
@@ -442,7 +453,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
     songRepository.seed(song);
 
     const useCase = new GetLeadDetailUseCase(

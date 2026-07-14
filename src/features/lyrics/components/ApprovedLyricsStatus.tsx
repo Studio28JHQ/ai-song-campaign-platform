@@ -10,7 +10,7 @@ interface ApprovedLyricsStatusProps {
 }
 
 const SONG_STATUS_LABEL: Record<LeadSessionSongStatus, string> = {
-  PENDING: "Song pending",
+  QUEUED: "Song queued",
   GENERATING: "Song generating",
   COMPLETED: "Song ready",
   FAILED: "Song generation failed",
@@ -32,7 +32,7 @@ export function ApprovedLyricsStatus({
   songStatus,
   supportEmail,
 }: ApprovedLyricsStatusProps) {
-  const status = songStatus ?? "PENDING";
+  const status = songStatus ?? "QUEUED";
 
   return (
     <div className="flex flex-col gap-4">

@@ -7,6 +7,8 @@ function fakeClient(counts: {
   lyricsGenerated: number;
   lyricsApproved: number;
   songsRequested: number;
+  songsQueued: number;
+  songsGenerating: number;
   songsCompleted: number;
   songsFailed: number;
   emailsSent: number;
@@ -20,6 +22,8 @@ function fakeClient(counts: {
   const songCount = vi
     .fn()
     .mockResolvedValueOnce(counts.songsRequested)
+    .mockResolvedValueOnce(counts.songsQueued)
+    .mockResolvedValueOnce(counts.songsGenerating)
     .mockResolvedValueOnce(counts.songsCompleted)
     .mockResolvedValueOnce(counts.songsFailed)
     .mockResolvedValueOnce(counts.emailsSent);
@@ -34,12 +38,14 @@ function fakeClient(counts: {
 }
 
 describe("PrismaAdminDashboardGate.getSummary", () => {
-  it("returns the nine dashboard indicators as plain counts", async () => {
+  it("returns the dashboard indicators as plain counts", async () => {
     const client = fakeClient({
       totalLeads: 10,
       lyricsGenerated: 12,
       lyricsApproved: 8,
       songsRequested: 7,
+      songsQueued: 1,
+      songsGenerating: 1,
       songsCompleted: 4,
       songsFailed: 2,
       emailsSent: 4,
@@ -54,6 +60,8 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       lyricsGenerated: 12,
       lyricsApproved: 8,
       songsRequested: 7,
+      songsQueued: 1,
+      songsGenerating: 1,
       songsCompleted: 4,
       songsFailed: 2,
       emailsSent: 4,
@@ -67,6 +75,8 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       lyricsGenerated: 1,
       lyricsApproved: 1,
       songsRequested: 1,
+      songsQueued: 0,
+      songsGenerating: 0,
       songsCompleted: 1,
       songsFailed: 0,
       emailsSent: 1,

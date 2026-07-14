@@ -21,6 +21,16 @@ class InMemorySongRepository implements SongRepository {
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.records.values()].find((s) => s.leadId === leadId) ?? null;
   }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.records.values()].find((s) => s.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.records.values()]
+        .filter((s) => s.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
+  }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
     return song;
@@ -59,7 +69,7 @@ describe("RetryFailedSongUseCase", () => {
     await expect(useCase.execute({ songId: "missing", adminId: "admin-1" })).rejects.toThrow();
   });
 
-  it("resets a FAILED song back to PENDING, without creating a new row", async () => {
+  it("resets a FAILED song back to QUEUED, without creating a new row", async () => {
     const song = buildFailedSong();
     songRepository.seed(song);
     const useCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
@@ -67,11 +77,11 @@ describe("RetryFailedSongUseCase", () => {
     const result = await useCase.execute({ songId: song.id, adminId: "admin-1" });
 
     expect(result.song.id).toBe(song.id);
-    expect(result.song.status).toBe(SongStatus.PENDING);
+    expect(result.song.status).toBe(SongStatus.QUEUED);
 
     const persisted = await songRepository.findById(song.id);
     expect(persisted?.id).toBe(song.id);
-    expect(persisted?.status).toBe(SongStatus.PENDING);
+    expect(persisted?.status).toBe(SongStatus.QUEUED);
   });
 
   it("reuses the same lyricsId and moodId — it never touches them", async () => {
@@ -101,7 +111,7 @@ describe("RetryFailedSongUseCase", () => {
     });
   });
 
-  it("rejects retrying a PENDING song", async () => {
+  it("rejects retrying a QUEUED song", async () => {
     const song = Song.create({ leadId: "lead-1", lyricsId: "lyrics-1", moodId: "mood-1" });
     songRepository.seed(song);
     const useCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
@@ -120,10 +130,10 @@ describe("RetryFailedSongUseCase", () => {
     expect(auditLogRepository.created).toHaveLength(0);
   });
 
-  it("rejects retrying an already-COMPLETED (READY) song", async () => {
+  it("rejects retrying an already-COMPLETED song", async () => {
     const song = Song.create({ leadId: "lead-1", lyricsId: "lyrics-1", moodId: "mood-1" });
     song.markGenerating();
-    song.markReady({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
     songRepository.seed(song);
     const useCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
 
@@ -131,6 +141,6 @@ describe("RetryFailedSongUseCase", () => {
     expect(auditLogRepository.created).toHaveLength(0);
 
     const persisted = await songRepository.findById(song.id);
-    expect(persisted?.status).toBe(SongStatus.READY);
+    expect(persisted?.status).toBe(SongStatus.COMPLETED);
   });
 });

@@ -9,26 +9,28 @@ import type { GenerateSongRequest } from "../dto/GenerateSongRequest";
 import type { GenerateSongResponse } from "../dto/GenerateSongResponse";
 
 /**
- * Synchronous intake for song generation: validates every rule in
+ * Creates the queued Song job: validates every rule in
  * docs/Product/Business_Rules.md that requires a repository lookup (the
  * Song entity alone cannot know about the lead, the campaign, or the
- * approved lyrics), then persists the Song as `PENDING` and returns
- * immediately — it never calls Suno itself.
+ * approved lyrics), then persists the Song as `QUEUED` and returns
+ * immediately — it never calls the music provider itself (see
+ * PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5).
  *
  * - The Lead exists.
- * - The Lead has not already generated a final (READY) song. A `FAILED`
- *   attempt does not count — see `Song`'s transition map — so a
- *   transient Suno failure never permanently blocks a lead, without
+ * - The Lead has not already generated a final (`COMPLETED`) song. A
+ *   `FAILED` attempt does not count — see `Song`'s transition map — so a
+ *   transient provider failure never permanently blocks a lead, without
  *   ever allowing a second row (the DB's `Song.leadId` unique constraint
  *   only ever sees one row per lead). Calling this again after a
  *   failure reuses the same row, which is how a manual retry works.
  * - The campaign is active and generation is enabled.
  * - The Lead has exactly one approved Lyrics version.
  *
- * The actual Suno call happens in `ProcessSongGenerationUseCase`, run in
- * the background by the API route (see `app/api/song/generate/route.ts`)
- * — this split is what makes the endpoint respond immediately (see
- * docs/Architecture/System_Architecture.md).
+ * The actual provider call happens in `SongGenerationWorker`, scheduled
+ * in the background once lyrics are approved (see
+ * `app/api/lyrics/approve/route.ts`) — this split is what makes lyrics
+ * approval return immediately without ever generating the song inline
+ * (see docs/Architecture/System_Architecture.md).
  */
 export class GenerateSongUseCase {
   constructor(
@@ -50,7 +52,7 @@ export class GenerateSongUseCase {
 
     const existingSong = await this.songRepository.findByLead(lead.id);
 
-    if (existingSong && existingSong.status === SongStatus.READY) {
+    if (existingSong && existingSong.status === SongStatus.COMPLETED) {
       throw new BusinessRuleError("This lead has already generated a song.", {
         code: "song.already_exists",
         context: { leadId: lead.id, songId: existingSong.id },

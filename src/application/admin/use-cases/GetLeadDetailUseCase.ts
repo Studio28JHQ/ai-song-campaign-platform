@@ -121,7 +121,7 @@ export class GetLeadDetailUseCase {
         actor: null,
       });
 
-      if (song.status === SongStatus.READY && song.generatedAt) {
+      if (song.status === SongStatus.COMPLETED && song.generatedAt) {
         history.push({
           type: "song_completed",
           label: "Song completed",

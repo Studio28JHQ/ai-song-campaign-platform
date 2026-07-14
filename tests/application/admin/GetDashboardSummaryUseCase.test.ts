@@ -11,6 +11,8 @@ function fakeGate(
       lyricsGenerated: 15,
       lyricsApproved: 10,
       songsRequested: 8,
+      songsQueued: 1,
+      songsGenerating: 1,
       songsCompleted: 5,
       songsFailed: 3,
       emailsSent: 5,
@@ -21,7 +23,7 @@ function fakeGate(
 }
 
 describe("GetDashboardSummaryUseCase", () => {
-  it("returns the nine indicators, computing generationSuccessRate from the gate's counts", async () => {
+  it("returns the indicators, computing generationSuccessRate from the gate's counts", async () => {
     const gate = fakeGate();
     const useCase = new GetDashboardSummaryUseCase(gate);
 
@@ -32,6 +34,8 @@ describe("GetDashboardSummaryUseCase", () => {
       lyricsGenerated: 15,
       lyricsApproved: 10,
       songsRequested: 8,
+      songsQueued: 1,
+      songsGenerating: 1,
       songsCompleted: 5,
       songsFailed: 3,
       emailsSent: 5,

@@ -12,7 +12,7 @@ function buildRecord(overrides: Record<string, unknown> = {}) {
     phone: "+1 555 123 4567",
     createdAt: now,
     lyrics: [{ approved: true }],
-    song: { status: "READY", generatedAt: now, emailedAt: now },
+    song: { status: "COMPLETED", generatedAt: now, emailedAt: now },
     ...overrides,
   };
 }

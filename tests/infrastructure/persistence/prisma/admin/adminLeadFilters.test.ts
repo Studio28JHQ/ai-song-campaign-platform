@@ -29,11 +29,11 @@ describe("buildAdminLeadWhere", () => {
     expect(where).toEqual({ AND: [{ city: { contains: "Austin", mode: "insensitive" } }] });
   });
 
-  it("maps songStatus COMPLETED to both READY and DELIVERED", () => {
+  it("maps songStatus COMPLETED to both COMPLETED and DELIVERED", () => {
     const where = buildAdminLeadWhere({ songStatus: "COMPLETED" }) as {
       AND: Array<{ song?: { status?: { in: string[] } } }>;
     };
-    expect(where.AND[0].song?.status?.in).toEqual(["READY", "DELIVERED"]);
+    expect(where.AND[0].song?.status?.in).toEqual(["COMPLETED", "DELIVERED"]);
   });
 
   it("maps songStatus NONE to leads with no song at all", () => {
@@ -67,14 +67,14 @@ describe("buildAdminLeadWhere", () => {
 });
 
 describe("toPublicSongStatus", () => {
-  it("maps READY and DELIVERED to COMPLETED", () => {
-    expect(toPublicSongStatus("READY" as never)).toBe("COMPLETED");
+  it("maps DELIVERED to COMPLETED", () => {
     expect(toPublicSongStatus("DELIVERED" as never)).toBe("COMPLETED");
   });
 
-  it("passes PENDING, GENERATING, and FAILED through unchanged", () => {
-    expect(toPublicSongStatus("PENDING" as never)).toBe("PENDING");
+  it("passes QUEUED, GENERATING, COMPLETED, and FAILED through unchanged", () => {
+    expect(toPublicSongStatus("QUEUED" as never)).toBe("QUEUED");
     expect(toPublicSongStatus("GENERATING" as never)).toBe("GENERATING");
+    expect(toPublicSongStatus("COMPLETED" as never)).toBe("COMPLETED");
     expect(toPublicSongStatus("FAILED" as never)).toBe("FAILED");
   });
 });

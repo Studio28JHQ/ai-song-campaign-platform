@@ -24,7 +24,7 @@ describe("PrismaAdminLeadSearchGate.search", () => {
           babyName: "Baby Doe",
           email: "jane@example.com",
           phone: "+1 555 123 4567",
-          song: { status: "READY", emailedAt: now },
+          song: { status: "COMPLETED", emailedAt: now },
         },
         {
           id: "lead-2",

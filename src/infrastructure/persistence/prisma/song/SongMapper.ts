@@ -6,21 +6,21 @@ import { SongStatus as DomainSongStatus, type SongProps } from "@/domain/song/ty
 /**
  * Prisma's `SongStatus` also has a `DELIVERED` value (see
  * prisma/schema.prisma) that belongs to a future email-delivery module —
- * the domain collapses it to `READY` on read, same as `LeadMapper` does
- * for its own out-of-scope persistence states.
+ * the domain collapses it to `COMPLETED` on read, same as `LeadMapper`
+ * does for its own out-of-scope persistence states.
  */
 const PERSISTENCE_TO_DOMAIN_STATUS: Record<PrismaSongStatus, DomainSongStatus> = {
-  PENDING: DomainSongStatus.PENDING,
+  QUEUED: DomainSongStatus.QUEUED,
   GENERATING: DomainSongStatus.GENERATING,
-  READY: DomainSongStatus.READY,
-  DELIVERED: DomainSongStatus.READY,
+  COMPLETED: DomainSongStatus.COMPLETED,
+  DELIVERED: DomainSongStatus.COMPLETED,
   FAILED: DomainSongStatus.FAILED,
 };
 
 const DOMAIN_TO_PERSISTENCE_STATUS: Record<DomainSongStatus, PrismaSongStatus> = {
-  [DomainSongStatus.PENDING]: PrismaSongStatus.PENDING,
+  [DomainSongStatus.QUEUED]: PrismaSongStatus.QUEUED,
   [DomainSongStatus.GENERATING]: PrismaSongStatus.GENERATING,
-  [DomainSongStatus.READY]: PrismaSongStatus.READY,
+  [DomainSongStatus.COMPLETED]: PrismaSongStatus.COMPLETED,
   [DomainSongStatus.FAILED]: PrismaSongStatus.FAILED,
 };
 

@@ -45,10 +45,15 @@ enum GenerationAttemptResult {
   @@map("generation_attempt_result")
 }
 
+// QUEUED / GENERATING / COMPLETED / FAILED are the only valid generation
+// states as of Sprint 7.5 (see PROJECT_MANIFEST.md — Architecture
+// exception). `DELIVERED` remains reserved for a future email-delivery
+// module (not implemented) and still collapses to `COMPLETED` on read —
+// see `SongMapper`.
 enum SongStatus {
-  PENDING
+  QUEUED
   GENERATING
-  READY
+  COMPLETED
   DELIVERED
   FAILED
 
@@ -189,7 +194,7 @@ model Song {
   providerSongId String?
   audioUrl       String?
   duration       Int?
-  status         SongStatus @default(PENDING)
+  status         SongStatus @default(QUEUED)
   generatedAt    DateTime?
   emailedAt      DateTime?
   createdAt      DateTime   @default(now())

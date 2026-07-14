@@ -11,7 +11,7 @@ import type { ResendSongEmailResponse } from "../dto/ResendSongEmailResponse";
 /**
  * The manual "Resend email" operational recovery action (see
  * docs/Product/User_Flow.md — Operational Recovery). Only ever available
- * once the Song is `READY` (`COMPLETED`, in the public vocabulary) *and*
+ * once the Song is `COMPLETED` *and*
  * the one-time automatic email has already gone out (`Song.emailedAt`
  * set) — this is a deliberate extra copy for a parent who says they
  * never received it, never a substitute for the automatic delivery.
@@ -41,7 +41,7 @@ export class ResendSongEmailUseCase {
       });
     }
 
-    if (song.status !== SongStatus.READY) {
+    if (song.status !== SongStatus.COMPLETED) {
       throw new BusinessRuleError("Only a completed song's email can be resent.", {
         code: "admin.song_not_completed",
         context: { songId: song.id, status: song.status },

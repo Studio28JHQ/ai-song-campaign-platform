@@ -58,6 +58,16 @@ No event-driven architecture.
 
 No unnecessary abstractions.
 
+Exception (Sprint 7.5): Version 1 introduces a database-backed song
+generation pipeline — a `Song.status` state machine
+(`QUEUED → GENERATING → COMPLETED/FAILED`) plus sequential,
+oldest-first processing of queued rows. This exists solely to satisfy
+the selected Mureka plan's provider-imposed limit of one concurrent
+generation; it is not a message broker, event bus, or pub/sub system,
+and introduces no new infrastructure component. The provider itself
+remains swappable behind an application-layer contract — see
+`docs/Architecture/System_Architecture.md`.
+
 # Technology Stack
 
 Frontend
@@ -141,6 +151,10 @@ Attempts are consumed only when:
 Attempts are never consumed during audio generation.
 
 Only one final song is generated.
+
+Song generation is queued and processed one at a time, oldest first —
+the selected music provider plan allows only one concurrent
+generation.
 
 The campaign provides exactly four predefined moods.
 

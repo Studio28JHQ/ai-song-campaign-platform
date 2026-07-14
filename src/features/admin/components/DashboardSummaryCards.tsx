@@ -26,6 +26,8 @@ export function DashboardSummaryCards({ summary }: DashboardSummaryCardsProps) {
       <SummaryCard label="Lyrics Generated" value={summary.lyricsGenerated} />
       <SummaryCard label="Lyrics Approved" value={summary.lyricsApproved} />
       <SummaryCard label="Songs Requested" value={summary.songsRequested} />
+      <SummaryCard label="Songs Queued" value={summary.songsQueued} />
+      <SummaryCard label="Songs Generating" value={summary.songsGenerating} />
       <SummaryCard label="Songs Completed" value={summary.songsCompleted} />
       <SummaryCard label="Songs Failed" value={summary.songsFailed} />
       <SummaryCard label="Emails Sent" value={summary.emailsSent} />

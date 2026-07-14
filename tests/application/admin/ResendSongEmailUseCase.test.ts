@@ -4,6 +4,7 @@ import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { Email } from "@/domain/lead/value-objects/Email";
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { SongStatus } from "@/domain/song/types";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
@@ -49,6 +50,16 @@ class InMemorySongRepository implements SongRepository {
   async findByLead(leadId: string): Promise<Song | null> {
     return [...this.records.values()].find((s) => s.leadId === leadId) ?? null;
   }
+  async findGenerating(): Promise<Song | null> {
+    return [...this.records.values()].find((s) => s.status === SongStatus.GENERATING) ?? null;
+  }
+  async findOldestQueued(): Promise<Song | null> {
+    return (
+      [...this.records.values()]
+        .filter((s) => s.status === SongStatus.QUEUED)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null
+    );
+  }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
     return song;
@@ -85,7 +96,7 @@ function createLead(): Lead {
 function buildCompletedEmailedSong(leadId: string): Song {
   const song = Song.create({ leadId, lyricsId: "lyrics-1", moodId: "mood-1" });
   song.markGenerating();
-  song.markReady({
+  song.markCompleted({
     providerSongId: "suno-1",
     audioUrl: "https://cdn.example.com/song.mp3",
     duration: 120,

@@ -1,4 +1,8 @@
-import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import {
+  Prisma,
+  SongStatus as PrismaSongStatus,
+  type PrismaClient,
+} from "@/generated/prisma/client";
 import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { BusinessRuleError, DatabaseError } from "@/shared/errors";
@@ -51,6 +55,29 @@ export class PrismaSongRepository implements SongRepository {
       return SongMapper.toDomain(record);
     } catch (error) {
       this.handleError(error, { operation: "update", songId: song.id });
+    }
+  }
+
+  async findGenerating(): Promise<Song | null> {
+    try {
+      const record = await this.client.song.findFirst({
+        where: { status: PrismaSongStatus.GENERATING },
+      });
+      return record ? SongMapper.toDomain(record) : null;
+    } catch (error) {
+      this.handleError(error, { operation: "findGenerating" });
+    }
+  }
+
+  async findOldestQueued(): Promise<Song | null> {
+    try {
+      const record = await this.client.song.findFirst({
+        where: { status: PrismaSongStatus.QUEUED },
+        orderBy: { createdAt: "asc" },
+      });
+      return record ? SongMapper.toDomain(record) : null;
+    } catch (error) {
+      this.handleError(error, { operation: "findOldestQueued" });
     }
   }
 
