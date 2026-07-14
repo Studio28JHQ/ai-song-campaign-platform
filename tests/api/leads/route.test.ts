@@ -104,6 +104,39 @@ describe("POST /api/leads", () => {
     expect(mockRepository.existsByEmail).not.toHaveBeenCalled();
   });
 
+  it("returns 400 and rejects an HTML/script payload in parentName (Sprint 8.1)", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+
+    const response = await POST(
+      postRequest({ ...validPayload, parentName: "<script>alert(1)</script>" }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
+    expect(mockRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a parentName longer than 100 characters (Sprint 8.1)", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+
+    const response = await POST(postRequest({ ...validPayload, parentName: "a".repeat(101) }));
+
+    expect(response.status).toBe(400);
+    expect(mockRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("registers a lead with a trimmed, whitespace-collapsed parentName (Sprint 8.1)", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+    mockRepository.create.mockImplementation(async (lead: Lead) => lead);
+
+    const response = await POST(postRequest({ ...validPayload, parentName: "  Jane    Doe  " }));
+
+    expect(response.status).toBe(201);
+    const createdLead = mockRepository.create.mock.calls[0][0] as Lead;
+    expect(createdLead.parentName).toBe("Jane Doe");
+  });
+
   it("returns 400 for a malformed email caught by the domain value object", async () => {
     mockRepository.existsByEmail.mockResolvedValue(false);
 

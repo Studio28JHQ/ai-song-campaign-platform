@@ -138,6 +138,30 @@ describe("POST /api/lyrics/generate", () => {
     expect(body.remainingAttempts).toBe(4);
   });
 
+  it("returns 400 and rejects an HTML/script payload in parentMessage (Sprint 8.1)", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+
+    const response = await POST(
+      postRequest({ ...validPayload, parentMessage: "<script>alert(1)</script>" }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
+    expect(mockLeadRepository.findById).not.toHaveBeenCalled();
+    expect(mockGenerateAndModerate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a parentMessage longer than 600 characters (Sprint 8.1)", async () => {
+    const response = await POST(postRequest({ ...validPayload, parentMessage: "a".repeat(601) }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
+    expect(mockGenerateAndModerate).not.toHaveBeenCalled();
+  });
+
   it("returns 404 when the lead is not found", async () => {
     mockLeadRepository.findById.mockResolvedValue(null);
 

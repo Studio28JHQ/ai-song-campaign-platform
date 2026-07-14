@@ -256,3 +256,60 @@ describe("GenerateLyricsForLeadUseCase", () => {
     expect(versions).toHaveLength(1);
   });
 });
+
+describe("GenerateLyricsForLeadUseCase — parentMessage hardening (Sprint 8.1)", () => {
+  let leadRepository: InMemoryLeadRepository;
+  let lyricsRepository: InMemoryLyricsRepository;
+
+  beforeEach(() => {
+    leadRepository = new InMemoryLeadRepository();
+    lyricsRepository = new InMemoryLyricsRepository();
+  });
+
+  it("rejects an HTML/script payload before calling the generator", async () => {
+    const lead = createLead(5);
+    leadRepository.seed(lead);
+    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await expect(
+      useCase.execute({
+        leadId: lead.id,
+        ...baseRequest,
+        parentMessage: "<script>alert(1)</script>",
+      }),
+    ).rejects.toThrow();
+
+    expect(generator.generateAndModerate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a message longer than 600 characters", async () => {
+    const lead = createLead(5);
+    leadRepository.seed(lead);
+    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await expect(
+      useCase.execute({ leadId: lead.id, ...baseRequest, parentMessage: "a".repeat(601) }),
+    ).rejects.toThrow();
+
+    expect(generator.generateAndModerate).not.toHaveBeenCalled();
+  });
+
+  it("trims and collapses whitespace before passing the message to the generator", async () => {
+    const lead = createLead(5);
+    leadRepository.seed(lead);
+    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await useCase.execute({
+      leadId: lead.id,
+      ...baseRequest,
+      parentMessage: "  A   gentle    song.  ",
+    });
+
+    expect(generator.generateAndModerate).toHaveBeenCalledWith(
+      expect.objectContaining({ parentMessage: "A gentle song." }),
+    );
+  });
+});

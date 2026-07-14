@@ -11,6 +11,13 @@ import { PrismaLeadSessionService } from "@/infrastructure/auth/PrismaLeadSessio
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { BusinessRuleError, ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
+import { FIELD_LIMITS } from "@/shared/validation/text";
+import {
+  emailField,
+  optionalPhoneField,
+  optionalPlainTextField,
+  plainTextField,
+} from "@/shared/validation/zodFields";
 
 /**
  * POST /api/leads — registers a new lead for the campaign.
@@ -32,18 +39,21 @@ const campaignConfig: LeadCampaignConfig = {
 const createLeadUseCase = new CreateLeadUseCase(new PrismaLeadRepository(), campaignConfig);
 const leadSessionService = new PrismaLeadSessionService();
 
-// Structural validation only (shape/type/presence). Semantic validation
-// (email format, age bounds, ...) belongs to the domain value objects and
-// is never duplicated here.
+// Structural validation (shape/type/presence) plus the shared Sprint 8.1
+// input-hardening rules (trim, collapse whitespace, Unicode
+// normalization, control-character/HTML/length limits — see
+// `@/shared/validation`). Domain value objects remain the authoritative
+// enforcement point (e.g. age bounds); this schema exists for early
+// rejection and consistent, user-friendly messages at the boundary.
 const createLeadRequestSchema = z
   .object({
     campaignId: z.string().min(1),
-    parentName: z.string().min(1),
-    babyName: z.string().min(1),
+    parentName: plainTextField("Parent name", FIELD_LIMITS.parentName),
+    babyName: plainTextField("Baby name", FIELD_LIMITS.babyName),
     babyAge: z.number().int().optional(),
-    city: z.string().min(1).optional(),
-    email: z.string().min(1),
-    phone: z.string().min(1).optional(),
+    city: optionalPlainTextField("City", FIELD_LIMITS.city),
+    email: emailField(),
+    phone: optionalPhoneField(),
   })
   .strict();
 
@@ -58,7 +68,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const parsed = createLeadRequestSchema.safeParse(payload);
   if (!parsed.success) {
-    return errorResponse(400, "invalid_request", "The request payload is invalid.");
+    const message = parsed.error.issues[0]?.message ?? "The request payload is invalid.";
+    return errorResponse(400, "invalid_request", message);
   }
 
   try {

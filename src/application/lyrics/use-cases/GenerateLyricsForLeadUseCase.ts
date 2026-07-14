@@ -1,7 +1,12 @@
 import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import { LeadStatus } from "@/domain/lead/types";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
-import { BusinessRuleError } from "@/shared/errors";
+import { BusinessRuleError, ValidationError } from "@/shared/errors";
+import {
+  describeTextValidationFailure,
+  FIELD_LIMITS,
+  sanitizePlainText,
+} from "@/shared/validation/text";
 import type { LyricsGenerator } from "../contracts/LyricsGenerator";
 import type { GenerateLyricsForLeadRequest } from "../dto/GenerateLyricsForLeadRequest";
 import type { GenerateLyricsForLeadResponse } from "../dto/GenerateLyricsForLeadResponse";
@@ -32,6 +37,8 @@ export class GenerateLyricsForLeadUseCase {
   ) {}
 
   async execute(request: GenerateLyricsForLeadRequest): Promise<GenerateLyricsForLeadResponse> {
+    const parentMessage = GenerateLyricsForLeadUseCase.sanitizeParentMessage(request.parentMessage);
+
     const lead = await this.leadRepository.findById(request.leadId);
 
     if (!lead) {
@@ -65,7 +72,7 @@ export class GenerateLyricsForLeadUseCase {
 
     const result = await this.lyricsGenerator.generateAndModerate({
       babyName: lead.babyName,
-      parentMessage: request.parentMessage,
+      parentMessage,
       mood: { name: request.moodName, description: request.moodDescription },
       language: DEFAULT_LANGUAGE,
     });
@@ -89,7 +96,7 @@ export class GenerateLyricsForLeadUseCase {
     const generated = await new GenerateLyricsUseCase(this.lyricsRepository).execute({
       leadId: lead.id,
       moodId: request.moodId,
-      prompt: `Mood: ${request.moodName}. Parent message: ${request.parentMessage}`,
+      prompt: `Mood: ${request.moodName}. Parent message: ${parentMessage}`,
       content: result.lyrics as string,
     });
 
@@ -100,5 +107,17 @@ export class GenerateLyricsForLeadUseCase {
       remainingAttempts: lead.remainingAttempts,
       leadStatus: lead.status,
     };
+  }
+
+  /** Sprint 8.1 input hardening for the custom lyrics message — see `@/shared/validation`. */
+  private static sanitizeParentMessage(raw: string): string {
+    const result = sanitizePlainText(raw, FIELD_LIMITS.lyricsMessage);
+    if (!result.ok) {
+      throw new ValidationError(
+        describeTextValidationFailure("Your message", result.reason, FIELD_LIMITS.lyricsMessage),
+        { code: "lyrics.invalid_parent_message" },
+      );
+    }
+    return result.value;
   }
 }

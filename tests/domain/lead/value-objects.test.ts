@@ -15,6 +15,15 @@ describe("Email", () => {
       expect(() => Email.create(raw)).toThrow();
     },
   );
+
+  it("rejects an email longer than 254 characters", () => {
+    const raw = `${"a".repeat(250)}@example.com`;
+    expect(() => Email.create(raw)).toThrow();
+  });
+
+  it("rejects an email containing HTML", () => {
+    expect(() => Email.create('"<script>"@example.com')).toThrow();
+  });
 });
 
 describe("PhoneNumber", () => {
@@ -25,6 +34,14 @@ describe("PhoneNumber", () => {
 
   it.each(["123", "not-a-phone", ""])("rejects invalid phone number %s", (raw) => {
     expect(() => PhoneNumber.create(raw)).toThrow();
+  });
+
+  it("rejects a phone number longer than 25 characters", () => {
+    expect(() => PhoneNumber.create("+1 555 123 4567 555 123 4567")).toThrow();
+  });
+
+  it("rejects a phone number containing HTML", () => {
+    expect(() => PhoneNumber.create("<script>5551234567</script>")).toThrow();
   });
 });
 

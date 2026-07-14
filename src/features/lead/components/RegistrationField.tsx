@@ -11,6 +11,7 @@ interface RegistrationFieldProps {
   type?: string;
   inputMode?: React.HTMLAttributes<HTMLElement>["inputMode"];
   autoComplete?: string;
+  maxLength?: number;
   error?: string;
   registration: UseFormRegisterReturn;
 }
@@ -26,6 +27,7 @@ export function RegistrationField({
   type = "text",
   inputMode,
   autoComplete,
+  maxLength,
   error,
   registration,
 }: RegistrationFieldProps) {
@@ -41,6 +43,7 @@ export function RegistrationField({
         inputMode={inputMode}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        maxLength={maxLength}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         {...registration}

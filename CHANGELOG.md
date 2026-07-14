@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-14
+
+Sprint 8.1 — Input Validation & Sanitization. Hardens every user-controlled field (Registration: parent name, baby name, city, email, phone; Lyrics generation: custom message) with a single shared set of validation rules enforced identically by the frontend, the API layer, and the domain layer. No business rule changed.
+
+### Added
+
+- `src/shared/validation/` — the shared Sprint 8.1 hardening module:
+  - `text.ts` — `sanitizePlainText()` trims, collapses repeated whitespace, normalizes Unicode (NFC), and rejects control characters, embedded null bytes, HTML angle brackets (`<`/`>`), and values that are empty (after trimming) or exceed the field's `FIELD_LIMITS` ceiling (parent name 100, baby name 60, city 100, email 254, phone 25, lyrics message 600). `describeTextValidationFailure()` maps a failure to a user-friendly message that never exposes implementation details.
+  - `email.ts` / `phone.ts` — RFC-shaped email format validation and international phone-number format validation (digit-count bounded to E.164).
+  - `zodFields.ts` — Zod schema builders (`plainTextField`, `optionalPlainTextField`, `emailField`, `optionalPhoneField`) built on the functions above, shared by the frontend forms and the API route schemas so both layers enforce identical rules from one source. Domain/application code never imports this file — it uses the framework-agnostic functions directly, preserving the existing Clean Architecture boundary.
+- Domain enforcement: `Email`, `PhoneNumber` (`src/domain/lead/value-objects/`) and `Lead.create` (parent name, baby name, city) now apply the shared hardening before their existing format/business checks.
+- Application enforcement: `GenerateLyricsForLeadUseCase` sanitizes the custom lyrics message before it reaches the AI provider or is persisted.
+- API enforcement: `POST /api/leads` and `POST /api/lyrics/generate` apply the same rules at the boundary via the shared Zod builders, and now surface the first validation issue as a user-friendly 400 message instead of a generic one.
+- Frontend enforcement: `RegistrationForm` and `LyricsGenerationForm` reuse the same Zod builders and `FIELD_LIMITS`, and their inputs now carry a matching HTML `maxLength`.
+
 ## [1.1.0] - 2026-07-14
 
 Sprint 7.5 — Async Song Generation Architecture. Replaces the synchronous song-generation assumption with a database-backed, provider-agnostic generation pipeline, in preparation for a future migration to Mureka (whose selected plan allows only one concurrent generation).

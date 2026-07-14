@@ -5,8 +5,10 @@ import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsServ
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
-import { BusinessRuleError, ExternalApiError } from "@/shared/errors";
+import { BusinessRuleError, ExternalApiError, ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
+import { FIELD_LIMITS } from "@/shared/validation/text";
+import { plainTextField } from "@/shared/validation/zodFields";
 
 /**
  * POST /api/lyrics/generate — generates (or regenerates) lyrics for a
@@ -26,15 +28,18 @@ const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
   new ClaudeLyricsService(),
 );
 
-// Structural validation only (shape/type/presence). Whether the lead
-// exists, has remaining attempts, and whether the content is approved are
-// Application/Domain-layer concerns, never duplicated here.
+// Structural validation (shape/type/presence) plus the shared Sprint 8.1
+// input-hardening rules for `parentMessage` (trim, collapse whitespace,
+// Unicode normalization, control-character/HTML/length limits — see
+// `@/shared/validation`). Whether the lead exists, has remaining
+// attempts, and whether the content is approved are Application/Domain-
+// layer concerns, never duplicated here.
 const generateLyricsRequestSchema = z
   .object({
     moodId: z.string().min(1),
     moodName: z.string().min(1),
     moodDescription: z.string().min(1).optional(),
-    parentMessage: z.string().min(1),
+    parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
   })
   .strict();
 
@@ -54,7 +59,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const parsed = generateLyricsRequestSchema.safeParse(payload);
   if (!parsed.success) {
-    return errorResponse(400, "invalid_request", "The request payload is invalid.");
+    const message = parsed.error.issues[0]?.message ?? "The request payload is invalid.";
+    return errorResponse(400, "invalid_request", message);
   }
 
   try {
@@ -79,6 +85,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 }
 
 function handleUseCaseError(error: unknown): NextResponse {
+  if (error instanceof ValidationError) {
+    return errorResponse(400, "invalid_request", error.message);
+  }
+
   if (error instanceof BusinessRuleError) {
     if (error.code === "lyrics.lead_not_found") {
       return errorResponse(404, "lead_not_found", error.message);

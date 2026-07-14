@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { FIELD_LIMITS } from "@/shared/validation/text";
+import { plainTextField } from "@/shared/validation/zodFields";
 
 /**
  * V1 provides exactly four predefined moods (see
@@ -28,9 +30,11 @@ const MOODS = [
   },
 ] as const;
 
+// Client-side validation built from the same Sprint 8.1 hardening rules
+// (`@/shared/validation`) enforced by the API and application layers.
 const formSchema = z.object({
   moodId: z.string().min(1, "Select a mood."),
-  parentMessage: z.string().trim().min(1, "Share a little about what you'd like the song to say."),
+  parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -117,6 +121,7 @@ export function LyricsGenerationForm({
           id="parentMessage"
           placeholder="Tell us about a memory, a feeling, or something you want the song to celebrate..."
           rows={4}
+          maxLength={FIELD_LIMITS.lyricsMessage}
           aria-invalid={Boolean(errors.parentMessage)}
           aria-describedby={errors.parentMessage ? "parentMessage-error" : undefined}
           className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"

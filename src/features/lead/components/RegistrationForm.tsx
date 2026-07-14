@@ -5,6 +5,13 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { FIELD_LIMITS } from "@/shared/validation/text";
+import {
+  emailField,
+  optionalPhoneField,
+  optionalPlainTextField,
+  plainTextField,
+} from "@/shared/validation/zodFields";
 import { useRegisterLead } from "../hooks/useRegisterLead";
 import { RegistrationField } from "./RegistrationField";
 
@@ -16,26 +23,28 @@ import { RegistrationField } from "./RegistrationField";
  */
 const DEFAULT_CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
 
-// Client-side UX validation only — instant feedback before a network
-// round-trip. The server (Application + Domain layers) remains the
+// Client-side validation — instant feedback before a network round-trip,
+// built from the same Sprint 8.1 hardening rules (`@/shared/validation`)
+// enforced by the API and domain layers. The server remains the
 // authoritative source of truth for every business rule.
 const registrationFormSchema = z.object({
-  parentName: z.string().trim().min(1, "Enter the parent's name."),
-  babyName: z.string().trim().min(1, "Enter the baby's name."),
+  parentName: plainTextField("Parent's name", FIELD_LIMITS.parentName),
+  babyName: plainTextField("Baby's name", FIELD_LIMITS.babyName),
   babyAge: z
     .string()
     .trim()
     .refine((value) => value === "" || (/^\d+$/.test(value) && Number(value) > 0), {
       message: "Enter a positive whole number of months.",
     }),
-  city: z.string().trim(),
-  email: z.string().trim().min(1, "Enter an email address.").email("Enter a valid email address."),
-  phone: z.string().trim(),
+  city: optionalPlainTextField("City", FIELD_LIMITS.city),
+  email: emailField(),
+  phone: optionalPhoneField(),
 });
 
-type RegistrationFormValues = z.infer<typeof registrationFormSchema>;
+type RegistrationFormInput = z.input<typeof registrationFormSchema>;
+type RegistrationFormValues = z.output<typeof registrationFormSchema>;
 
-const defaultValues: RegistrationFormValues = {
+const defaultValues: RegistrationFormInput = {
   parentName: "",
   babyName: "",
   babyAge: "",
@@ -50,7 +59,7 @@ export function RegistrationForm() {
     handleSubmit,
     setError,
     formState: { errors },
-  } = useForm<RegistrationFormValues>({
+  } = useForm<RegistrationFormInput, unknown, RegistrationFormValues>({
     resolver: zodResolver(registrationFormSchema),
     defaultValues,
   });
@@ -65,9 +74,9 @@ export function RegistrationForm() {
       parentName: values.parentName,
       babyName: values.babyName,
       babyAge: values.babyAge === "" ? undefined : Number(values.babyAge),
-      city: values.city === "" ? undefined : values.city,
+      city: values.city,
       email: values.email,
-      phone: values.phone === "" ? undefined : values.phone,
+      phone: values.phone,
     });
 
     if (!outcome.success) {
@@ -91,6 +100,7 @@ export function RegistrationForm() {
         label="Parent name"
         placeholder="Jane Doe"
         autoComplete="name"
+        maxLength={FIELD_LIMITS.parentName}
         error={errors.parentName?.message}
         registration={register("parentName")}
       />
@@ -99,6 +109,7 @@ export function RegistrationForm() {
         label="Baby name"
         placeholder="Baby Doe"
         autoComplete="off"
+        maxLength={FIELD_LIMITS.babyName}
         error={errors.babyName?.message}
         registration={register("babyName")}
       />
@@ -117,6 +128,7 @@ export function RegistrationForm() {
         label="City"
         placeholder="Austin"
         autoComplete="address-level2"
+        maxLength={FIELD_LIMITS.city}
         error={errors.city?.message}
         registration={register("city")}
       />
@@ -126,6 +138,7 @@ export function RegistrationForm() {
         placeholder="jane@example.com"
         type="email"
         autoComplete="email"
+        maxLength={FIELD_LIMITS.email}
         error={errors.email?.message}
         registration={register("email")}
       />
@@ -135,6 +148,7 @@ export function RegistrationForm() {
         placeholder="+1 555 123 4567"
         type="tel"
         autoComplete="tel"
+        maxLength={FIELD_LIMITS.phone}
         error={errors.phone?.message}
         registration={register("phone")}
       />

@@ -1,4 +1,9 @@
 import { BusinessRuleError, ValidationError } from "@/shared/errors";
+import {
+  describeTextValidationFailure,
+  FIELD_LIMITS,
+  sanitizePlainText,
+} from "@/shared/validation/text";
 import { BabyAge } from "../value-objects/BabyAge";
 import { Email } from "../value-objects/Email";
 import { PhoneNumber } from "../value-objects/PhoneNumber";
@@ -32,12 +37,22 @@ export class Lead {
     }
 
     const campaignId = Lead.requireNonEmpty(input.campaignId, "campaignId");
-    const parentName = Lead.requireNonEmpty(input.parentName, "parentName");
-    const babyName = Lead.requireNonEmpty(input.babyName, "babyName");
+    const parentName = Lead.sanitizeRequiredField(
+      input.parentName,
+      "Parent name",
+      FIELD_LIMITS.parentName,
+      "parentName",
+    );
+    const babyName = Lead.sanitizeRequiredField(
+      input.babyName,
+      "Baby name",
+      FIELD_LIMITS.babyName,
+      "babyName",
+    );
     const email = Email.create(input.email);
     const phone = input.phone ? PhoneNumber.create(input.phone) : null;
     const babyAge = input.babyAge !== undefined ? BabyAge.create(input.babyAge) : null;
-    const city = input.city?.trim() || null;
+    const city = Lead.sanitizeOptionalField(input.city, "City", FIELD_LIMITS.city, "city");
     const now = new Date();
 
     return new Lead({
@@ -75,6 +90,39 @@ export class Lead {
       });
     }
     return trimmed;
+  }
+
+  /** Sprint 8.1 input hardening for required plain-text fields — see `@/shared/validation`. */
+  private static sanitizeRequiredField(
+    value: string,
+    fieldLabel: string,
+    maxLength: number,
+    code: string,
+  ): string {
+    const result = sanitizePlainText(value, maxLength);
+    if (!result.ok) {
+      throw new ValidationError(
+        describeTextValidationFailure(fieldLabel, result.reason, maxLength),
+        {
+          code: `lead.invalid_${code}`,
+        },
+      );
+    }
+    return result.value;
+  }
+
+  /** Same hardening as `sanitizeRequiredField`, but a blank/omitted value collapses to `null`. */
+  private static sanitizeOptionalField(
+    value: string | undefined,
+    fieldLabel: string,
+    maxLength: number,
+    code: string,
+  ): string | null {
+    if (value === undefined || value.trim().length === 0) {
+      return null;
+    }
+
+    return Lead.sanitizeRequiredField(value, fieldLabel, maxLength, code);
   }
 
   private static assertAttemptsInvariant(remainingAttempts: number, maxAttempts?: number): void {

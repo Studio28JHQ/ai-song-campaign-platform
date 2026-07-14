@@ -55,9 +55,9 @@ describe("RegistrationForm", () => {
     render(<RegistrationForm />);
     await user.click(screen.getByRole("button", { name: /register/i }));
 
-    expect(await screen.findByText("Enter the parent's name.")).toBeInTheDocument();
-    expect(screen.getByText("Enter the baby's name.")).toBeInTheDocument();
-    expect(screen.getByText("Enter an email address.")).toBeInTheDocument();
+    expect(await screen.findByText("Parent's name is required.")).toBeInTheDocument();
+    expect(screen.getByText("Baby's name is required.")).toBeInTheDocument();
+    expect(screen.getByText("Email is required.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
