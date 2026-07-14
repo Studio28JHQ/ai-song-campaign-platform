@@ -117,13 +117,25 @@ Only these three fields are returned — no internal identifiers (campaign ID, t
 
 The endpoint only validates input and maps the result of `CreateLeadUseCase` to an HTTP response — email uniqueness and every other business rule are enforced by the Application and Domain layers, not by the endpoint itself.
 
-## Lead Registration Screen
+## Landing Page
 
-`/` (`app/page.tsx`) is the registration screen — the first, minimal version of the Landing Page. It shows only a campaign logo placeholder, a page title, a short subtitle, and the registration form; no storytelling sections, images, or marketing content exist yet.
+`/` (`app/page.tsx`, sections in `src/features/landing/components/`) is the full public campaign website — the entry point for every visitor, and the only page that isn't gated behind a prior step. It is composed entirely of Server Components; the sole client-side island anywhere on the page is the existing `RegistrationForm` (see below) — nothing about registration is duplicated or reimplemented here.
 
-The form (`src/features/lead/components/RegistrationForm.tsx`) collects parent name, baby name, baby age, city, email, and phone, validates them client-side with React Hook Form + Zod (required fields, email format, positive baby age, trimmed strings) for instant feedback, then calls `POST /api/leads`. The submit button is disabled while the request is in flight.
+Top to bottom:
 
-On success, the returned lead id, the submitted baby name, and the starting remaining-attempts count are stored in `sessionStorage`, and the user is navigated to `/generate` — now the Lyrics Review screen (see below). On failure, a duplicate email surfaces as a field-level error under the Email input; every other error (validation, business rule, unexpected server error) surfaces as a form-level banner with a user-friendly message.
+1. **Hero** — the campaign's headline and one-line pitch, plus a "Create your baby's song" call to action. The CTA is a plain anchor (`href="#register"`) to the Registration section further down the same page — no client-side scroll handler, no JavaScript required for it to work.
+2. **Campaign explanation** — a short answer to "what is this campaign?": a free, limited-time gift, no cost, no catch.
+3. **How it works** — the six-step flow, in order: Register → Describe the baby → AI generates lyrics → You approve the lyrics → AI generates the song → Delivered by email. Each step is shown with a number and a one-line description; no step here is a live progress tracker, just a preview of what happens next.
+4. **Registration** — the `#register` anchor target, wrapping the existing `RegistrationForm` (`src/features/lead/components/`) unchanged. This is the same component and the same `POST /api/leads` flow documented under Lead Registration Endpoint above; the Landing Page does not introduce a second registration path.
+5. **FAQ** — common questions (cost, turnaround time, changing the lyrics, one song per email, how delivery works), implemented as native `<details>`/`<summary>` disclosures — keyboard- and screen-reader-accessible with zero JavaScript.
+6. **Legal disclaimer** — states this is a limited-time promotional campaign (not an ongoing product), that content is AI-generated and automatically reviewed, that one song is available per email while capacity lasts, and what the registration email is used for.
+7. **Footer** — campaign name and copyright year.
+
+On successful registration, the flow continues exactly as already documented: the lead id, baby name, and remaining-attempts count are stored in `sessionStorage`, and the user is navigated to `/generate` (the Lyrics Review screen, see below).
+
+**SEO.** `app/layout.tsx` sets `metadataBase`, default Open Graph/Twitter Card metadata, and `robots: { index: true, follow: true }`; `app/page.tsx` overrides the title/description/canonical for `/` specifically. `app/robots.ts` and `app/sitemap.ts` (Next.js's file-based conventions) serve `/robots.txt` and `/sitemap.xml`; only `/` is listed in the sitemap and allowed for crawling — `/generate`, `/song` (mid-funnel steps that depend on prior client state) and `/admin`, `/api` (operator/backend surfaces) are disallowed. `app/layout.tsx` also emits `Organization` and `WebSite` JSON-LD structured data.
+
+**Performance & accessibility.** No images are embedded (avoiding any LCP/CLS cost from unoptimized assets); the only decorative glyph (♪) is `aria-hidden`. Semantic landmarks (`<main>`, one `<section>` per block, `<footer>`) and a single `<h1>` with ordered `<h2>`s establish the page's structure for assistive technology and search engines alike. A production Lighthouse run scored Performance 98, Accessibility 100, Best Practices 100, and SEO 100 (Largest Contentful Paint 2.3s, Cumulative Layout Shift 0).
 
 ## Lyrics Generation Endpoints
 
