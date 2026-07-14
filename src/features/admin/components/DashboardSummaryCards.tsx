@@ -2,7 +2,7 @@ import type { DashboardSummary } from "../services/getDashboardSummary";
 
 interface SummaryCardProps {
   label: string;
-  value: number;
+  value: string | number;
 }
 
 function SummaryCard({ label, value }: SummaryCardProps) {
@@ -18,14 +18,19 @@ interface DashboardSummaryCardsProps {
   summary: DashboardSummary;
 }
 
-/** The four read-only summary cards on the Admin Dashboard. No charts, no analytics — just counts (see docs/Product/User_Flow.md). */
+/** The nine read-only summary indicators on the Admin Dashboard. No charts, no BI dashboards — just counts and one derived percentage (see docs/Product/User_Flow.md). */
 export function DashboardSummaryCards({ summary }: DashboardSummaryCardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       <SummaryCard label="Total Leads" value={summary.totalLeads} />
+      <SummaryCard label="Lyrics Generated" value={summary.lyricsGenerated} />
+      <SummaryCard label="Lyrics Approved" value={summary.lyricsApproved} />
+      <SummaryCard label="Songs Requested" value={summary.songsRequested} />
       <SummaryCard label="Songs Completed" value={summary.songsCompleted} />
-      <SummaryCard label="Songs Pending" value={summary.songsPending} />
       <SummaryCard label="Songs Failed" value={summary.songsFailed} />
+      <SummaryCard label="Emails Sent" value={summary.emailsSent} />
+      <SummaryCard label="Email Resent" value={summary.emailsResent} />
+      <SummaryCard label="Generation Success Rate" value={`${summary.generationSuccessRate}%`} />
     </div>
   );
 }

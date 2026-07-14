@@ -77,4 +77,43 @@ describe("GET /api/admin/leads", () => {
     expect(body.error).toBe("invalid_request");
     expect(mockSearch).not.toHaveBeenCalled();
   });
+
+  it("combines the free-text query with date range, song status, email status, and city filters", async () => {
+    const response = await GET(
+      getRequest(
+        "?q=jane&dateFrom=2026-01-01&dateTo=2026-01-31&songStatus=FAILED&emailStatus=NOT_SENT&city=Austin",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "jane",
+        songStatus: "FAILED",
+        emailStatus: "NOT_SENT",
+        city: "Austin",
+      }),
+    );
+    const call = mockSearch.mock.calls[0][0];
+    expect(call.dateFrom).toBeInstanceOf(Date);
+    expect(call.dateTo).toBeInstanceOf(Date);
+  });
+
+  it("returns 400 for an invalid songStatus filter value", async () => {
+    const response = await GET(getRequest("?songStatus=NOT_A_STATUS"));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an invalid emailStatus filter value", async () => {
+    const response = await GET(getRequest("?emailStatus=MAYBE"));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
 });

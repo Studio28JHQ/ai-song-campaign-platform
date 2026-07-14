@@ -1,8 +1,13 @@
 export interface DashboardSummary {
   totalLeads: number;
+  lyricsGenerated: number;
+  lyricsApproved: number;
+  songsRequested: number;
   songsCompleted: number;
-  songsPending: number;
   songsFailed: number;
+  emailsSent: number;
+  emailsResent: number;
+  generationSuccessRate: number;
 }
 
 export class GetDashboardSummaryError extends Error {

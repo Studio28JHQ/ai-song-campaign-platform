@@ -10,27 +10,44 @@ import { prisma as defaultPrismaClient } from "../client";
  * Thin, single-purpose Prisma adapter satisfying the `AdminDashboardGate`
  * port. There is no reporting/analytics domain module (out of scope —
  * see PROJECT_MANIFEST.md), so this is a handful of `count` queries, not
- * a full repository — the same pattern as `PrismaCampaignGate`.
- *
- * "Pending" groups `PENDING` and `GENERATING` into one figure — the
- * dashboard shows four cards (Total Leads, Songs Completed, Songs
- * Pending, Songs Failed), not a fifth "generating" card.
+ * a full repository — the same pattern as `PrismaCampaignGate`. No
+ * charts, no BI — every figure here is a single, cheap aggregate count.
  */
 export class PrismaAdminDashboardGate implements AdminDashboardGate {
   constructor(private readonly client: PrismaClient = defaultPrismaClient) {}
 
   async getSummary(): Promise<DashboardSummaryCounts> {
     try {
-      const [totalLeads, songsCompleted, songsPending, songsFailed] = await Promise.all([
+      const [
+        totalLeads,
+        lyricsGenerated,
+        lyricsApproved,
+        songsRequested,
+        songsCompleted,
+        songsFailed,
+        emailsSent,
+        emailsResent,
+      ] = await Promise.all([
         this.client.lead.count(),
+        this.client.lyrics.count(),
+        this.client.lyrics.count({ where: { approved: true } }),
+        this.client.song.count(),
         this.client.song.count({ where: { status: PrismaSongStatus.READY } }),
-        this.client.song.count({
-          where: { status: { in: [PrismaSongStatus.PENDING, PrismaSongStatus.GENERATING] } },
-        }),
         this.client.song.count({ where: { status: PrismaSongStatus.FAILED } }),
+        this.client.song.count({ where: { emailedAt: { not: null } } }),
+        this.client.auditLog.count({ where: { action: "resend_email" } }),
       ]);
 
-      return { totalLeads, songsCompleted, songsPending, songsFailed };
+      return {
+        totalLeads,
+        lyricsGenerated,
+        lyricsApproved,
+        songsRequested,
+        songsCompleted,
+        songsFailed,
+        emailsSent,
+        emailsResent,
+      };
     } catch (error) {
       throw new DatabaseError("Unexpected database error while loading the dashboard summary.", {
         code: "admin.unexpected_database_error",

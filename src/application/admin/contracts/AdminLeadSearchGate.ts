@@ -1,8 +1,9 @@
+import type { AdminLeadFilterCriteria } from "./AdminLeadFilterCriteria";
+
 export type AdminLeadSortField = "createdAt" | "parentName" | "babyName" | "email" | "songStatus";
 export type AdminLeadSortDirection = "asc" | "desc";
 
-export interface AdminLeadSearchFilter {
-  query?: string;
+export interface AdminLeadSearchFilter extends AdminLeadFilterCriteria {
   page: number;
   pageSize: number;
   sortBy?: AdminLeadSortField;
@@ -28,12 +29,13 @@ export interface AdminLeadSearchResult {
 }
 
 /**
- * What `SearchLeadsUseCase` needs — a paginated, sortable, searchable
- * join across Lead and Song. No existing repository supports this (the
- * domain `LeadRepository`/`SongRepository` intentionally don't, since no
- * other module needs pagination/sorting/full-text search), so this is a
- * narrow, admin-specific read-model port, satisfied by a thin
- * Prisma-backed adapter in `src/infrastructure/`.
+ * What `SearchLeadsUseCase` needs — a paginated, sortable, searchable,
+ * filterable join across Lead and Song. No existing repository supports
+ * this (the domain `LeadRepository`/`SongRepository` intentionally
+ * don't, since no other module needs pagination/sorting/full-text
+ * search/filtering), so this is a narrow, admin-specific read-model
+ * port, satisfied by a thin Prisma-backed adapter in
+ * `src/infrastructure/`.
  */
 export interface AdminLeadSearchGate {
   search(filter: AdminLeadSearchFilter): Promise<AdminLeadSearchResult>;

@@ -1,8 +1,9 @@
+import { appendLeadFilterParams, type LeadFilterCriteria } from "./leadFilters";
+
 export type LeadSortField = "createdAt" | "parentName" | "babyName" | "email" | "songStatus";
 export type LeadSortDirection = "asc" | "desc";
 
-export interface SearchLeadsInput {
-  query?: string;
+export interface SearchLeadsInput extends LeadFilterCriteria {
   page: number;
   pageSize: number;
   sortBy?: LeadSortField;
@@ -34,10 +35,14 @@ export class SearchLeadsError extends Error {
   }
 }
 
-/** Thin HTTP client for `GET /api/admin/leads`. No business rule is evaluated here. */
+/**
+ * Thin HTTP client for `GET /api/admin/leads`. No business rule is
+ * evaluated here. Filters (see docs/Product/User_Flow.md — Filters)
+ * always combine with the free-text query.
+ */
 export async function searchLeads(input: SearchLeadsInput): Promise<SearchLeadsResult> {
   const params = new URLSearchParams();
-  if (input.query) params.set("q", input.query);
+  appendLeadFilterParams(params, input);
   params.set("page", String(input.page));
   params.set("pageSize", String(input.pageSize));
   if (input.sortBy) params.set("sortBy", input.sortBy);

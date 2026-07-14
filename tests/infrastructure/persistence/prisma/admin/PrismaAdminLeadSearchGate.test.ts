@@ -75,7 +75,7 @@ describe("PrismaAdminLeadSearchGate.search", () => {
     await gate.search({ query: "jane", page: 1, pageSize: 20 });
 
     const call = (client.lead.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.where.OR).toEqual([
+    expect(call.where.AND[0].OR).toEqual([
       { parentName: { contains: "jane", mode: "insensitive" } },
       { babyName: { contains: "jane", mode: "insensitive" } },
       { email: { contains: "jane", mode: "insensitive" } },

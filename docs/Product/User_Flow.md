@@ -229,7 +229,7 @@ The Administration module is a separate, minimal operational surface for campaig
 
 1. **Sign in** — `/admin/login` (`app/admin/login/page.tsx`, `src/features/admin/components/LoginForm.tsx`) collects email, password, and an optional "Remember me", and calls `POST /api/admin/login`. On success, the session is set as an HTTP-only cookie by the server (the client never sees the token itself) and the operator is redirected to `/admin/dashboard`. On failure, a single generic "Invalid email or password." banner is shown — never which field was wrong, and never any detail about whether the email exists.
 2. **Every other `/admin` page, and every `/api/admin` route, is protected** by `middleware.ts`. An unauthenticated visit to a page redirects to `/admin/login`; an unauthenticated API call returns `401`. See docs/Architecture/System_Architecture.md — Authentication Flow.
-3. **Dashboard** — `/admin/dashboard` shows four summary cards (Total Leads, Songs Completed, Songs Pending, Songs Failed — no charts) above a searchable, sortable, paginated participants table (columns: Created, Parent, Baby, Email, Song Status, Email Status, Actions).
+3. **Dashboard** — `/admin/dashboard` shows nine summary indicators (see Operational Reports below — no charts) above a searchable, sortable, filterable, paginated participants table (columns: Created, Parent, Baby, Email, Song Status, Email Status, Actions), and an "Export CSV" link that always reflects the currently applied search/filters.
 4. **Search** — typing in the search box filters by parent name, baby name, email, or phone (case-insensitive, partial match); any column header can be clicked to sort by it (toggling direction on a repeat click). Both reset back to page 1.
 5. **Lead Detail** — clicking "View" on a row opens `/admin/leads/{leadId}` (`src/features/admin/components/LeadDetailView.tsx`): the lead's information, its full lyrics history, the approved version, the song's status/audio player/download button/duration, generation and email-delivery timestamps, the two operational recovery actions below (only ever shown when applicable), and the complete execution history for this lead. Every other field here is read-only; there is no edit control anywhere else on this screen.
 6. **Sign out** — a "Log out" button (present on the dashboard) calls `POST /api/admin/logout`, which clears the session cookie.
@@ -252,6 +252,18 @@ The Lead Detail screen's history section is a single, chronological (newest-firs
 
 - **System events**, synthesized from timestamps already on the Lead/Lyrics/Song records — no admin attached: Lead created, Lyrics generated (per version), Lyrics approved (the approved version only), Song requested, Song completed, Song failed (shown only while the song's current status is still `FAILED` — a later successful retry naturally stops showing it, since the song is no longer failed), and Automatic email sent.
 - **Admin-attributed events**, one row per real action taken in this module: Lead viewed, Retry executed, and Manual email resent (with its reason shown alongside).
+
+## Operational Reports
+
+The Dashboard's summary indicators, the participants table's filters, and the CSV export are all read-only reporting tools for campaign operators — there are no charts, no BI dashboards, and no campaign-configuration controls anywhere in this module (see PROJECT_MANIFEST.md).
+
+**Summary indicators.** Nine plain counts (no trends, no time series): Total Leads, Lyrics Generated, Lyrics Approved, Songs Requested, Songs Completed, Songs Failed, Emails Sent, Email Resent, and Generation Success Rate (Songs Completed ÷ Songs Requested, as a whole-number percentage — 0% when no song has been requested yet, never a division by zero).
+
+**Filters.** The participants table can be filtered by date range (on registration date), Song Status (Pending/Generating/Completed/Failed/No song yet), Email Status (Sent/Not sent), and City — every filter combines with the free-text search and with every other filter (all narrowing the same result set), and changing any of them resets back to page 1.
+
+**CSV export.** The "Export CSV" link streams every Lead matching the currently applied search/filters — not just the visible page — as a CSV file, with one row per lead: Lead (parent name), Baby, Email, Phone, Created Date, Lyrics Status (`NONE`/`GENERATED`/`APPROVED`), Song Status, Email Status, Generation Date, and Delivery Date. The browser downloads it directly (the response sets `Content-Disposition: attachment`); there is no separate "generate report" step or async job to wait on.
+
+**Performance.** Both the on-screen table and the CSV export are paginated internally — the table via the existing page/pageSize parameters, and the export by streaming the result set in fixed-size batches as the response body is written. Neither ever loads the complete matching dataset into memory at once.
 
 ## Failure Scenarios
 

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { buttonVariants } from "@/components/ui/button";
 import { useLeadSearch } from "../hooks/useLeadSearch";
+import { buildLeadsExportUrl } from "../services/exportLeadsCsv";
 import type { LeadSortField } from "../services/searchLeads";
 
 const COLUMNS: Array<{ field: LeadSortField; label: string }> = [
@@ -13,15 +16,31 @@ const COLUMNS: Array<{ field: LeadSortField; label: string }> = [
   { field: "songStatus", label: "Song Status" },
 ];
 
+const SONG_STATUS_OPTIONS = [
+  { value: "", label: "Any song status" },
+  { value: "PENDING", label: "Pending" },
+  { value: "GENERATING", label: "Generating" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "FAILED", label: "Failed" },
+  { value: "NONE", label: "No song yet" },
+] as const;
+
+const EMAIL_STATUS_OPTIONS = [
+  { value: "", label: "Any email status" },
+  { value: "SENT", label: "Sent" },
+  { value: "NOT_SENT", label: "Not sent" },
+] as const;
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString();
 }
 
 /**
- * The searchable, sortable, paginated participants table on the Admin
- * Dashboard (see docs/Product/User_Flow.md — Search). Read-only: every
- * row only ever links to the read-only Lead Detail screen — there is no
- * inline editing anywhere in this table.
+ * The searchable, sortable, filterable, paginated participants table on
+ * the Admin Dashboard (see docs/Product/User_Flow.md — Search, Filters,
+ * Export). Read-only: every row only ever links to the read-only Lead
+ * Detail screen — there is no inline editing anywhere in this table. The
+ * "Export CSV" link always reflects the currently applied filters.
  */
 export function LeadSearchTable() {
   const {
@@ -30,27 +49,111 @@ export function LeadSearchTable() {
     page,
     pageSize,
     query,
+    dateFrom,
+    dateTo,
+    songStatus,
+    emailStatus,
+    city,
     sortBy,
     sortDirection,
     isLoading,
     errorMessage,
     setQuery,
+    setDateFrom,
+    setDateTo,
+    setSongStatus,
+    setEmailStatus,
+    setCity,
     setPage,
     toggleSort,
+    currentFilters,
   } = useLeadSearch();
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="flex flex-col gap-4">
-      <Input
-        type="search"
-        placeholder="Search by parent name, baby name, email, or phone..."
-        aria-label="Search participants"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+        <Input
+          type="search"
+          placeholder="Search by parent name, baby name, email, or phone..."
+          aria-label="Search participants"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="max-w-sm"
+        />
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="filter-date-from">From</Label>
+            <Input
+              id="filter-date-from"
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="filter-date-to">To</Label>
+            <Input
+              id="filter-date-to"
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="filter-song-status">Song status</Label>
+            <select
+              id="filter-song-status"
+              value={songStatus}
+              onChange={(event) =>
+                setSongStatus(event.target.value as Parameters<typeof setSongStatus>[0])
+              }
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              {SONG_STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="filter-email-status">Email status</Label>
+            <select
+              id="filter-email-status"
+              value={emailStatus}
+              onChange={(event) =>
+                setEmailStatus(event.target.value as Parameters<typeof setEmailStatus>[0])
+              }
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              {EMAIL_STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="filter-city">City</Label>
+            <Input
+              id="filter-city"
+              value={city}
+              onChange={(event) => setCity(event.target.value)}
+              placeholder="e.g. Austin"
+            />
+          </div>
+        </div>
+
+        <a
+          href={buildLeadsExportUrl(currentFilters)}
+          className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
+        >
+          Export CSV
+        </a>
+      </div>
 
       {errorMessage ? (
         <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
