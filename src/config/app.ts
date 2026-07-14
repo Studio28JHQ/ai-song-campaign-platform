@@ -12,6 +12,7 @@ export const appConfig = {
   url: env.NEXT_PUBLIC_APP_URL,
   admin: {
     email: env.ADMIN_EMAIL,
+    sessionSecret: env.ADMIN_SESSION_SECRET,
   },
   campaign: {
     name: env.CAMPAIGN_NAME,

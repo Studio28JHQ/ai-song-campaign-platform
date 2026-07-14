@@ -22,6 +22,9 @@ const envSchema = z.object({
   CLAUDE_API_KEY: z.string().min(1),
   SUNO_API_KEY: z.string().min(1),
   ADMIN_EMAIL: z.string().email(),
+  ADMIN_SESSION_SECRET: z
+    .string()
+    .min(32, "ADMIN_SESSION_SECRET must be at least 32 characters long."),
   CAMPAIGN_NAME: z.string().min(1),
   MAX_LYRIC_ATTEMPTS: z.coerce.number().int().positive(),
   CAMPAIGN_MAX_SONGS: z.coerce.number().int().positive(),

@@ -38,6 +38,7 @@ export class SongMapper {
       duration: record.duration,
       status: PERSISTENCE_TO_DOMAIN_STATUS[record.status],
       generatedAt: record.generatedAt,
+      emailedAt: record.emailedAt,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };

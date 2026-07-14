@@ -223,6 +223,21 @@ Once a Song reaches `COMPLETED` (the `GENERATING -> READY` transition, internall
 
 A failure to send this email (Resend unavailable, delivery rejected, etc.) is logged for follow-up; it never fails the song generation itself, since by that point the song has already completed successfully.
 
+## Administrator Workflow
+
+The Administration module is a separate, minimal operational surface for campaign operators — entirely read-only, with no user/role management, campaign configuration, or analytics (see PROJECT_MANIFEST.md). It has no connection to the parent-facing happy path above beyond reading the same persisted data.
+
+1. **Sign in** — `/admin/login` (`app/admin/login/page.tsx`, `src/features/admin/components/LoginForm.tsx`) collects email, password, and an optional "Remember me", and calls `POST /api/admin/login`. On success, the session is set as an HTTP-only cookie by the server (the client never sees the token itself) and the operator is redirected to `/admin/dashboard`. On failure, a single generic "Invalid email or password." banner is shown — never which field was wrong, and never any detail about whether the email exists.
+2. **Every other `/admin` page, and every `/api/admin` route, is protected** by `middleware.ts`. An unauthenticated visit to a page redirects to `/admin/login`; an unauthenticated API call returns `401`. See docs/Architecture/System_Architecture.md — Authentication Flow.
+3. **Dashboard** — `/admin/dashboard` shows four summary cards (Total Leads, Songs Completed, Songs Pending, Songs Failed — no charts) above a searchable, sortable, paginated participants table (columns: Created, Parent, Baby, Email, Song Status, Email Status, Actions).
+4. **Search** — typing in the search box filters by parent name, baby name, email, or phone (case-insensitive, partial match); any column header can be clicked to sort by it (toggling direction on a repeat click). Both reset back to page 1.
+5. **Lead Detail** — clicking "View" on a row opens `/admin/leads/{leadId}` (`src/features/admin/components/LeadDetailView.tsx`): the lead's information, its full lyrics history, the approved version, the song's status/audio player/download button/duration, generation and email-delivery timestamps, and the audit history for this lead (including the "view_lead" entry this very visit just created — see below). Every field here is read-only; there is no edit control anywhere on this screen.
+6. **Sign out** — a "Log out" button (present on the dashboard) calls `POST /api/admin/logout`, which clears the session cookie.
+
+**Audit history.** Two actions are recorded automatically as the operator uses the module: a successful login (`action: "login"`, against the `AdminUser`), and viewing a lead's detail page (`action: "view_lead"`, against that `Lead`). There is no UI to create, edit, or delete an audit entry — they exist purely as the read-only trail shown on the Lead Detail screen.
+
+**Provisioning.** There is no sign-up or account-creation flow — admin accounts are provisioned directly in the database (see docs/Architecture/System_Architecture.md — Authentication Flow), consistent with "no user management" being out of scope for this module.
+
 ## Failure Scenarios
 
 - **Duplicate email**: Registration is rejected because the email has already generated a final song.

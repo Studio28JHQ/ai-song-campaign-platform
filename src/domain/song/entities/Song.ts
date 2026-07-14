@@ -49,6 +49,7 @@ export class Song {
       duration: null,
       status: SongStatus.PENDING,
       generatedAt: null,
+      emailedAt: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -147,6 +148,10 @@ export class Song {
     return this.props.generatedAt;
   }
 
+  get emailedAt(): Date | null {
+    return this.props.emailedAt;
+  }
+
   get createdAt(): Date {
     return this.props.createdAt;
   }
@@ -167,6 +172,7 @@ export class Song {
       duration: this.props.duration,
       status: this.props.status,
       generatedAt: this.props.generatedAt,
+      emailedAt: this.props.emailedAt,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     };

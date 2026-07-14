@@ -110,6 +110,35 @@ Song generation is the one step of the pipeline that runs in the background rath
 
 **Error handling.** A provider timeout, an unavailable provider, or an unexpected/malformed Suno response are all just exceptions from the `SunoGenerator` port as far as `ProcessSongGenerationUseCase` is concerned — every one of them is caught, persisted as `FAILED`, and rethrown (so the background-scheduling `catch` in the route can log it). None of them are retried automatically; a `FAILED` song is simply left available for a future manual call to `POST /api/song/generate`, which reuses the same row instead of creating a duplicate.
 
+## Administration Module
+
+The Administration module (`src/domain/admin/`, `src/application/admin/`, `src/infrastructure/auth/` + `src/infrastructure/persistence/prisma/admin/`, `app/admin/`, `app/api/admin/`) is a separate, read-only operational surface for campaign operators, layered exactly like every other module — it introduces no new architectural pattern, only new modules within the existing one.
+
+**Domain.** `AdminUser` models only the login lifecycle (`assertCanAuthenticate`, `recordLogin`) — there is no create/edit flow, since accounts are provisioned directly in the database (see Authentication Flow below). `AuditLogEntry` is an immutable record of an administrative action (`login`, `view_lead`), backed by the pre-existing `AuditLog` Prisma model.
+
+**Reused, not duplicated.** The Dashboard, Search, and Lead Detail screens are pure reads over the existing `Lead`, `Lyrics`, and `Song` repositories — `GetLeadDetailUseCase` composes `LeadRepository.findById`, `LyricsRepository.findAllByLead`/`findApprovedByLead`, and `SongRepository.findByLead` directly, with no parallel read model for lead/lyrics/song data. The one addition to an existing aggregate: `Song` gained a read-only `emailedAt` getter (populated from the already-existing `emailedAt` column) so the Lead Detail screen can show email delivery status — previously that column was written by `PrismaEmailDeliveryTracker` but never read back through the domain.
+
+**Narrow ports for cross-aggregate reads.** Two admin-specific needs have no natural home on an existing repository, so — the same pattern as `CampaignGate`/`MoodSunoPromptProvider` — they're narrow ports satisfied by thin Prisma adapters instead of new repositories: `AdminDashboardGate` (a handful of `count()` queries) and `AdminLeadSearchGate` (a paginated, sorted, `ILIKE`-searched join across `Lead` and `Song` that no other module needs).
+
+## Authentication Flow
+
+**Password storage.** `AdminUser.passwordHash` (added via a dedicated migration, `prisma/migrations/20260714004326_add_admin_password_hash/`) is hashed with Node's built-in `scrypt` (`ScryptPasswordHasher`, `src/infrastructure/auth/`) — a random 16-byte salt per password, `<saltHex>:<derivedKeyHex>` stored format, and a `timingSafeEqual` comparison on verify. No external hashing library (bcrypt/argon2) is used, consistent with this project's preference for small, self-owned infrastructure over new dependencies (see `SunoClient`/`ClaudeClient`, which use the shared `httpRequest` helper instead of vendor SDKs).
+
+**Session tokens.** `SignedSessionTokenService` (`src/infrastructure/auth/`) issues a stateless, tamper-proof token: a base64url JSON payload (`{ adminId, email, exp }`) plus an HMAC-SHA256 signature over it, keyed by `appConfig.admin.sessionSecret` (a required, 32+ character env var, `ADMIN_SESSION_SECRET`). It is built on Web Crypto (`crypto.subtle`) rather than Node's `crypto` module specifically so the exact same code runs unmodified in both the login Route Handler (Node.js runtime) and `middleware.ts` (Edge runtime, by default) — there is no session store to keep in sync between the two.
+
+**Cookie.** The token is set as `admin_session`, `HttpOnly`, `Secure`, `SameSite=Lax` (`adminSessionCookieOptions`, `src/infrastructure/auth/sessionCookie.ts`) — 8 hours by default, 14 days with "Remember me". It is never returned in a JSON response body; only the admin's public snapshot (id/email/name/role/active/lastLogin — never `passwordHash`) is.
+
+**Request sequence — `POST /api/admin/login`:**
+
+1. Zod-validates the request body (`email`, `password`, optional `rememberMe`) — shape only.
+2. `LoginUseCase` (`src/application/admin/use-cases/`) looks up the account by (trimmed, lowercased) email, verifies the password via the `PasswordHasher` port, and checks `assertCanAuthenticate()`. Whether the email doesn't exist or the password is wrong, the caller sees the identical `admin.invalid_credentials` error — the route maps both to the same generic `401 "Invalid email or password."`, never revealing which one failed.
+3. On success, it records `lastLogin`, issues the session token via the `SessionTokenService` port, and writes a `login` audit log entry.
+4. The route sets the returned token as the `admin_session` cookie and responds with the admin's snapshot only.
+
+**Route protection — `middleware.ts`:** gates every `/admin/:path*` and `/api/admin/:path*` request except `/admin/login`, `/api/admin/login`, and `/api/admin/logout`. It reads the `admin_session` cookie and verifies it with `SignedSessionTokenService` directly (no database round-trip); a missing, tampered, or expired token redirects page requests to `/admin/login` and returns `401 { error: "unauthorized" }` for API requests. `getAdminSession` (`src/infrastructure/auth/`) is a second, independent read of the same cookie used only by the one route that needs to know the _acting_ admin's identity (`GET /api/admin/leads/[leadId]`, to attribute its `view_lead` audit entry) — defense in depth, not the access-control gate itself.
+
+**Provisioning.** There is no account-creation endpoint or UI — user management is explicitly out of scope for this module (see PROJECT_MANIFEST.md). An operator account is inserted directly against the `admin_users` table, with a `passwordHash` produced by `ScryptPasswordHasher.hash(...)` (or the equivalent Node `crypto.scrypt` call) ahead of time.
+
 ## Why This Project Intentionally Avoids
 
 - **Microservices** — the campaign has a fixed, modest scale (≤3,000 songs, one month). Splitting into services would add deployment, networking, and operational overhead with no corresponding benefit.

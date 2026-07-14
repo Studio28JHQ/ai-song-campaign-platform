@@ -185,14 +185,15 @@ model Song {
 }
 
 model AdminUser {
-  id        String    @id @default(uuid()) @db.Uuid
-  email     String    @unique
-  name      String
-  role      String    @default("admin")
-  active    Boolean   @default(true)
-  lastLogin DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String    @default("admin")
+  active       Boolean   @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   auditLogs AuditLog[]
 

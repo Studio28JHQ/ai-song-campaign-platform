@@ -37,6 +37,8 @@ export interface SongProps {
   duration: number | null;
   status: SongStatus;
   generatedAt: Date | null;
+  /** When the one-time "song ready" email was delivered — `null` until then. Written exclusively by `EmailDeliveryTracker`'s atomic claim (see `docs/Architecture/External_Services.md`); read-only from this entity's perspective. */
+  emailedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +55,7 @@ export interface SongSnapshot {
   duration: number | null;
   status: SongStatus;
   generatedAt: Date | null;
+  emailedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

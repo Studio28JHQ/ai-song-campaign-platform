@@ -103,6 +103,7 @@ describe("Song.fromPersistence / toSnapshot", () => {
       duration: song.duration,
       status: song.status,
       generatedAt: song.generatedAt,
+      emailedAt: song.emailedAt,
       createdAt: song.createdAt,
       updatedAt: song.updatedAt,
     });
