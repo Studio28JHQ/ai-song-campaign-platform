@@ -1,7 +1,12 @@
+import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
+import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { BusinessRuleError } from "@/shared/errors";
+import { logger } from "@/shared/logger/logger";
+import type { EmailDeliveryTracker } from "../contracts/EmailDeliveryTracker";
 import type { MoodSunoPromptProvider } from "../contracts/MoodSunoPromptProvider";
+import type { SongEmailSender } from "../contracts/SongEmailSender";
 import type { SunoGenerator } from "../contracts/SunoGenerator";
 import type { ProcessSongGenerationRequest } from "../dto/ProcessSongGenerationRequest";
 import type { ProcessSongGenerationResponse } from "../dto/ProcessSongGenerationResponse";
@@ -25,6 +30,12 @@ import type { ProcessSongGenerationResponse } from "../dto/ProcessSongGeneration
  * `FAILED`; it is never retried automatically (see
  * docs/Product/Business_Rules.md), leaving the row available for a
  * future manual retry via `GenerateSongUseCase`.
+ *
+ * On the one transition that ever reaches `READY` (`GENERATING ->
+ * READY`), it also delivers the one-time "song ready" email — see
+ * docs/Architecture/External_Services.md. A failure to send that email
+ * never fails the use case itself (generation already succeeded); it is
+ * only logged.
  */
 export class ProcessSongGenerationUseCase {
   constructor(
@@ -32,6 +43,9 @@ export class ProcessSongGenerationUseCase {
     private readonly lyricsRepository: LyricsRepository,
     private readonly moodProvider: MoodSunoPromptProvider,
     private readonly sunoGenerator: SunoGenerator,
+    private readonly leadRepository: LeadRepository,
+    private readonly emailSender: SongEmailSender,
+    private readonly deliveryTracker: EmailDeliveryTracker,
   ) {}
 
   async execute(request: ProcessSongGenerationRequest): Promise<ProcessSongGenerationResponse> {
@@ -75,11 +89,44 @@ export class ProcessSongGenerationUseCase {
       song.markReady(result);
       const updated = await this.songRepository.update(song);
 
+      await this.deliverReadyEmail(updated);
+
       return { song: updated.toSnapshot() };
     } catch (error) {
       song.markFailed();
       await this.songRepository.update(song);
       throw error;
+    }
+  }
+
+  /**
+   * Claims delivery before sending: the claim is atomic at the database
+   * level (see `EmailDeliveryTracker`), so even if this use case somehow
+   * ran twice for the same song, only one caller ever sends. Never
+   * rethrows — an email failure must not undo an otherwise-successful
+   * generation, and `READY -> FAILED` isn't a transition `Song` allows.
+   */
+  private async deliverReadyEmail(song: Song): Promise<void> {
+    try {
+      const claimed = await this.deliveryTracker.claimDelivery(song.id);
+      if (!claimed) return;
+
+      const lead = await this.leadRepository.findById(song.leadId);
+      if (!lead || !song.audioUrl) return;
+
+      await this.emailSender.sendSongReadyEmail({
+        to: lead.email.toString(),
+        parentName: lead.parentName,
+        babyName: lead.babyName,
+        songId: song.id,
+        audioUrl: song.audioUrl,
+        duration: song.duration,
+      });
+    } catch (error) {
+      logger.error("Failed to send song-ready email", {
+        songId: song.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

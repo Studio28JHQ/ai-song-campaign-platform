@@ -2,9 +2,11 @@ import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
 import { ProcessSongGenerationUseCase } from "@/application/song/use-cases/ProcessSongGenerationUseCase";
+import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
+import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
 import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
@@ -29,6 +31,8 @@ const songRepository = new PrismaSongRepository();
 const campaignGate = new PrismaCampaignGate();
 const moodProvider = new PrismaMoodSunoPromptProvider();
 const sunoGenerator = new SunoSongService();
+const emailSender = new ResendEmailService();
+const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 
 const generateSongUseCase = new GenerateSongUseCase(
   leadRepository,
@@ -42,6 +46,9 @@ const processSongGenerationUseCase = new ProcessSongGenerationUseCase(
   lyricsRepository,
   moodProvider,
   sunoGenerator,
+  leadRepository,
+  emailSender,
+  emailDeliveryTracker,
 );
 
 const generateSongRequestSchema = z.object({ leadId: z.string().min(1) }).strict();

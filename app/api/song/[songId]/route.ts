@@ -35,7 +35,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Nex
 
     if (status === "COMPLETED") {
       return NextResponse.json(
-        { songId: song.id, status, audioUrl: song.audioUrl },
+        { songId: song.id, status, audioUrl: song.audioUrl, duration: song.duration },
         { status: 200 },
       );
     }

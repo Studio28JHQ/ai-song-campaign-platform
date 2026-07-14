@@ -34,6 +34,8 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 const mockIsActiveAndGenerationEnabled = vi.fn();
 const mockGetMoodDetails = vi.fn();
 const mockGenerateSong = vi.fn();
+const mockClaimDelivery = vi.fn();
+const mockSendSongReadyEmail = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope (see
 // node_modules/next/dist/server/after/after.js), which is exactly the
@@ -85,6 +87,18 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
 vi.mock("@/infrastructure/suno/SunoSongService", () => ({
   SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
     return { generateSong: mockGenerateSong };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker", () => ({
+  PrismaEmailDeliveryTracker: vi.fn().mockImplementation(function PrismaEmailDeliveryTracker() {
+    return { claimDelivery: mockClaimDelivery };
+  }),
+}));
+
+vi.mock("@/infrastructure/email/ResendEmailService", () => ({
+  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
+    return { sendSongReadyEmail: mockSendSongReadyEmail };
   }),
 }));
 
@@ -149,6 +163,8 @@ describe("POST /api/song/generate", () => {
     });
     mockIsActiveAndGenerationEnabled.mockResolvedValue(true);
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
+    mockClaimDelivery.mockResolvedValue(true);
+    mockSendSongReadyEmail.mockResolvedValue(undefined);
   });
 
   it("returns 202 immediately with PENDING status, without waiting for Suno", async () => {
@@ -190,9 +206,39 @@ describe("POST /api/song/generate", () => {
     expect(mockSongRepository.update).toHaveBeenCalled();
     const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
     expect(lastUpdateCall.status).toBe("READY");
+
+    // Exactly one email, sent to the lead, once the song completes.
+    expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
+    expect(mockSendSongReadyEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendSongReadyEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "jane@example.com",
+        audioUrl: "https://cdn.example.com/song.mp3",
+      }),
+    );
   });
 
-  it("persists a FAILED status when Suno fails in the background, without crashing", async () => {
+  it("never sends an email when the delivery claim was already taken (duplicate prevention)", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    const lyrics = buildApprovedLyrics(lead.id);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
+    mockLyricsRepository.findById.mockResolvedValue(lyrics);
+    mockGenerateSong.mockResolvedValue({
+      providerSongId: "suno-123",
+      audioUrl: "https://cdn.example.com/song.mp3",
+      duration: 120,
+    });
+    mockClaimDelivery.mockResolvedValue(false);
+
+    await POST(postRequest({ leadId: lead.id }));
+    await runScheduledBackgroundWork();
+
+    expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
+    expect(mockSendSongReadyEmail).not.toHaveBeenCalled();
+  });
+
+  it("persists a FAILED status when Suno fails in the background, without crashing, and never sends an email", async () => {
     const lead = buildLead();
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
@@ -207,6 +253,7 @@ describe("POST /api/song/generate", () => {
 
     const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
     expect(lastUpdateCall.status).toBe("FAILED");
+    expect(mockSendSongReadyEmail).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the lead is not found", async () => {

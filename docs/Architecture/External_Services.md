@@ -94,15 +94,23 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 - Transactional emails
 
-**Purpose** — Delivers the final song email to the user once generated and stored.
+**Purpose** — Delivers the one-time "song ready" email to the lead once their Song reaches `COMPLETED`. Implemented at `src/infrastructure/email/`.
 
-**Expected Inputs** — Recipient email, final Song reference/audio link, email template content.
+**Classes:**
 
-**Expected Outputs** — Delivery confirmation/status.
+- **`ResendClient`** — minimal HTTP client for Resend's email-sending endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the Claude/Suno integrations. Adds the bearer token (from `appConfig.resend.apiKey`) and posts the `from`/`to`/`subject`/`html` payload.
+- **`SongReadyEmailTemplate`** — builds the fixed subject ("Your personalized song is ready!") and a responsive, table-based, inline-styled HTML body (greeting, thank-you message, campaign branding, a direct "Play the song" button, a direct "Download the song" button, support contact, footer). Both buttons link straight to the stored `audioUrl` — this integration never proxies or re-serves the file itself.
+- **`ResendEmailService`** — implements the application layer's `SongEmailSender` port; orchestrates building the template and calling the client, the same "build payload → call provider" shape as `SunoSongService`.
 
-**Failure Scenarios** — Delivery failure, invalid recipient, service outage.
+**Trigger & Idempotency** — Email delivery is driven from `ProcessSongGenerationUseCase` (`src/application/song/use-cases/`), on the one transition that ever reaches `READY` (`GENERATING -> READY`). Exactly one email is guaranteed per Song via `PrismaEmailDeliveryTracker` (`src/infrastructure/persistence/prisma/song/`), which claims delivery through a single atomic, conditional `UPDATE songs SET "emailedAt" = now() WHERE id = $1 AND "emailedAt" IS NULL`. Only the caller that flips this row (`count === 1`) is allowed to call `ResendEmailService`; every other caller — including a background job that somehow ran twice for the same song — sees `count === 0` and must not send. A failure inside the email step (Resend unavailable, malformed lead data, etc.) is caught and logged, never rethrown: by that point Suno already succeeded, and `Song`'s state machine has no `READY -> FAILED` transition, so an email failure must never be allowed to look like a generation failure.
 
-**Retry Policy** — Retry transient delivery failures with backoff; on persistent failure, log for admin follow-up rather than blocking the user-facing flow indefinitely.
+**Expected Inputs** — Recipient email, parent/baby name, the Song's `audioUrl` and `duration`.
+
+**Expected Outputs** — Delivery confirmation/status from Resend (not otherwise surfaced to the user — the email is fire-and-forget from the user's perspective).
+
+**Failure Scenarios** — Delivery failure, invalid recipient, service outage, an invalid response body.
+
+**Retry Policy** — Transient network failures are retried transparently by the shared `httpRequest` helper, same as Claude/Suno; on persistent failure the error is logged for admin follow-up rather than blocking or retrying the user-facing flow — and, per the idempotency mechanism above, the claim is not released, so a persistently-failed send is not retried automatically either (this campaign has no queue/worker to schedule such a retry — see "Why This Project Intentionally Avoids" in `docs/Architecture/System_Architecture.md`).
 
 ## Vercel
 

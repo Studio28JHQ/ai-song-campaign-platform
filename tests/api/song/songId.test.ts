@@ -44,11 +44,12 @@ describe("GET /api/song/[songId]", () => {
     expect(body).toEqual({ songId: "song-1", status: "GENERATING" });
   });
 
-  it("returns COMPLETED status with the audioUrl when the song is READY", async () => {
+  it("returns COMPLETED status with the audioUrl and duration when the song is READY", async () => {
     mockFindById.mockResolvedValue({
       id: "song-1",
       status: "READY",
       audioUrl: "https://cdn.example.com/song.mp3",
+      duration: 120,
     });
 
     const response = await GET(getRequest(), context("song-1"));
@@ -59,6 +60,7 @@ describe("GET /api/song/[songId]", () => {
       songId: "song-1",
       status: "COMPLETED",
       audioUrl: "https://cdn.example.com/song.mp3",
+      duration: 120,
     });
   });
 

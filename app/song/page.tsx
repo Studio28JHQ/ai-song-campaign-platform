@@ -2,20 +2,19 @@ import type { Metadata } from "next";
 import { ContentWrapper } from "@/components/layout/ContentWrapper";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/layout/Section";
+import { appConfig } from "@/config/app";
+import { SongResultView } from "@/features/song/components/SongResultView";
 
 export const metadata: Metadata = {
-  title: "Generating your song — AI Song Campaign",
+  title: "Your song — AI Song Campaign",
 };
 
-/** Temporary placeholder — the song generation flow is implemented in a later task. */
 export default function SongPage() {
   return (
     <PageContainer>
       <Section spacing="lg">
         <ContentWrapper>
-          <p className="text-center text-body text-muted-foreground">
-            Song generation module coming next.
-          </p>
+          <SongResultView supportEmail={appConfig.admin.email} />
         </ContentWrapper>
       </Section>
     </PageContainer>

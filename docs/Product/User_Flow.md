@@ -168,7 +168,7 @@ or, when rejected:
 1. **Generation form** — shows the baby's name and starting remaining-attempts count (both read from the `sessionStorage` written at registration — there is no separate "fetch lead" endpoint), a mood selector, a message textarea, and a "Generate Lyrics" button. V1 has exactly four predefined moods with no Mood-management UI yet, so the four options are a fixed, documented placeholder list (see the component's source comment) — the same kind of simplification as the campaign id placeholder in the registration form.
 2. On submit, `POST /api/lyrics/generate` is called. An **approved** result switches the screen to the **review panel** (song title extracted from the first line of the lyrics, the full lyrics text, the updated remaining-attempts count, and "Approve Lyrics" / "Generate Again" buttons). A **rejected** result stays on the generation form with the moderation reason shown as a friendly banner and the remaining-attempts count updated.
 3. **Generate Again** re-submits the same endpoint with the same mood/message; the previous version is never deleted — every version remains queryable via `LyricsRepository.findAllByLead`.
-4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — a temporary placeholder page ("Song generation module coming next.") until the Song Generation UI is implemented; the backend endpoint below already exists.
+4. **Approve Lyrics** calls `POST /api/lyrics/approve` and, on success, navigates to `/song` — the Song Result screen (see below).
 
 ## Song Generation Endpoints
 
@@ -195,13 +195,33 @@ A song can only be started if, in order: the lead exists; the lead has not alrea
 ```json
 { "songId": "...", "status": "PENDING" }
 { "songId": "...", "status": "GENERATING" }
-{ "songId": "...", "status": "COMPLETED", "audioUrl": "https://..." }
+{ "songId": "...", "status": "COMPLETED", "audioUrl": "https://...", "duration": 125 }
 { "songId": "...", "status": "FAILED" }
 ```
 
 **Errors:** `400 invalid_request` (missing `songId`), `404 song_not_found`, `500 internal_error`.
 
 A Suno failure — a timeout, the provider being unavailable, or an unexpected response — is always persisted as `FAILED` (never left stuck on `GENERATING`) so the same lead can retry by calling `POST /api/song/generate` again; retries are never automatic (see `docs/Product/Business_Rules.md` — Song Rules).
+
+## Song Result Screen
+
+`/song` (`app/song/page.tsx`, driven by `src/features/song/`) is the final screen of the happy path — it both triggers generation and shows its outcome, closing the loop opened by the Lyrics Review screen:
+
+1. On mount, `useSongResult` (`src/features/song/hooks/`) reads the `leadId`/`babyName` written to `sessionStorage` at registration (redirecting to `/` if missing, same convention as the Lyrics Review screen). If a `songId` from a previous visit is already in `sessionStorage`, it resumes polling that song instead of starting a new one — a lead can only ever generate one final song (see `docs/Product/Business_Rules.md`), so a page refresh must never trigger a second `POST /api/song/generate`.
+2. Otherwise, it calls `POST /api/song/generate` once, stores the returned `songId`, and — unless the response is already a terminal status — starts polling `GET /api/song/{songId}` every 5 seconds. Polling stops immediately once the status is `COMPLETED` or `FAILED`; there is no WebSocket or Server-Sent Events channel anywhere in this flow.
+3. **While `PENDING`/`GENERATING`** — shows the song title (derived from the baby's name), a loading indicator, and an explanatory message. "Generate Another Song" is shown but always disabled, in every state, since only one final song is ever allowed per lead.
+4. **`COMPLETED`** — shows an embedded HTML `<audio>` player (`controls`, `src` set directly to the stored `audioUrl`), the song duration (when available), a "Download Song" link, and a short share message. The download link points straight at the stored audio file — the application never proxies or re-serves it.
+5. **`FAILED`** — shows a friendly, generic message asking the user to contact support (the support email is passed down from the server-rendered page via `appConfig.admin.email`, never hardcoded client-side) — no internal error detail, provider name, or stack trace is ever surfaced.
+
+## Email Delivery
+
+Once a Song reaches `COMPLETED` (the `GENERATING -> READY` transition, internally — see `docs/Architecture/System_Architecture.md`), exactly one email is sent to the lead's address via Resend, still as part of the same background job that called Suno — the user is never made to wait for it. See `docs/Architecture/External_Services.md` for the full Resend integration and the idempotency mechanism that guarantees the email is never sent twice, even if the background job were ever to run more than once for the same song.
+
+**Subject:** "Your personalized song is ready!"
+
+**Body:** a greeting, a thank-you message, campaign branding, a direct "Play the song" button, a direct "Download the song" button (both pointing straight at the stored `audioUrl` — never a link back into the application), a support contact address, and a footer — all as responsive, inline-styled HTML suitable for common email clients.
+
+A failure to send this email (Resend unavailable, delivery rejected, etc.) is logged for follow-up; it never fails the song generation itself, since by that point the song has already completed successfully.
 
 ## Failure Scenarios
 
@@ -213,6 +233,6 @@ A Suno failure — a timeout, the provider being unavailable, or an unexpected r
 - **Lyrics regeneration requested**: User rejects the previewed lyrics and requests a new version; an attempt is consumed.
 - **Song generation failure**: Suno API call times out, is unavailable, or returns an unexpected response; the song is persisted as `FAILED` (discovered by the client via polling), is never retried automatically, and does not consume a lyric attempt — the same lead can trigger a fresh attempt via `POST /api/song/generate`.
 - **Audio storage failure**: Upload to Supabase Storage fails; the system retries before proceeding to email delivery.
-- **Email delivery failure**: Resend fails to deliver the final email; the system retries or logs the failure for admin follow-up.
+- **Email delivery failure**: Resend fails to deliver the final email; the failure is logged for admin follow-up rather than blocking or retrying automatically — the song itself has already completed successfully by this point (see Email Delivery above).
 - **Campaign capacity reached**: The 3,000 song cap is reached; new registrations are declined or queued per campaign rules.
 - **Campaign period ended**: The one-month campaign window has closed; the Landing Page no longer accepts new registrations.

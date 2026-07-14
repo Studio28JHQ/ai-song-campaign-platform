@@ -1,15 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Lead } from "@/domain/lead/entities/Lead";
+import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
+import type { Email } from "@/domain/lead/value-objects/Email";
 import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { ProcessSongGenerationUseCase } from "@/application/song/use-cases/ProcessSongGenerationUseCase";
+import type { EmailDeliveryTracker } from "@/application/song/contracts/EmailDeliveryTracker";
 import type { MoodSunoPromptProvider } from "@/application/song/contracts/MoodSunoPromptProvider";
+import type {
+  SongEmailSender,
+  SongReadyEmailInput,
+} from "@/application/song/contracts/SongEmailSender";
 import type {
   SunoGenerationResult,
   SunoGenerator,
 } from "@/application/song/contracts/SunoGenerator";
+
+class InMemoryLeadRepository implements LeadRepository {
+  private readonly leads = new Map<string, Lead>();
+  seed(lead: Lead): void {
+    this.leads.set(lead.id, lead);
+  }
+  async findById(id: string): Promise<Lead | null> {
+    return this.leads.get(id) ?? null;
+  }
+  async findByEmail(email: Email): Promise<Lead | null> {
+    for (const lead of this.leads.values()) if (lead.email.equals(email)) return lead;
+    return null;
+  }
+  async existsByEmail(email: Email): Promise<boolean> {
+    return (await this.findByEmail(email)) !== null;
+  }
+  async create(lead: Lead): Promise<Lead> {
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
+  async update(lead: Lead): Promise<Lead> {
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
+}
 
 class InMemoryLyricsRepository implements LyricsRepository {
   private readonly records = new Map<string, Lyrics>();
@@ -60,6 +93,16 @@ class InMemorySongRepository implements SongRepository {
   }
 }
 
+/** In-memory stand-in for the atomic `claimDelivery` DB flag — true exactly once per songId. */
+class InMemoryEmailDeliveryTracker implements EmailDeliveryTracker {
+  private readonly claimed = new Set<string>();
+  async claimDelivery(songId: string): Promise<boolean> {
+    if (this.claimed.has(songId)) return false;
+    this.claimed.add(songId);
+    return true;
+  }
+}
+
 function fakeMoodProvider(
   details: { name: string; sunoPrompt: string } | null = {
     name: "Joyful",
@@ -84,6 +127,14 @@ function fakeSunoGenerator(
   };
 }
 
+function fakeEmailSender(error?: Error): SongEmailSender {
+  return {
+    sendSongReadyEmail: error
+      ? vi.fn().mockRejectedValue(error)
+      : vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function createApprovedLyrics(): Lyrics {
   const lyrics = Lyrics.create({
     leadId: "lead-1",
@@ -96,39 +147,71 @@ function createApprovedLyrics(): Lyrics {
   return lyrics;
 }
 
+function createLead(): Lead {
+  return Lead.create(
+    {
+      campaignId: "campaign-1",
+      parentName: "Jane Doe",
+      babyName: "Baby Doe",
+      email: "jane@example.com",
+    },
+    5,
+  );
+}
+
 describe("ProcessSongGenerationUseCase", () => {
   let lyricsRepository: InMemoryLyricsRepository;
   let songRepository: InMemorySongRepository;
+  let leadRepository: InMemoryLeadRepository;
+  let deliveryTracker: InMemoryEmailDeliveryTracker;
+  let lead: Lead;
 
   beforeEach(() => {
     lyricsRepository = new InMemoryLyricsRepository();
     songRepository = new InMemorySongRepository();
+    leadRepository = new InMemoryLeadRepository();
+    deliveryTracker = new InMemoryEmailDeliveryTracker();
+    lead = createLead();
+    leadRepository.seed(lead);
   });
 
-  it("rejects an unknown song id", async () => {
-    const useCase = new ProcessSongGenerationUseCase(
+  function buildUseCase(
+    options: {
+      moodProvider?: MoodSunoPromptProvider;
+      sunoGenerator?: SunoGenerator;
+      emailSender?: SongEmailSender;
+      deliveryTracker?: EmailDeliveryTracker;
+    } = {},
+  ): ProcessSongGenerationUseCase {
+    return new ProcessSongGenerationUseCase(
       songRepository,
       lyricsRepository,
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
+      options.moodProvider ?? fakeMoodProvider(),
+      options.sunoGenerator ?? fakeSunoGenerator(),
+      leadRepository,
+      options.emailSender ?? fakeEmailSender(),
+      options.deliveryTracker ?? deliveryTracker,
     );
+  }
+
+  function seedSong(): Song {
+    const lyrics = createApprovedLyrics();
+    lyricsRepository.seed(lyrics);
+    const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: lyrics.moodId });
+    songRepository.seed(song);
+    return song;
+  }
+
+  it("rejects an unknown song id", async () => {
+    const useCase = buildUseCase();
 
     await expect(useCase.execute({ songId: "missing" })).rejects.toThrow();
   });
 
   it("moves a PENDING song through GENERATING to READY on success, making exactly one Suno request", async () => {
-    const lyrics = createApprovedLyrics();
-    lyricsRepository.seed(lyrics);
-    const song = Song.create({ leadId: "lead-1", lyricsId: lyrics.id, moodId: lyrics.moodId });
-    songRepository.seed(song);
-
+    const song = seedSong();
     const suno = fakeSunoGenerator();
-    const useCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(),
-      suno,
-    );
+    const useCase = buildUseCase({ sunoGenerator: suno });
 
     const response = await useCase.execute({ songId: song.id });
 
@@ -141,17 +224,10 @@ describe("ProcessSongGenerationUseCase", () => {
   });
 
   it("marks the song FAILED and re-throws on a Suno failure", async () => {
-    const lyrics = createApprovedLyrics();
-    lyricsRepository.seed(lyrics);
-    const song = Song.create({ leadId: "lead-1", lyricsId: lyrics.id, moodId: lyrics.moodId });
-    songRepository.seed(song);
-
-    const useCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(),
-      fakeSunoGenerator(new Error("Suno API responded with status 503.")),
-    );
+    const song = seedSong();
+    const useCase = buildUseCase({
+      sunoGenerator: fakeSunoGenerator(new Error("Suno API responded with status 503.")),
+    });
 
     await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
 
@@ -160,61 +236,94 @@ describe("ProcessSongGenerationUseCase", () => {
   });
 
   it("marks the song FAILED when the approved lyrics can no longer be found", async () => {
-    const song = Song.create({ leadId: "lead-1", lyricsId: "missing-lyrics", moodId: "mood-1" });
+    const song = Song.create({ leadId: lead.id, lyricsId: "missing-lyrics", moodId: "mood-1" });
     songRepository.seed(song);
 
-    const useCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
-    );
+    const useCase = buildUseCase();
 
     await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
   });
 
   it("marks the song FAILED when the mood can no longer be found", async () => {
-    const lyrics = createApprovedLyrics();
-    lyricsRepository.seed(lyrics);
-    const song = Song.create({ leadId: "lead-1", lyricsId: lyrics.id, moodId: lyrics.moodId });
-    songRepository.seed(song);
-
-    const useCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(null),
-      fakeSunoGenerator(),
-    );
+    const song = seedSong();
+    const useCase = buildUseCase({ moodProvider: fakeMoodProvider(null) });
 
     await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
   });
 
   it("allows retrying the same song after a failure, succeeding on the second attempt", async () => {
-    const lyrics = createApprovedLyrics();
-    lyricsRepository.seed(lyrics);
-    const song = Song.create({ leadId: "lead-1", lyricsId: lyrics.id, moodId: lyrics.moodId });
-    songRepository.seed(song);
+    const song = seedSong();
 
-    const failingUseCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(),
-      fakeSunoGenerator(new Error("timeout")),
-    );
+    const failingUseCase = buildUseCase({
+      sunoGenerator: fakeSunoGenerator(new Error("timeout")),
+    });
     await expect(failingUseCase.execute({ songId: song.id })).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
 
-    const succeedingUseCase = new ProcessSongGenerationUseCase(
-      songRepository,
-      lyricsRepository,
-      fakeMoodProvider(),
-      fakeSunoGenerator(),
-    );
+    const succeedingUseCase = buildUseCase();
     const response = await succeedingUseCase.execute({ songId: song.id });
 
     expect(response.song.status).toBe(SongStatus.READY);
     expect(response.song.id).toBe(song.id);
+  });
+
+  describe("email delivery", () => {
+    it("sends exactly one song-ready email when the song completes", async () => {
+      const song = seedSong();
+      const emailSender = fakeEmailSender();
+      const useCase = buildUseCase({ emailSender });
+
+      await useCase.execute({ songId: song.id });
+
+      expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
+      const input = (emailSender.sendSongReadyEmail as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as SongReadyEmailInput;
+      expect(input.to).toBe("jane@example.com");
+      expect(input.parentName).toBe("Jane Doe");
+      expect(input.babyName).toBe("Baby Doe");
+      expect(input.audioUrl).toBe("https://cdn.example.com/song.mp3");
+      expect(input.duration).toBe(120);
+    });
+
+    it("never sends an email when generation fails", async () => {
+      const song = seedSong();
+      const emailSender = fakeEmailSender();
+      const useCase = buildUseCase({
+        emailSender,
+        sunoGenerator: fakeSunoGenerator(new Error("timeout")),
+      });
+
+      await expect(useCase.execute({ songId: song.id })).rejects.toThrow();
+
+      expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+    });
+
+    it("never sends a duplicate email once delivery has already been claimed", async () => {
+      const song = seedSong();
+      const emailSender = fakeEmailSender();
+      // Simulate the claim already having been made by a prior run.
+      await deliveryTracker.claimDelivery(song.id);
+
+      const useCase = buildUseCase({ emailSender });
+      await useCase.execute({ songId: song.id });
+
+      expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+    });
+
+    it("does not fail the use case, and does not retry, when the email itself fails to send", async () => {
+      const song = seedSong();
+      const emailSender = fakeEmailSender(new Error("Resend API responded with status 500."));
+      const useCase = buildUseCase({ emailSender });
+
+      const response = await useCase.execute({ songId: song.id });
+
+      expect(response.song.status).toBe(SongStatus.READY);
+      expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
+      // The claim was already made before the send attempt, so a
+      // subsequent run (e.g. a manual retry) must not send again either.
+      expect(await deliveryTracker.claimDelivery(song.id)).toBe(false);
+    });
   });
 });
