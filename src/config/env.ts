@@ -19,6 +19,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   DATABASE_URL: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
+  EMAIL_FROM: z.string().min(1),
   CLAUDE_API_KEY: z.string().min(1),
   SUNO_API_KEY: z.string().min(1),
   ADMIN_EMAIL: z.string().email(),

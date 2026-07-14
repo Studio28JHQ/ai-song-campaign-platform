@@ -50,22 +50,23 @@ npx prisma migrate deploy   # applies existing migrations to your database
 
 All variables are validated by a Zod schema (`src/config/env.ts`) at startup — the app fails fast if one is missing or malformed. Full reference, including purpose and secrets policy: `docs/Development/Environment.md`.
 
-| Variable                    | Purpose                                         |
-| --------------------------- | ----------------------------------------------- |
-| `NEXT_PUBLIC_APP_NAME`      | Public-facing application name.                 |
-| `NEXT_PUBLIC_APP_URL`       | Public base URL of the deployed app.            |
-| `SUPABASE_URL`              | Supabase project URL.                           |
-| `SUPABASE_ANON_KEY`         | Supabase public/anon key.                       |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only).        |
-| `DATABASE_URL`              | PostgreSQL connection string used by Prisma.    |
-| `RESEND_API_KEY`            | Resend API key (email delivery).                |
-| `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics). |
-| `SUNO_API_KEY`              | Suno API key (song generation).                 |
-| `ADMIN_EMAIL`               | Admin panel contact/notification address.       |
-| `ADMIN_SESSION_SECRET`      | 32+ char secret signing admin session cookies.  |
-| `CAMPAIGN_NAME`             | Display name of the current campaign.           |
-| `MAX_LYRIC_ATTEMPTS`        | Lyric attempts allowed per lead.                |
-| `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.              |
+| Variable                    | Purpose                                          |
+| --------------------------- | ------------------------------------------------ |
+| `NEXT_PUBLIC_APP_NAME`      | Public-facing application name.                  |
+| `NEXT_PUBLIC_APP_URL`       | Public base URL of the deployed app.             |
+| `SUPABASE_URL`              | Supabase project URL.                            |
+| `SUPABASE_ANON_KEY`         | Supabase public/anon key.                        |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only).         |
+| `DATABASE_URL`              | PostgreSQL connection string used by Prisma.     |
+| `RESEND_API_KEY`            | Resend API key (email delivery).                 |
+| `EMAIL_FROM`                | Verified sender address used for outgoing email. |
+| `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics).  |
+| `SUNO_API_KEY`              | Suno API key (song generation).                  |
+| `ADMIN_EMAIL`               | Admin panel contact/notification address.        |
+| `ADMIN_SESSION_SECRET`      | 32+ char secret signing admin session cookies.   |
+| `CAMPAIGN_NAME`             | Display name of the current campaign.            |
+| `MAX_LYRIC_ATTEMPTS`        | Lyric attempts allowed per lead.                 |
+| `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.               |
 
 ## Development
 

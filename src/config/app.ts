@@ -29,6 +29,7 @@ export const appConfig = {
   },
   resend: {
     apiKey: env.RESEND_API_KEY,
+    fromAddress: env.EMAIL_FROM,
   },
   claude: {
     apiKey: env.CLAUDE_API_KEY,
