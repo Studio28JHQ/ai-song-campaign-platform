@@ -16,6 +16,7 @@ This document describes how environment variables and configuration are managed.
 | `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics generation).                        |
 | `SUNO_API_KEY`              | Suno API key (song generation).                                                   |
 | `ADMIN_EMAIL`               | Email address used to access/notify the admin panel.                              |
+| `ADMIN_SESSION_SECRET`      | Long, random secret (32+ chars) used to sign admin session cookies.               |
 | `CAMPAIGN_NAME`             | Display name of the current campaign.                                             |
 | `MAX_LYRIC_ATTEMPTS`        | Number of lyric attempts allowed per lead (see `docs/Product/Business_Rules.md`). |
 | `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.                                                |
