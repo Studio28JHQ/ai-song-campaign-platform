@@ -3,12 +3,19 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { CampaignStatus, PrismaClient } from "../src/generated/prisma/client";
 
 /**
- * Production seed for Version 1 — creates only the one required record:
- * the default Campaign every Lead registers against (see
- * `DEFAULT_CAMPAIGN_ID` in `src/features/lead/components/RegistrationForm.tsx`
- * and `docs/Architecture/Domain_Model.md#Campaign`). Idempotent: an upsert
- * keyed on this fixed id, so running it any number of times never creates
- * a duplicate and never overwrites an already-seeded campaign's state.
+ * Production seed for Version 1 — creates only the static catalog records
+ * the application has no other way to create: the default Campaign every
+ * Lead registers against, and the four fixed Moods the Lyrics Review
+ * screen lets a user pick from (see
+ * `docs/Architecture/Domain_Model.md#Campaign` /`#Mood`, and the schema
+ * audit in the commit this file is part of for why every other table is
+ * excluded — most are pure application data, and `AdminUser` is
+ * deliberately provisioned manually, never via a committed seed, since
+ * that would mean checking a credential into source control).
+ *
+ * Idempotent: every record is an upsert keyed on its fixed id, so running
+ * this any number of times never creates a duplicate and never overwrites
+ * already-seeded state.
  *
  * Reads `CAMPAIGN_NAME`/`CAMPAIGN_MAX_SONGS` directly from `process.env`
  * (the same existing values `src/config/env.ts` validates for the running
@@ -20,6 +27,33 @@ import { CampaignStatus, PrismaClient } from "../src/generated/prisma/client";
 
 const DEFAULT_CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000; // "Campaign duration: One month." — docs/Product/Product_Vision.md
+
+/**
+ * The four predefined moods (see `docs/Product/Business_Rules.md` — Mood
+ * Rules). ids/names/descriptions match the fixed placeholder list in
+ * `src/features/lyrics/components/LyricsGenerationForm.tsx` exactly — that
+ * list is what a user's selection actually sends as `moodId`, so these
+ * must line up 1:1. `sunoPrompt` reuses each mood's own existing
+ * `description` text verbatim rather than inventing new creative copy.
+ */
+const MOODS = [
+  {
+    id: "10000000-0000-0000-0000-000000000001",
+    name: "Joyful",
+    description: "upbeat and cheerful",
+  },
+  { id: "10000000-0000-0000-0000-000000000002", name: "Calm", description: "soft and soothing" },
+  {
+    id: "10000000-0000-0000-0000-000000000003",
+    name: "Playful",
+    description: "fun and bouncy",
+  },
+  {
+    id: "10000000-0000-0000-0000-000000000004",
+    name: "Sentimental",
+    description: "warm and heartfelt",
+  },
+] as const;
 
 async function main(): Promise<void> {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -49,6 +83,23 @@ async function main(): Promise<void> {
     console.log(
       `Seed complete — campaign "${campaign.name}" (${campaign.id}) is ${campaign.status}.`,
     );
+
+    for (const [index, mood] of MOODS.entries()) {
+      const seededMood = await prisma.mood.upsert({
+        where: { id: mood.id },
+        update: {},
+        create: {
+          id: mood.id,
+          name: mood.name,
+          description: mood.description,
+          sunoPrompt: mood.description,
+          displayOrder: index,
+          active: true,
+        },
+      });
+
+      console.log(`Seed complete — mood "${seededMood.name}" (${seededMood.id}) is active.`);
+    }
   } finally {
     await prisma.$disconnect();
   }
