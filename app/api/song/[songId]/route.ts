@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
 import { logger } from "@/shared/logger/logger";
 import { toPublicSongStatus } from "../publicSongStatus";
@@ -9,6 +10,10 @@ import { toPublicSongStatus } from "../publicSongStatus";
  * frontend is expected to poll this every 5 seconds (see
  * docs/Product/User_Flow.md); there is no WebSocket or SSE push here by
  * design.
+ *
+ * Requires a valid parent session cookie, and the song must belong to
+ * that session's Lead — otherwise this responds identically to a
+ * non-existent song (404), never confirming another lead's song exists.
  */
 
 const songRepository = new PrismaSongRepository();
@@ -24,10 +29,15 @@ export async function GET(_request: Request, context: RouteContext): Promise<Nex
     return errorResponse(400, "invalid_request", "A songId is required.");
   }
 
+  const leadId = await getLeadSession();
+  if (!leadId) {
+    return errorResponse(401, "no_session", "No active session.");
+  }
+
   try {
     const song = await songRepository.findById(songId);
 
-    if (!song) {
+    if (!song || song.leadId !== leadId) {
       return errorResponse(404, "song_not_found", "Song not found.");
     }
 

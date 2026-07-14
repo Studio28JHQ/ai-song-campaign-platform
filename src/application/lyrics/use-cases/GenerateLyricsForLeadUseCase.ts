@@ -48,6 +48,14 @@ export class GenerateLyricsForLeadUseCase {
       });
     }
 
+    const alreadyApproved = await this.lyricsRepository.findApprovedByLead(lead.id);
+    if (alreadyApproved) {
+      throw new BusinessRuleError("This lead already has an approved lyrics version.", {
+        code: "lyrics.already_approved",
+        context: { leadId: lead.id, lyricsId: alreadyApproved.id },
+      });
+    }
+
     const existingVersions = await this.lyricsRepository.findAllByLead(lead.id);
     const isRegeneration = existingVersions.length > 0;
 

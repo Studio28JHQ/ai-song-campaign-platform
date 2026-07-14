@@ -24,6 +24,7 @@ const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof v
 };
 
 const mockGenerateAndModerate = vi.fn();
+const mockGetLeadSession = vi.fn();
 
 vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
   PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
@@ -43,6 +44,10 @@ vi.mock("@/infrastructure/ai/claude/ClaudeLyricsService", () => ({
   }),
 }));
 
+vi.mock("@/infrastructure/auth/getLeadSession", () => ({
+  getLeadSession: mockGetLeadSession,
+}));
+
 const { POST } = await import("../../../app/api/lyrics/generate/route");
 
 function buildLead(): Lead {
@@ -58,7 +63,6 @@ function buildLead(): Lead {
 }
 
 const validPayload = {
-  leadId: "lead-1",
   moodId: "mood-1",
   moodName: "Joyful",
   moodDescription: "upbeat and cheerful",
@@ -76,14 +80,28 @@ function postRequest(body: unknown): Request {
 describe("POST /api/lyrics/generate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLeadSession.mockResolvedValue("lead-1");
     mockLyricsRepository.findAllByLead.mockResolvedValue([]);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockLyricsRepository.create.mockImplementation(async (lyrics: Lyrics) => lyrics);
     mockLeadRepository.update.mockImplementation(async (lead: Lead) => lead);
   });
 
-  it("returns 200 with generated lyrics on approval", async () => {
+  it("returns 401 when there is no active session, without touching the use case", async () => {
+    mockGetLeadSession.mockResolvedValue(null);
+
+    const response = await POST(postRequest(validPayload));
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error).toBe("no_session");
+    expect(mockLeadRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 with generated lyrics on approval, identifying the lead via the session only", async () => {
     const lead = buildLead();
     mockLeadRepository.findById.mockResolvedValue(lead);
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockGenerateAndModerate.mockResolvedValue({
       approved: true,
       reason: null,
@@ -97,11 +115,13 @@ describe("POST /api/lyrics/generate", () => {
     expect(body.approved).toBe(true);
     expect(body.lyrics.content).toContain("Title");
     expect(body.remainingAttempts).toBe(5);
+    expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
   });
 
   it("returns 200 with approved:false on moderation rejection, without an error status", async () => {
     const lead = buildLead();
     mockLeadRepository.findById.mockResolvedValue(lead);
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockGenerateAndModerate.mockResolvedValue({
       approved: false,
       reason: "Contains offensive language.",
@@ -151,6 +171,19 @@ describe("POST /api/lyrics/generate", () => {
     expect(mockGenerateAndModerate).not.toHaveBeenCalled();
   });
 
+  it("returns 422 when the lead already has an approved lyrics version, without calling Claude", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockLyricsRepository.findApprovedByLead.mockResolvedValue({ id: "lyrics-1" });
+
+    const response = await POST(postRequest(validPayload));
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error).toBe("lyrics_already_approved");
+    expect(mockGenerateAndModerate).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when Claude is unavailable", async () => {
     const lead = buildLead();
     mockLeadRepository.findById.mockResolvedValue(lead);
@@ -172,5 +205,13 @@ describe("POST /api/lyrics/generate", () => {
     expect(response.status).toBe(400);
     expect(body.error).toBe("invalid_request");
     expect(mockLeadRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the payload still carries a leadId (never accepted from the client)", async () => {
+    const response = await POST(postRequest({ ...validPayload, leadId: "lead-1" }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_request");
   });
 });

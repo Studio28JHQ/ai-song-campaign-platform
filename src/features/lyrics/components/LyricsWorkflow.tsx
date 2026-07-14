@@ -3,26 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  BABY_NAME_STORAGE_KEY,
-  LEAD_ID_STORAGE_KEY,
-  REMAINING_ATTEMPTS_STORAGE_KEY,
-} from "@/features/lead/hooks/useRegisterLead";
-import { getSongStatus, type SongStatusValue } from "@/features/song/services/getSongStatus";
-import { SONG_ID_STORAGE_KEY } from "@/features/song/hooks/useSongResult";
+  getLeadSession,
+  type LeadSessionSongStatus,
+} from "@/features/lead/services/getLeadSession";
 import { useApproveLyrics } from "../hooks/useApproveLyrics";
 import { useGenerateLyrics } from "../hooks/useGenerateLyrics";
 import { ApprovedLyricsStatus } from "./ApprovedLyricsStatus";
 import { LyricsGenerationForm, type LyricsGenerationSubmitValues } from "./LyricsGenerationForm";
 import { LyricsReviewPanel } from "./LyricsReviewPanel";
 
-// Exported so a returning visit (e.g. the browser back button after song
-// generation starts) can detect that this lead's lyrics are already
-// approved and immutable, without a dedicated "fetch lead" endpoint —
-// same convention as `SONG_ID_STORAGE_KEY` in the Song feature.
-export const APPROVED_LYRICS_STORAGE_KEY = "approvedLyrics";
-
 interface Session {
-  leadId: string;
   babyName: string;
 }
 
@@ -42,28 +32,23 @@ interface LyricsWorkflowProps {
   supportEmail: string;
 }
 
-function readApprovedLyrics(): ApprovedLyricsRecord | null {
-  const raw = window.sessionStorage.getItem(APPROVED_LYRICS_STORAGE_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as ApprovedLyricsRecord;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Orchestrates the full lyrics generation + review flow: reads the
- * registration session, drives generation/regeneration through
- * `useGenerateLyrics`, and approval through `useApproveLyrics`. Renders
- * the input form until a version is approved by Claude (see
- * docs/Product/User_Flow.md — Lyrics Review), then the review panel.
+ * current session state from the backend (see `GET /api/leads/session` —
+ * GATE 6.6), drives generation/regeneration through `useGenerateLyrics`,
+ * and approval through `useApproveLyrics`. Renders the input form until a
+ * version is approved by Claude (see docs/Product/User_Flow.md — Lyrics
+ * Review), then the review panel.
  *
- * Once a version has been approved, it is immutable: this component
- * never shows the generation form or review panel again for this lead,
- * even on a fresh mount (e.g. navigating back from `/song`) — see
- * `APPROVED_LYRICS_STORAGE_KEY`.
+ * Once a version has been approved, it is immutable — and the backend,
+ * not client-side storage, is what makes this true: the Lead is
+ * identified only by an HttpOnly session cookie, and
+ * `GenerateLyricsForLeadUseCase` itself now refuses to generate another
+ * version once one is approved. This component never shows the
+ * generation form or review panel again for this lead, even on a fresh
+ * mount (e.g. navigating back from `/song`, a refresh, or clearing
+ * browser storage), because every mount re-asks the backend rather than
+ * trusting anything cached client-side.
  */
 export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProps) {
   const router = useRouter();
@@ -73,7 +58,7 @@ export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProp
   const [approvedLyrics, setApprovedLyrics] = useState<ApprovedLyricsRecord | null | undefined>(
     undefined,
   );
-  const [songStatus, setSongStatus] = useState<SongStatusValue | null>(null);
+  const [songStatus, setSongStatus] = useState<LeadSessionSongStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<LyricsGenerationSubmitValues | null>(null);
 
@@ -81,33 +66,25 @@ export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProp
   const { submit: submitApprove, isSubmitting: isApproving } = useApproveLyrics();
 
   useEffect(() => {
-    const leadId = window.sessionStorage.getItem(LEAD_ID_STORAGE_KEY);
-    const babyName = window.sessionStorage.getItem(BABY_NAME_STORAGE_KEY);
-    const storedAttempts = window.sessionStorage.getItem(REMAINING_ATTEMPTS_STORAGE_KEY);
+    let cancelled = false;
 
-    if (!leadId || !babyName) {
-      router.replace("/");
-      return;
-    }
+    getLeadSession().then((state) => {
+      if (cancelled) return;
 
-    setSession({ leadId, babyName });
-    setRemainingAttempts(storedAttempts ? Number(storedAttempts) : 0);
+      if (!state) {
+        router.replace("/");
+        return;
+      }
 
-    const existingApproval = readApprovedLyrics();
-    setApprovedLyrics(existingApproval);
+      setSession({ babyName: state.babyName });
+      setRemainingAttempts(state.remainingAttempts);
+      setApprovedLyrics(state.approvedLyrics);
+      setSongStatus(state.song?.status ?? null);
+    });
 
-    if (!existingApproval) return;
-
-    const songId = window.sessionStorage.getItem(SONG_ID_STORAGE_KEY);
-    if (!songId) return;
-
-    getSongStatus(songId)
-      .then((result) => setSongStatus(result.status))
-      .catch(() => {
-        // A failed status check here does not mean the song failed — the
-        // live source of truth is the Song Result screen's own polling;
-        // this is only a one-time, best-effort summary.
-      });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   async function handleGenerate(values: LyricsGenerationSubmitValues) {
@@ -116,17 +93,13 @@ export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProp
     setErrorMessage(null);
     setLastRequest(values);
 
-    const outcome = await submitGenerate({ leadId: session.leadId, ...values });
+    const outcome = await submitGenerate(values);
 
     if (!outcome.success) {
       setErrorMessage(outcome.message);
       return;
     }
 
-    window.sessionStorage.setItem(
-      REMAINING_ATTEMPTS_STORAGE_KEY,
-      String(outcome.result.remainingAttempts),
-    );
     setRemainingAttempts(outcome.result.remainingAttempts);
 
     if (!outcome.result.approved || !outcome.result.lyrics) {
@@ -160,9 +133,7 @@ export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProp
       return;
     }
 
-    const record: ApprovedLyricsRecord = { content: lyrics.content, version: lyrics.version };
-    window.sessionStorage.setItem(APPROVED_LYRICS_STORAGE_KEY, JSON.stringify(record));
-    setApprovedLyrics(record);
+    setApprovedLyrics({ content: lyrics.content, version: lyrics.version });
   }
 
   if (!session || approvedLyrics === undefined) {

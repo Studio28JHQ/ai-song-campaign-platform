@@ -36,6 +36,7 @@ const mockGetMoodDetails = vi.fn();
 const mockGenerateSong = vi.fn();
 const mockClaimDelivery = vi.fn();
 const mockSendSongReadyEmail = vi.fn();
+const mockGetLeadSession = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope (see
 // node_modules/next/dist/server/after/after.js), which is exactly the
@@ -102,6 +103,10 @@ vi.mock("@/infrastructure/email/ResendEmailService", () => ({
   }),
 }));
 
+vi.mock("@/infrastructure/auth/getLeadSession", () => ({
+  getLeadSession: mockGetLeadSession,
+}));
+
 const { POST } = await import("../../../app/api/song/generate/route");
 
 function buildLead(): Lead {
@@ -128,7 +133,7 @@ function buildApprovedLyrics(leadId: string): Lyrics {
   return lyrics;
 }
 
-function postRequest(body: unknown): Request {
+function postRequest(body: unknown = {}): Request {
   return new Request("http://localhost/api/song/generate", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -148,6 +153,7 @@ describe("POST /api/song/generate", () => {
     vi.clearAllMocks();
     capturedAfterCallbacks.length = 0;
     createdSong = undefined;
+    mockGetLeadSession.mockResolvedValue("lead-1");
     mockSongRepository.findByLead.mockResolvedValue(null);
     mockSongRepository.create.mockImplementation(async (song: Song) => {
       createdSong = song;
@@ -167,25 +173,39 @@ describe("POST /api/song/generate", () => {
     mockSendSongReadyEmail.mockResolvedValue(undefined);
   });
 
-  it("returns 202 immediately with PENDING status, without waiting for Suno", async () => {
+  it("returns 401 when there is no active session, without touching the use case", async () => {
+    mockGetLeadSession.mockResolvedValue(null);
+
+    const response = await POST(postRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error).toBe("no_session");
+    expect(mockLeadRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it("returns 202 immediately with PENDING status, identifying the lead via the session only", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(202);
     expect(body.status).toBe("PENDING");
     expect(typeof body.songId).toBe("string");
     expect(body.estimatedNextAction).toContain(`/api/song/${body.songId}`);
+    expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
     // Suno must never be called synchronously as part of the request.
     expect(mockGenerateSong).not.toHaveBeenCalled();
   });
 
   it("schedules background processing that eventually completes the song", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
@@ -196,7 +216,7 @@ describe("POST /api/song/generate", () => {
       duration: 120,
     });
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     expect(response.status).toBe(202);
     expect(capturedAfterCallbacks).toHaveLength(1);
 
@@ -220,6 +240,7 @@ describe("POST /api/song/generate", () => {
 
   it("never sends an email when the delivery claim was already taken (duplicate prevention)", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
@@ -231,7 +252,7 @@ describe("POST /api/song/generate", () => {
     });
     mockClaimDelivery.mockResolvedValue(false);
 
-    await POST(postRequest({ leadId: lead.id }));
+    await POST(postRequest());
     await runScheduledBackgroundWork();
 
     expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
@@ -240,13 +261,14 @@ describe("POST /api/song/generate", () => {
 
   it("persists a FAILED status when Suno fails in the background, without crashing, and never sends an email", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
     mockGenerateSong.mockRejectedValue(new Error("Suno API responded with status 503."));
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     expect(response.status).toBe(202);
 
     await expect(runScheduledBackgroundWork()).resolves.toBeUndefined();
@@ -259,7 +281,7 @@ describe("POST /api/song/generate", () => {
   it("returns 404 when the lead is not found", async () => {
     mockLeadRepository.findById.mockResolvedValue(null);
 
-    const response = await POST(postRequest({ leadId: "missing" }));
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(404);
@@ -269,10 +291,11 @@ describe("POST /api/song/generate", () => {
 
   it("returns 422 when the lead has no approved lyrics", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(422);
@@ -282,11 +305,12 @@ describe("POST /api/song/generate", () => {
 
   it("returns 409 when the lead already generated a song", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const existingSong = { status: "READY" } as unknown as Song;
     mockSongRepository.findByLead.mockResolvedValue(existingSong);
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(409);
@@ -296,10 +320,11 @@ describe("POST /api/song/generate", () => {
 
   it("returns 422 when the campaign is disabled", async () => {
     const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     mockIsActiveAndGenerationEnabled.mockResolvedValue(false);
 
-    const response = await POST(postRequest({ leadId: lead.id }));
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(422);
@@ -308,7 +333,7 @@ describe("POST /api/song/generate", () => {
   });
 
   it("returns 400 for an invalid payload without calling the use case", async () => {
-    const response = await POST(postRequest({}));
+    const response = await POST(postRequest({ leadId: "some-id" }));
     const body = await response.json();
 
     expect(response.status).toBe(400);

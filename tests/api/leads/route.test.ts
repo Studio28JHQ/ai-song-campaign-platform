@@ -13,9 +13,17 @@ const mockRepository: {
   update: vi.fn(),
 };
 
+const mockCreateSession = vi.fn();
+
 vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
   PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
     return mockRepository;
+  }),
+}));
+
+vi.mock("@/infrastructure/auth/PrismaLeadSessionService", () => ({
+  PrismaLeadSessionService: vi.fn().mockImplementation(function PrismaLeadSessionService() {
+    return { create: mockCreateSession, resolve: vi.fn() };
   }),
 }));
 
@@ -39,9 +47,13 @@ function postRequest(body: unknown): Request {
 describe("POST /api/leads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCreateSession.mockResolvedValue({
+      token: "session-token",
+      expiresAt: new Date("2026-08-14T00:00:00.000Z"),
+    });
   });
 
-  it("registers a lead and returns 201 with only the public fields", async () => {
+  it("registers a lead and returns 201 with only the public fields — never a Lead id", async () => {
     mockRepository.existsByEmail.mockResolvedValue(false);
     mockRepository.create.mockImplementation(async (lead: Lead) => lead);
 
@@ -49,10 +61,26 @@ describe("POST /api/leads", () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect(Object.keys(body).sort()).toEqual(["leadId", "remainingAttempts", "status"]);
+    expect(Object.keys(body).sort()).toEqual(["remainingAttempts", "status"]);
     expect(body.remainingAttempts).toBe(5);
     expect(body.status).toBe("REGISTERED");
-    expect(typeof body.leadId).toBe("string");
+    expect(JSON.stringify(body)).not.toMatch(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
+    );
+  });
+
+  it("issues a session and sets it as an HttpOnly cookie", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+    mockRepository.create.mockImplementation(async (lead: Lead) => lead);
+
+    const response = await POST(postRequest(validPayload));
+
+    expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    const setCookieHeader = response.headers.get("set-cookie");
+    expect(setCookieHeader).toContain("lead_session=session-token");
+    expect(setCookieHeader).toMatch(/HttpOnly/i);
+    expect(setCookieHeader).toMatch(/SameSite=Lax/i);
+    expect(setCookieHeader).toMatch(/Path=\//i);
   });
 
   it("returns 409 when the email is already registered", async () => {
@@ -64,6 +92,7 @@ describe("POST /api/leads", () => {
     expect(response.status).toBe(409);
     expect(body.error).toBe("email_already_registered");
     expect(mockRepository.create).not.toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   it("returns 400 for an invalid payload without calling the repository", async () => {

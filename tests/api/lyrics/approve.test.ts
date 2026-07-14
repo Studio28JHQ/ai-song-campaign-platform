@@ -12,10 +12,16 @@ const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof v
   reject: vi.fn(),
 };
 
+const mockGetLeadSession = vi.fn();
+
 vi.mock("@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository", () => ({
   PrismaLyricsRepository: vi.fn().mockImplementation(function PrismaLyricsRepository() {
     return mockLyricsRepository;
   }),
+}));
+
+vi.mock("@/infrastructure/auth/getLeadSession", () => ({
+  getLeadSession: mockGetLeadSession,
 }));
 
 const { POST } = await import("../../../app/api/lyrics/approve/route");
@@ -41,7 +47,19 @@ function postRequest(body: unknown): Request {
 describe("POST /api/lyrics/approve", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLeadSession.mockResolvedValue("lead-1");
     mockLyricsRepository.approve.mockImplementation(async (lyrics: Lyrics) => lyrics);
+  });
+
+  it("returns 401 when there is no active session, without touching the repository", async () => {
+    mockGetLeadSession.mockResolvedValue(null);
+
+    const response = await POST(postRequest({ lyricsId: "lyrics-1" }));
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error).toBe("no_session");
+    expect(mockLyricsRepository.findById).not.toHaveBeenCalled();
   });
 
   it("approves an existing lyrics version", async () => {

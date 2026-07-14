@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ApproveLyricsUseCase } from "@/application/lyrics/use-cases/ApproveLyricsUseCase";
+import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -9,6 +10,9 @@ import { logger } from "@/shared/logger/logger";
  * POST /api/lyrics/approve — approves a lyrics version for a lead. This
  * file only validates input, invokes `ApproveLyricsUseCase`, and maps the
  * result/errors to an HTTP response.
+ *
+ * Requires a valid parent session cookie (see `getLeadSession`) — this
+ * route is only ever reachable by a caller who has already registered.
  */
 
 const approveLyricsUseCase = new ApproveLyricsUseCase(new PrismaLyricsRepository());
@@ -20,6 +24,11 @@ const approveLyricsRequestSchema = z
   .strict();
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const leadId = await getLeadSession();
+  if (!leadId) {
+    return errorResponse(401, "no_session", "No active session.");
+  }
+
   let payload: unknown;
 
   try {

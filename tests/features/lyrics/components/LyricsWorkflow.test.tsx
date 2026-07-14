@@ -21,33 +21,75 @@ function renderWorkflow(props: Partial<typeof DEFAULT_PROPS> = {}) {
   return render(<LyricsWorkflow {...DEFAULT_PROPS} {...props} />);
 }
 
-function seedSession(remainingAttempts = 5) {
-  window.sessionStorage.setItem("leadId", "lead-1");
-  window.sessionStorage.setItem("babyName", "Baby Doe");
-  window.sessionStorage.setItem("remainingAttempts", String(remainingAttempts));
-}
-
-function seedApproval(content = "Title\nVerse 1\n...", version = 1) {
-  window.sessionStorage.setItem("approvedLyrics", JSON.stringify({ content, version }));
-}
-
-function mockGenerateResponse(body: unknown, ok = true, status = 200) {
+function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body };
+}
+
+function baseSession(overrides: Record<string, unknown> = {}) {
+  return {
+    babyName: "Baby Doe",
+    remainingAttempts: 5,
+    leadStatus: "GENERATING",
+    approvedLyrics: null,
+    song: null,
+    ...overrides,
+  };
+}
+
+/**
+ * `LyricsWorkflow` now reconstructs its session from `GET
+ * /api/leads/session` (the backend authority, see GATE 6.6) rather than
+ * sessionStorage, and no longer sends a Lead id anywhere — so the fetch
+ * mock must dispatch by URL, and every test supplies the session
+ * response explicitly instead of seeding client-side storage.
+ */
+function routedFetch(options: {
+  session: unknown | null;
+  generateResponses?: unknown[];
+  approveResponse?: unknown;
+}) {
+  const generateQueue = [...(options.generateResponses ?? [])];
+
+  return vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>>((input) => {
+    const url = String(input);
+
+    if (url === "/api/leads/session") {
+      return Promise.resolve(
+        options.session === null
+          ? jsonResponse({ error: "no_session" }, false, 401)
+          : jsonResponse(options.session),
+      );
+    }
+
+    if (url === "/api/lyrics/generate") {
+      return Promise.resolve(jsonResponse(generateQueue.shift() ?? {}));
+    }
+
+    if (url === "/api/lyrics/approve") {
+      return Promise.resolve(jsonResponse(options.approveResponse ?? {}));
+    }
+
+    return Promise.resolve(jsonResponse({}));
+  });
+}
+
+function install(mock: ReturnType<typeof routedFetch>): void {
+  global.fetch = mock as unknown as typeof fetch;
 }
 
 describe("LyricsWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.sessionStorage.clear();
   });
 
-  it("redirects to / when there is no registration session", async () => {
+  it("redirects to / when there is no active session", async () => {
+    install(routedFetch({ session: null }));
     renderWorkflow();
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
   });
 
   it("shows the generation form with baby name and remaining attempts", async () => {
-    seedSession(5);
+    install(routedFetch({ session: baseSession() }));
     renderWorkflow();
 
     expect(await screen.findByText("Baby Doe")).toBeInTheDocument();
@@ -55,18 +97,21 @@ describe("LyricsWorkflow", () => {
     expect(screen.getByRole("button", { name: /generate lyrics/i })).toBeInTheDocument();
   });
 
-  it("generates lyrics successfully and shows the review panel", async () => {
-    seedSession(5);
+  it("generates lyrics successfully and shows the review panel, never sending a Lead id", async () => {
     const user = userEvent.setup();
-    global.fetch = vi.fn().mockResolvedValue(
-      mockGenerateResponse({
-        lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
-        approved: true,
-        reason: null,
-        remainingAttempts: 5,
-        leadStatus: "GENERATING",
-      }),
-    );
+    const fetchMock = routedFetch({
+      session: baseSession(),
+      generateResponses: [
+        {
+          lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
+          approved: true,
+          reason: null,
+          remainingAttempts: 5,
+          leadStatus: "GENERATING",
+        },
+      ],
+    });
+    install(fetchMock);
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/your message/i), "A gentle bedtime song.");
@@ -75,18 +120,27 @@ describe("LyricsWorkflow", () => {
     expect(await screen.findByText("Title")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /approve lyrics/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate again/i })).toBeInTheDocument();
+
+    const generateCall = fetchMock.mock.calls.find(([url]) => url === "/api/lyrics/generate");
+    expect(JSON.parse((generateCall?.[1] as RequestInit).body as string)).not.toHaveProperty(
+      "leadId",
+    );
   });
 
   it("shows Attempt X / MAX using the configured maximum, not a hardcoded value", async () => {
-    seedSession(5);
     const user = userEvent.setup();
-    global.fetch = vi.fn().mockResolvedValue(
-      mockGenerateResponse({
-        lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
-        approved: true,
-        reason: null,
-        remainingAttempts: 5,
-        leadStatus: "GENERATING",
+    install(
+      routedFetch({
+        session: baseSession(),
+        generateResponses: [
+          {
+            lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
+            approved: true,
+            reason: null,
+            remainingAttempts: 5,
+            leadStatus: "GENERATING",
+          },
+        ],
       }),
     );
 
@@ -98,15 +152,19 @@ describe("LyricsWorkflow", () => {
   });
 
   it("shows a rejection message and stays on the generation form", async () => {
-    seedSession(5);
     const user = userEvent.setup();
-    global.fetch = vi.fn().mockResolvedValue(
-      mockGenerateResponse({
-        lyrics: null,
-        approved: false,
-        reason: "Contains offensive language.",
-        remainingAttempts: 4,
-        leadStatus: "GENERATING",
+    install(
+      routedFetch({
+        session: baseSession(),
+        generateResponses: [
+          {
+            lyrics: null,
+            approved: false,
+            reason: "Contains offensive language.",
+            remainingAttempts: 4,
+            leadStatus: "GENERATING",
+          },
+        ],
       }),
     );
 
@@ -120,34 +178,33 @@ describe("LyricsWorkflow", () => {
   });
 
   it("consumes an attempt and refreshes the UI on Generate Again", async () => {
-    seedSession(5);
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        mockGenerateResponse({
-          lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
-          approved: true,
-          reason: null,
-          remainingAttempts: 5,
-          leadStatus: "GENERATING",
-        }),
-      )
-      .mockResolvedValueOnce(
-        mockGenerateResponse({
-          lyrics: {
-            id: "lyrics-2",
-            content: "New Title\nVerse 1\n...",
-            version: 2,
+    install(
+      routedFetch({
+        session: baseSession(),
+        generateResponses: [
+          {
+            lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
             approved: true,
+            reason: null,
+            remainingAttempts: 5,
+            leadStatus: "GENERATING",
           },
-          approved: true,
-          reason: null,
-          remainingAttempts: 4,
-          leadStatus: "GENERATING",
-        }),
-      );
-    global.fetch = fetchMock;
+          {
+            lyrics: {
+              id: "lyrics-2",
+              content: "New Title\nVerse 1\n...",
+              version: 2,
+              approved: true,
+            },
+            approved: true,
+            reason: null,
+            remainingAttempts: 4,
+            leadStatus: "GENERATING",
+          },
+        ],
+      }),
+    );
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/your message/i), "A gentle bedtime song.");
@@ -158,29 +215,26 @@ describe("LyricsWorkflow", () => {
 
     expect(await screen.findByText("New Title")).toBeInTheDocument();
     expect(screen.getByText("Remaining attempts: 4")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("approves the lyrics, persists the approval, and navigates to /song", async () => {
-    seedSession(5);
+  it("approves the lyrics and navigates to /song, without writing anything to client storage", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        mockGenerateResponse({
+    const fetchMock = routedFetch({
+      session: baseSession(),
+      generateResponses: [
+        {
           lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
           approved: true,
           reason: null,
           remainingAttempts: 5,
           leadStatus: "GENERATING",
-        }),
-      )
-      .mockResolvedValueOnce(
-        mockGenerateResponse({
-          lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
-        }),
-      );
-    global.fetch = fetchMock;
+        },
+      ],
+      approveResponse: {
+        lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
+      },
+    });
+    install(fetchMock);
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/your message/i), "A gentle bedtime song.");
@@ -190,27 +244,30 @@ describe("LyricsWorkflow", () => {
     await user.click(screen.getByRole("button", { name: /approve lyrics/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/song"));
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "/api/lyrics/approve",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(window.sessionStorage.getItem("approvedLyrics")).toEqual(
-      JSON.stringify({ content: "Title\nVerse 1\n...", version: 1 }),
-    );
+    expect(window.sessionStorage.length).toBe(0);
   });
 
   it("disables Generate Lyrics once remaining attempts reach zero", async () => {
-    seedSession(0);
+    install(routedFetch({ session: baseSession({ remainingAttempts: 0 }) }));
     renderWorkflow();
 
     expect(await screen.findByRole("button", { name: /generate lyrics/i })).toBeDisabled();
   });
 
-  describe("once a Lyrics version has been approved", () => {
+  describe("once a Lyrics version has been approved (reconstructed from the backend)", () => {
     it("does not show the generation form, mood selector, message textarea, or remaining attempts", async () => {
-      seedSession(5);
-      seedApproval();
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "PENDING" }));
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
+            song: { songId: "song-1", status: "PENDING" },
+          }),
+        }),
+      );
 
       renderWorkflow();
 
@@ -222,9 +279,14 @@ describe("LyricsWorkflow", () => {
     });
 
     it("hides the Generate Again and Approve Lyrics buttons", async () => {
-      seedSession(5);
-      seedApproval();
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "PENDING" }));
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
+            song: { songId: "song-1", status: "PENDING" },
+          }),
+        }),
+      );
 
       renderWorkflow();
 
@@ -234,9 +296,14 @@ describe("LyricsWorkflow", () => {
     });
 
     it("renders the approved lyrics read-only, with no editable control", async () => {
-      seedSession(5);
-      seedApproval("Title\nLine one\nLine two", 2);
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "GENERATING" }));
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nLine one\nLine two", version: 2 },
+            song: { songId: "song-1", status: "GENERATING" },
+          }),
+        }),
+      );
 
       renderWorkflow();
 
@@ -246,20 +313,29 @@ describe("LyricsWorkflow", () => {
     });
 
     it("displays Attempt X / MAX using the approved version and the configured maximum", async () => {
-      seedSession(5);
-      seedApproval("Title\n...", 3);
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "PENDING" }));
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\n...", version: 3 },
+            song: { songId: "song-1", status: "PENDING" },
+          }),
+        }),
+      );
 
       renderWorkflow({ maxAttempts: 5 });
 
       expect(await screen.findByText("Attempt 3 / 5")).toBeInTheDocument();
     });
 
-    it("shows the current song status using existing state, not invented state", async () => {
-      seedSession(5);
-      seedApproval();
-      window.sessionStorage.setItem("songId", "song-1");
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "GENERATING" }));
+    it("shows the current song status directly from the backend session response, not invented state", async () => {
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
+            song: { songId: "song-1", status: "GENERATING" },
+          }),
+        }),
+      );
 
       renderWorkflow();
 
@@ -267,10 +343,14 @@ describe("LyricsWorkflow", () => {
     });
 
     it("on failed song generation, shows only the failure message and support email from configuration — never reopening lyrics generation", async () => {
-      seedSession(5);
-      seedApproval();
-      window.sessionStorage.setItem("songId", "song-1");
-      global.fetch = vi.fn().mockResolvedValue(mockGenerateResponse({ status: "FAILED" }));
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
+            song: { songId: "song-1", status: "FAILED" },
+          }),
+        }),
+      );
 
       renderWorkflow({ supportEmail: "help@campaign.example" });
 
@@ -278,6 +358,23 @@ describe("LyricsWorkflow", () => {
       expect(screen.getByText("help@campaign.example")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /generate lyrics/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /generate again/i })).not.toBeInTheDocument();
+    });
+
+    it("survives a browser storage wipe — the lock comes from the backend, not sessionStorage", async () => {
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1 },
+            song: { songId: "song-1", status: "PENDING" },
+          }),
+        }),
+      );
+      window.sessionStorage.clear();
+
+      renderWorkflow();
+
+      expect(await screen.findByText("Title")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /generate lyrics/i })).not.toBeInTheDocument();
     });
   });
 });

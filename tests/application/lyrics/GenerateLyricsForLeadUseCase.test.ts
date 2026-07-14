@@ -228,4 +228,31 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const persistedLead = await leadRepository.findById(lead.id);
     expect(persistedLead?.status).toBe(LeadStatus.BLOCKED);
   });
+
+  it("refuses to generate a new version once the lead already has an approved lyrics version (GATE 6.6)", async () => {
+    const lead = createLead(5);
+    leadRepository.seed(lead);
+
+    const approved = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\n...",
+      version: 1,
+    });
+    approved.approve();
+    await lyricsRepository.create(approved);
+
+    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\nNew\n..." });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await expect(useCase.execute({ leadId: lead.id, ...baseRequest })).rejects.toThrow();
+
+    // Refused before ever calling Claude, and without consuming an attempt.
+    expect(generator.generateAndModerate).not.toHaveBeenCalled();
+    const persistedLead = await leadRepository.findById(lead.id);
+    expect(persistedLead?.remainingAttempts).toBe(5);
+    const versions = await lyricsRepository.findAllByLead(lead.id);
+    expect(versions).toHaveLength(1);
+  });
 });

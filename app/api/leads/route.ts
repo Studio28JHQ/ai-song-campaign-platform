@@ -3,6 +3,11 @@ import { z } from "zod";
 import type { LeadCampaignConfig } from "@/application/lead/contracts/LeadCampaignConfig";
 import { CreateLeadUseCase } from "@/application/lead/use-cases/CreateLeadUseCase";
 import { appConfig } from "@/config/app";
+import {
+  LEAD_SESSION_COOKIE,
+  leadSessionCookieOptions,
+} from "@/infrastructure/auth/leadSessionCookie";
+import { PrismaLeadSessionService } from "@/infrastructure/auth/PrismaLeadSessionService";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { BusinessRuleError, ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -13,6 +18,11 @@ import { logger } from "@/shared/logger/logger";
  * This file only validates input, invokes `CreateLeadUseCase`, and maps
  * the result/errors to an HTTP response. No business rule is evaluated
  * here — those live in the Application and Domain layers.
+ *
+ * On success, it also issues a parent session (see
+ * `docs/Architecture/System_Architecture.md` — Parent Session) and sets
+ * it as an HttpOnly cookie. The Lead id itself is never returned in the
+ * response body — the browser only ever holds the opaque session token.
  */
 
 const campaignConfig: LeadCampaignConfig = {
@@ -20,6 +30,7 @@ const campaignConfig: LeadCampaignConfig = {
 };
 
 const createLeadUseCase = new CreateLeadUseCase(new PrismaLeadRepository(), campaignConfig);
+const leadSessionService = new PrismaLeadSessionService();
 
 // Structural validation only (shape/type/presence). Semantic validation
 // (email format, age bounds, ...) belongs to the domain value objects and
@@ -52,15 +63,19 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     const result = await createLeadUseCase.execute(parsed.data);
+    const session = await leadSessionService.create(result.lead.id);
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
-        leadId: result.lead.id,
         remainingAttempts: result.lead.remainingAttempts,
         status: result.lead.status,
       },
       { status: 201 },
     );
+
+    response.cookies.set(LEAD_SESSION_COOKIE, session.token, leadSessionCookieOptions());
+
+    return response;
   } catch (error) {
     return handleUseCaseError(error);
   }

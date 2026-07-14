@@ -9,7 +9,6 @@ export interface RegisterLeadInput {
 }
 
 export interface RegisterLeadResult {
-  leadId: string;
   remainingAttempts: number;
   status: string;
 }

@@ -1,15 +1,15 @@
-import type { SongStatusValue } from "@/features/song/services/getSongStatus";
+import type { LeadSessionSongStatus } from "@/features/lead/services/getLeadSession";
 import { LyricsContent } from "./LyricsContent";
 
 interface ApprovedLyricsStatusProps {
   content: string;
   version: number;
   maxAttempts: number;
-  songStatus: SongStatusValue | null;
+  songStatus: LeadSessionSongStatus | null;
   supportEmail: string;
 }
 
-const SONG_STATUS_LABEL: Record<SongStatusValue, string> = {
+const SONG_STATUS_LABEL: Record<LeadSessionSongStatus, string> = {
   PENDING: "Song pending",
   GENERATING: "Song generating",
   COMPLETED: "Song ready",

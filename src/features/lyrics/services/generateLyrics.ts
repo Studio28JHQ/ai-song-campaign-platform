@@ -1,5 +1,4 @@
 export interface GenerateLyricsInput {
-  leadId: string;
   moodId: string;
   moodName: string;
   moodDescription?: string;
@@ -23,16 +22,20 @@ export interface GenerateLyricsResult {
 
 export type GenerateLyricsErrorCode =
   | "invalid_request"
+  | "no_session"
   | "lead_not_found"
   | "no_remaining_attempts"
+  | "lyrics_already_approved"
   | "business_rule_violation"
   | "claude_unavailable"
   | "internal_error";
 
 const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
   "invalid_request",
+  "no_session",
   "lead_not_found",
   "no_remaining_attempts",
+  "lyrics_already_approved",
   "business_rule_violation",
   "claude_unavailable",
   "internal_error",
@@ -40,8 +43,10 @@ const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
 
 const DEFAULT_MESSAGES: Record<GenerateLyricsErrorCode, string> = {
   invalid_request: "Please check your message and try again.",
+  no_session: "We couldn't find your registration. Please register again.",
   lead_not_found: "We couldn't find your registration. Please register again.",
   no_remaining_attempts: "You have no attempts left to generate lyrics.",
+  lyrics_already_approved: "You have already approved a lyrics version.",
   business_rule_violation: "This request could not be completed.",
   claude_unavailable:
     "The lyrics generation service is temporarily unavailable. Please try again shortly.",

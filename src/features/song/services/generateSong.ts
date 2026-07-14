@@ -1,7 +1,3 @@
-export interface GenerateSongInput {
-  leadId: string;
-}
-
 export interface GenerateSongResult {
   songId: string;
   status: string;
@@ -10,6 +6,7 @@ export interface GenerateSongResult {
 
 export type GenerateSongErrorCode =
   | "invalid_request"
+  | "no_session"
   | "lead_not_found"
   | "song_already_exists"
   | "lyrics_not_approved"
@@ -19,6 +16,7 @@ export type GenerateSongErrorCode =
 
 const KNOWN_ERROR_CODES: readonly GenerateSongErrorCode[] = [
   "invalid_request",
+  "no_session",
   "lead_not_found",
   "song_already_exists",
   "lyrics_not_approved",
@@ -29,6 +27,7 @@ const KNOWN_ERROR_CODES: readonly GenerateSongErrorCode[] = [
 
 const DEFAULT_MESSAGES: Record<GenerateSongErrorCode, string> = {
   invalid_request: "Please try again.",
+  no_session: "We couldn't find your registration. Please register again.",
   lead_not_found: "We couldn't find your registration. Please register again.",
   song_already_exists: "You have already generated your song.",
   lyrics_not_approved: "Please approve your lyrics before generating a song.",
@@ -57,16 +56,18 @@ function toErrorCode(value: unknown): GenerateSongErrorCode {
  * Thin HTTP client for `POST /api/song/generate`. No business rule is
  * evaluated here; the endpoint returns immediately (`202 Accepted`)
  * without waiting for the song to finish generating — see
- * docs/Architecture/System_Architecture.md.
+ * docs/Architecture/System_Architecture.md. The Lead is identified by the
+ * session cookie, sent automatically by the browser — no Lead id is ever
+ * included in this request.
  */
-export async function generateSong(input: GenerateSongInput): Promise<GenerateSongResult> {
+export async function generateSong(): Promise<GenerateSongResult> {
   let response: Response;
 
   try {
     response = await fetch("/api/song/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({}),
     });
   } catch {
     throw new GenerateSongError(

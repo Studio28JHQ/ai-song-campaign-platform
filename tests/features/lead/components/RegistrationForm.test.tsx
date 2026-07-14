@@ -29,11 +29,11 @@ describe("RegistrationForm", () => {
     window.sessionStorage.clear();
   });
 
-  it("submits successfully, stores the lead id, and navigates to /generate", async () => {
+  it("submits successfully and navigates to /generate — the server identifies the lead via a session cookie, never a client-stored id", async () => {
     const user = userEvent.setup();
     mockFetchOnce({
       ok: true,
-      body: { leadId: "lead-1", remainingAttempts: 5, status: "REGISTERED" },
+      body: { remainingAttempts: 5, status: "REGISTERED" },
     });
 
     render(<RegistrationForm />);
@@ -41,7 +41,7 @@ describe("RegistrationForm", () => {
     await user.click(screen.getByRole("button", { name: /register/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/generate"));
-    expect(window.sessionStorage.getItem("leadId")).toBe("lead-1");
+    expect(window.sessionStorage.length).toBe(0);
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/leads",
       expect.objectContaining({ method: "POST" }),
@@ -132,7 +132,7 @@ describe("RegistrationForm", () => {
 
     resolveFetch({
       ok: true,
-      json: async () => ({ leadId: "lead-1", remainingAttempts: 5, status: "REGISTERED" }),
+      json: async () => ({ remainingAttempts: 5, status: "REGISTERED" }),
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
   });

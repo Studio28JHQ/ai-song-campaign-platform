@@ -13,37 +13,70 @@ vi.mock("next/navigation", () => ({
   useRouter: () => routerMock,
 }));
 
-function seedSession() {
-  window.sessionStorage.setItem("leadId", "lead-1");
-  window.sessionStorage.setItem("babyName", "Baby Doe");
-}
-
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body };
+}
+
+/**
+ * `useSongResult` now calls two different endpoints — `GET
+ * /api/leads/session` (the backend authority, see GATE 6.6) and the Song
+ * endpoints — so the fetch mock must dispatch by URL rather than
+ * returning one fixed response for every call.
+ */
+function routedFetch(options: { session?: unknown | null; songResponses?: unknown[] }) {
+  const songQueue = [...(options.songResponses ?? [])];
+
+  return vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === "/api/leads/session") {
+      return options.session === null || options.session === undefined
+        ? Promise.resolve(jsonResponse({ error: "no_session" }, false, 401))
+        : Promise.resolve(jsonResponse(options.session));
+    }
+
+    const next = songQueue.shift();
+    return Promise.resolve(jsonResponse(next ?? {}));
+  });
+}
+
+function install(mock: object): void {
+  global.fetch = mock as unknown as typeof fetch;
+}
+
+function fetchMock(): ReturnType<typeof vi.fn> {
+  return global.fetch as unknown as ReturnType<typeof vi.fn>;
 }
 
 describe("SongResultView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.sessionStorage.clear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("redirects to / when there is no registration session", async () => {
+  it("redirects to / when there is no active session", async () => {
+    install(routedFetch({ session: null }));
+
     render(<SongResultView supportEmail="support@example.com" />);
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
   });
 
   it("starts generation and shows a loading indicator with the disabled 'Generate Another Song' button", async () => {
-    seedSession();
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" }),
-      );
+    install(
+      routedFetch({
+        session: {
+          babyName: "Baby Doe",
+          remainingAttempts: 5,
+          leadStatus: "GENERATING",
+          approvedLyrics: null,
+          song: null,
+        },
+        songResponses: [{ songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" }],
+      }),
+    );
 
     render(<SongResultView supportEmail="support@example.com" />);
 
@@ -54,41 +87,43 @@ describe("SongResultView", () => {
   });
 
   it("polls every 5 seconds and stops immediately once COMPLETED, rendering the player, duration, download, and share message", async () => {
-    seedSession();
     vi.useFakeTimers();
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({ songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ songId: "song-1", status: "GENERATING" }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          songId: "song-1",
-          status: "COMPLETED",
-          audioUrl: "https://cdn.example.com/song.mp3",
-          duration: 125,
-        }),
-      );
-    global.fetch = fetchMock;
+    install(
+      routedFetch({
+        session: {
+          babyName: "Baby Doe",
+          remainingAttempts: 5,
+          leadStatus: "GENERATING",
+          approvedLyrics: null,
+          song: null,
+        },
+        songResponses: [
+          { songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" },
+          { songId: "song-1", status: "GENERATING" },
+          {
+            songId: "song-1",
+            status: "COMPLETED",
+            audioUrl: "https://cdn.example.com/song.mp3",
+            duration: 125,
+          },
+        ],
+      }),
+    );
 
     render(<SongResultView supportEmail="support@example.com" />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     expect(screen.getByText(/your personalized song is ready/i)).toBeInTheDocument();
     expect(screen.getByText(/duration: 2:05/i)).toBeInTheDocument();
@@ -102,37 +137,44 @@ describe("SongResultView", () => {
     expect(downloadLink).toHaveAttribute("href", "https://cdn.example.com/song.mp3");
     expect(downloadLink).toHaveAttribute("download");
 
+    const callsAfterCompletion = fetchMock().mock.calls.length;
+
     // No WebSocket/SSE — polling is the only mechanism, and it must not
     // keep going once the song reached a terminal status.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock().mock.calls.length).toBe(callsAfterCompletion);
   });
 
   it("stops polling on FAILED and shows a friendly message with support contact, never internal error detail", async () => {
-    seedSession();
     vi.useFakeTimers();
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({ songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ songId: "song-1", status: "FAILED" }));
-    global.fetch = fetchMock;
+    install(
+      routedFetch({
+        session: {
+          babyName: "Baby Doe",
+          remainingAttempts: 5,
+          leadStatus: "GENERATING",
+          approvedLyrics: null,
+          song: null,
+        },
+        songResponses: [
+          { songId: "song-1", status: "PENDING", estimatedNextAction: "poll me" },
+          { songId: "song-1", status: "FAILED" },
+        ],
+      }),
+    );
 
     render(<SongResultView supportEmail="support@example.com" />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/couldn't generate your song/i);
@@ -140,33 +182,59 @@ describe("SongResultView", () => {
     expect(screen.getByText("support@example.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate another song/i })).toBeDisabled();
 
+    const callsAfterFailure = fetchMock().mock.calls.length;
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock().mock.calls.length).toBe(callsAfterFailure);
   });
 
-  it("resumes polling an existing songId from a previous visit instead of starting a new generation", async () => {
-    seedSession();
-    window.sessionStorage.setItem("songId", "song-1");
+  it("resumes polling the song already recorded in backend session state, instead of starting a new generation", async () => {
     vi.useFakeTimers();
 
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        songId: "song-1",
-        status: "COMPLETED",
-        audioUrl: "https://cdn.example.com/song.mp3",
-        duration: 60,
+    const generateFetch = vi.fn();
+    install(
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url === "/api/leads/session") {
+          return Promise.resolve(
+            jsonResponse({
+              babyName: "Baby Doe",
+              remainingAttempts: 5,
+              leadStatus: "GENERATING",
+              approvedLyrics: null,
+              song: {
+                songId: "song-1",
+                status: "GENERATING",
+              },
+            }),
+          );
+        }
+
+        if (url === "/api/song/generate") {
+          generateFetch();
+          return Promise.resolve(jsonResponse({}));
+        }
+
+        return Promise.resolve(
+          jsonResponse({
+            songId: "song-1",
+            status: "COMPLETED",
+            audioUrl: "https://cdn.example.com/song.mp3",
+            duration: 60,
+          }),
+        );
       }),
     );
-    global.fetch = fetchMock;
 
     render(<SongResultView supportEmail="support@example.com" />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/api/song/song-1");
+    expect(generateFetch).not.toHaveBeenCalled();
+    expect(fetchMock()).toHaveBeenCalledWith("/api/song/song-1");
   });
 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { GenerateLyricsForLeadUseCase } from "@/application/lyrics/use-cases/GenerateLyricsForLeadUseCase";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
+import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { BusinessRuleError, ExternalApiError } from "@/shared/errors";
@@ -14,6 +15,9 @@ import { logger } from "@/shared/logger/logger";
  * response. No business rule (attempt consumption, moderation, lead
  * validation) is evaluated here — those live in the Application and
  * Domain layers.
+ *
+ * The Lead is identified only via the session cookie (see
+ * `getLeadSession`) — the request body never carries a Lead id.
  */
 
 const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
@@ -27,7 +31,6 @@ const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
 // Application/Domain-layer concerns, never duplicated here.
 const generateLyricsRequestSchema = z
   .object({
-    leadId: z.string().min(1),
     moodId: z.string().min(1),
     moodName: z.string().min(1),
     moodDescription: z.string().min(1).optional(),
@@ -36,6 +39,11 @@ const generateLyricsRequestSchema = z
   .strict();
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const leadId = await getLeadSession();
+  if (!leadId) {
+    return errorResponse(401, "no_session", "No active session.");
+  }
+
   let payload: unknown;
 
   try {
@@ -50,7 +58,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const result = await generateLyricsUseCase.execute(parsed.data);
+    const result = await generateLyricsUseCase.execute({ leadId, ...parsed.data });
 
     // A moderation rejection is a normal, expected outcome (see
     // docs/Product/Business_Rules.md) — the request itself succeeded, so
@@ -78,6 +86,10 @@ function handleUseCaseError(error: unknown): NextResponse {
 
     if (error.code === "lyrics.no_remaining_attempts") {
       return errorResponse(422, "no_remaining_attempts", error.message);
+    }
+
+    if (error.code === "lyrics.already_approved") {
+      return errorResponse(422, "lyrics_already_approved", error.message);
     }
 
     return errorResponse(422, "business_rule_violation", error.message);

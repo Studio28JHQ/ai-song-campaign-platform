@@ -3,6 +3,7 @@ import { z } from "zod";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
 import { ProcessSongGenerationUseCase } from "@/application/song/use-cases/ProcessSongGenerationUseCase";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
+import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
@@ -51,9 +52,14 @@ const processSongGenerationUseCase = new ProcessSongGenerationUseCase(
   emailDeliveryTracker,
 );
 
-const generateSongRequestSchema = z.object({ leadId: z.string().min(1) }).strict();
+const generateSongRequestSchema = z.object({}).strict();
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const leadId = await getLeadSession();
+  if (!leadId) {
+    return errorResponse(401, "no_session", "No active session.");
+  }
+
   let payload: unknown;
 
   try {
@@ -68,7 +74,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const result = await generateSongUseCase.execute(parsed.data);
+    const result = await generateSongUseCase.execute({ leadId });
     const songId = result.song.id;
 
     // Scheduled with `after()` so it keeps running once the response has

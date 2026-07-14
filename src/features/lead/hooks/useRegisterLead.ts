@@ -9,20 +9,16 @@ import {
   type RegisterLeadInput,
 } from "../services/registerLead";
 
-// Exported so the (separate) Lyrics feature can read the same
-// registration data without a new "fetch lead" endpoint — see
-// docs/Product/User_Flow.md for the reasoning behind this simplification.
-export const LEAD_ID_STORAGE_KEY = "leadId";
-export const BABY_NAME_STORAGE_KEY = "babyName";
-export const REMAINING_ATTEMPTS_STORAGE_KEY = "remainingAttempts";
-
 export type RegisterLeadOutcome =
   { success: true } | { success: false; code: RegisterLeadErrorCode; message: string };
 
 /**
- * Orchestrates a registration submission: tracks the in-flight state,
- * stores the returned lead id client-side, and navigates on success. Does
- * not decide *how* to present an error — that's left to the caller.
+ * Orchestrates a registration submission: tracks the in-flight state and
+ * navigates on success. Does not decide *how* to present an error —
+ * that's left to the caller. The server identifies the lead via an
+ * HttpOnly session cookie it sets on success (see GATE 6.6) — nothing
+ * about the lead is stored client-side; `/generate` reconstructs
+ * everything it needs from `GET /api/leads/session`.
  */
 export function useRegisterLead() {
   const router = useRouter();
@@ -33,13 +29,7 @@ export function useRegisterLead() {
       setIsSubmitting(true);
 
       try {
-        const result = await registerLead(input);
-        window.sessionStorage.setItem(LEAD_ID_STORAGE_KEY, result.leadId);
-        window.sessionStorage.setItem(BABY_NAME_STORAGE_KEY, input.babyName);
-        window.sessionStorage.setItem(
-          REMAINING_ATTEMPTS_STORAGE_KEY,
-          String(result.remainingAttempts),
-        );
+        await registerLead(input);
         router.push("/generate");
         return { success: true };
       } catch (error) {
