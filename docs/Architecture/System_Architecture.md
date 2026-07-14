@@ -8,7 +8,7 @@ The system is a modular monolith built on Next.js, following Clean Architecture 
 
 - **Domain** — Core business concepts and rules: leads, emails, attempts, moods, lyrics, songs. No framework or infrastructure dependencies.
 - **Application** — Use cases / orchestration (e.g. register lead, generate lyrics, accept lyrics, generate song, deliver email). Depends only on the domain layer and repository/service interfaces.
-- **Infrastructure** — Implementations of repositories and external service adapters (Prisma/Supabase persistence, Claude client, Suno client, Resend client).
+- **Infrastructure** — Implementations of repositories and external service adapters (Prisma/Supabase persistence, Claude client, Suno client, Resend client, Cloudflare R2 storage client).
 - **Presentation** — Next.js Route Handlers and UI (React components, pages) that call into the application layer.
 
 Dependencies point inward: presentation and infrastructure depend on application and domain; domain depends on nothing else.
@@ -17,7 +17,8 @@ Dependencies point inward: presentation and infrastructure depend on application
 
 - **Anthropic Claude API** — content moderation and lyrics generation.
 - **Suno API** — final song (audio) generation.
-- **Supabase** — primary database (via Prisma). Generated audio is referenced directly by the URL Suno's API returns, never uploaded to Supabase Storage — see `docs/Architecture/External_Services.md`.
+- **Supabase** — primary database (via Prisma).
+- **Cloudflare R2** — private object storage for generated audio (S3-compatible, via `@aws-sdk/client-s3`). The bucket has no public access; every download goes through a short-lived, presigned URL generated on demand. Implemented at the infrastructure layer (`src/infrastructure/storage/`) — see `docs/Architecture/External_Services.md`. Not yet called from `ProcessSongGenerationUseCase`: today, the song flow still persists the URL Suno's API returns directly on the `Song` record, unchanged.
 - **Resend** — transactional email delivery of the final song.
 - **Vercel** — hosting and deployment.
 - **Cloudflare** — DNS/CDN/edge in front of the deployed application.
@@ -30,7 +31,7 @@ Dependencies point inward: presentation and infrastructure depend on application
 4. On approval, application layer calls Claude to generate lyrics and returns a preview to the user.
 5. User accepts or requests regeneration (consuming an attempt) via another Route Handler call.
 6. On acceptance, application layer calls Suno to generate the song (no attempt consumed).
-7. The song's provider-hosted audio URL is persisted on the `Song` record — see `docs/Architecture/External_Services.md` for why this is not mirrored to separate storage.
+7. The song's provider-hosted audio URL is persisted on the `Song` record as-is — private Cloudflare R2 storage infrastructure exists (see `docs/Architecture/External_Services.md`) but is not yet called from this flow.
 8. Application layer triggers Resend to email the final song to the user.
 9. Lead/campaign state is persisted throughout via the Repository Pattern over Prisma/Supabase.
 

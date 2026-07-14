@@ -31,6 +31,13 @@ export const appConfig = {
     apiKey: env.RESEND_API_KEY,
     fromAddress: env.EMAIL_FROM,
   },
+  storage: {
+    accountId: env.R2_ACCOUNT_ID,
+    endpoint: env.R2_ENDPOINT,
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+    bucket: env.R2_BUCKET,
+  },
   claude: {
     apiKey: env.CLAUDE_API_KEY,
   },

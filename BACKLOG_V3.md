@@ -26,10 +26,6 @@ Improve response times and throughput under real campaign load.
 
 Add deeper logging, tracing, and monitoring beyond Version 1 baseline.
 
-## Own Audio Storage
-
-Generated audio is currently referenced directly by the URL Suno's API returns and is never mirrored to owned storage (e.g. Supabase Storage). This works for the campaign's one-month lifetime but means song availability depends on Suno continuing to host the file. Mirror/persist the audio independently if long-term availability beyond the campaign window is ever required.
-
 ## Generation Attempt Audit Trail
 
 The `GenerationAttempt` table is defined in the schema but not populated — the five-attempts business rule is enforced via `Lead.remainingAttempts` alone, which is sufficient for V1. Wiring up a real per-attempt audit trail would let the Admin execution history show individual moderation-rejected attempts that never produced a `Lyrics` row.

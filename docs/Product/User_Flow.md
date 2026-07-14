@@ -70,7 +70,7 @@ Campaign Finished
 
 **Accept Lyrics / Generate Again** — User either approves the lyrics to proceed, or requests regeneration (consuming an attempt).
 
-**Suno Song Generation** — Approved lyrics and the selected mood's fixed prompt are sent to Suno to generate the final audio. Suno's response includes a hosted URL for the audio file; that URL is persisted on the `Song` record as-is (see `docs/Architecture/External_Services.md` — Supabase) and is what the player, download link, and email all point to directly.
+**Suno Song Generation** — Approved lyrics and the selected mood's fixed prompt are sent to Suno to generate the final audio. Suno's response includes a hosted URL for the audio file; that URL is persisted on the `Song` record as-is and is what the player, download link, and email all point to directly. Private Cloudflare R2 storage infrastructure exists (see `docs/Architecture/External_Services.md` — Cloudflare R2), with downloads served only via short-lived signed URLs, but it is not yet part of this flow.
 
 **Send Email** — The final song is emailed to the user via Resend.
 

@@ -76,7 +76,7 @@ Backend
 Infrastructure
 
 - Supabase
-- Supabase Storage
+- Cloudflare R2 (object storage for generated audio)
 - Anthropic Claude API
 - Suno API
 - Resend

@@ -78,7 +78,7 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Purpose** — Primary relational database (via Prisma) for all domain records (Lead, Lyrics, Song, Campaign, Mood, GenerationAttempt).
 
-**Note on scope** — `PROJECT_MANIFEST.md` lists Supabase Storage and Supabase Authentication as available infrastructure. Neither is exercised by the delivered V1 flow: generated audio is referenced directly by the URL Suno's API returns (never re-uploaded or mirrored — see the Suno section above and `docs/Product/User_Flow.md`), and the Admin panel uses its own signed-session-cookie authentication (see `docs/Architecture/System_Architecture.md` — Authentication Flow), not Supabase Auth. See `BACKLOG_V3.md` for owning the audio asset independently of the AI provider's hosted URL.
+**Note on scope** — `PROJECT_MANIFEST.md` lists Supabase Authentication as available infrastructure, but it is not exercised by the delivered V1 flow: the Admin panel uses its own signed-session-cookie authentication (see `docs/Architecture/System_Architecture.md` — Authentication Flow), not Supabase Auth. Object storage for generated audio is Cloudflare R2, not Supabase Storage — see below.
 
 **Expected Inputs** — Reads/writes from repository implementations.
 
@@ -87,6 +87,25 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 **Failure Scenarios** — Connection failure, constraint violation.
 
 **Retry Policy** — Retry transient connection failures a limited number of times; constraint violations (e.g. duplicate email) are not retried — they are translated into the corresponding business error.
+
+## Cloudflare R2
+
+**Responsibilities**
+
+- Private object storage for generated audio
+
+**Purpose** — S3-compatible object storage for the platform's generated song files. Implemented at `src/infrastructure/storage/`. The bucket is **never publicly exposed** — there is no public bucket URL or public-access configuration anywhere in this integration; every read goes through a short-lived, presigned URL generated on demand.
+
+**Classes:**
+
+- **`StorageClient`** — minimal wrapper around the official `@aws-sdk/client-s3` `S3Client` (plus `@aws-sdk/s3-request-presigner` for signing), configured with `R2_ENDPOINT` (never built from the account ID in code), credentials, and bucket, all from `appConfig.storage`. Exposes the raw `putObject`/`headObject`/`deleteObject`/presigned-URL SDK calls, nothing else.
+- **`CloudflareR2Storage`** — orchestrates the client into the four supported operations: `upload`, `generateSignedDownloadUrl` (a presigned `GetObjectCommand` URL, expiring after `R2_SIGNED_URL_EXPIRY_SECONDS` — see `src/config/constants.ts`), `delete`, `exists`. Translates any SDK failure into the shared `ExternalApiError` — no raw AWS SDK exception ever escapes the infrastructure layer.
+
+**Current wiring** — This is infrastructure only. No Application use case calls it yet: `ProcessSongGenerationUseCase` still persists Suno's own hosted `audioUrl` directly on the `Song` record, unchanged (see `docs/Architecture/System_Architecture.md`). Wiring R2 into the song-generation flow itself (and switching playback/download to signed URLs) is a separate, not-yet-scheduled change.
+
+**Failure Scenarios** — Invalid credentials, bucket permission errors, network failure.
+
+**Retry Policy** — None beyond what the AWS SDK itself performs by default; this integration does not add its own retry loop.
 
 ## Resend
 
