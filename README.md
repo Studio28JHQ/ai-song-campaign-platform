@@ -43,6 +43,7 @@ cd ai-song-campaign-platform
 npm install   # also generates the Prisma Client automatically (postinstall)
 cp .env.example .env   # then fill in real values — see Environment Variables below
 npx prisma migrate deploy   # applies existing migrations to your database
+npm run db:seed             # creates the required default Campaign row (idempotent)
 ```
 
 ## Environment Variables
@@ -103,6 +104,7 @@ npm run start              # next start
 - Prisma Client generation is guaranteed by the repository itself (a `postinstall` script), not by relying on the hosting provider's automatic framework detection.
 - Environment variables are configured in the hosting provider's project settings (e.g. Vercel), not committed to the repository — see `docs/Development/Environment.md`.
 - Apply any pending Prisma migrations (`npx prisma migrate deploy`) against the production database before starting the new build.
+- **Run `npm run db:seed` once against the production database** (a Prisma Client seed script at `prisma/seed.ts`, idempotent — safe to run more than once). It creates the one record required for lead registration to work at all: the default `Campaign` row (`id = 00000000-0000-0000-0000-000000000000`, matching `DEFAULT_CAMPAIGN_ID` in `src/features/lead/components/RegistrationForm.tsx`). Without it, every `POST /api/leads` fails with a Prisma `P2003` foreign key error, since `Lead.campaignId` has no row to reference.
 - Security headers (frame/content-type protections, HSTS, referrer/permissions policy) are configured in `next.config.ts` and apply to every route.
 
 ## License
