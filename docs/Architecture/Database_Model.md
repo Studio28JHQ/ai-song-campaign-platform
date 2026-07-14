@@ -28,7 +28,9 @@ Every generated lyrics version for a lead (see `docs/Architecture/Domain_Model.m
 
 ### GenerationAttempt
 
-An audit trail of every interaction with Claude (see `docs/Product/Business_Rules.md#Attempts-Rules`), including attempts that fail before producing lyrics. `attemptNumber` is unique per lead so attempts are strictly ordered and never collide. `lyricsId` is optional and unique — an attempt produces at most one `Lyrics` row (on success), and a `Lyrics` row traces back to exactly one originating attempt. `result` distinguishes `SUCCESS` / `MODERATION_REJECTED` / `FAILED`; deciding _whether_ a given result consumes one of the lead's five attempts is business logic that belongs to the application layer, not to this table.
+Designed as an audit trail of every interaction with Claude (see `docs/Product/Business_Rules.md#Attempts-Rules`), including attempts that fail before producing lyrics. `attemptNumber` is unique per lead so attempts are strictly ordered and never collide. `lyricsId` is optional and unique — an attempt produces at most one `Lyrics` row (on success), and a `Lyrics` row traces back to exactly one originating attempt. `result` distinguishes `SUCCESS` / `MODERATION_REJECTED` / `FAILED`.
+
+**Not currently populated.** No application code writes to or reads this table in V1 — the five-attempts rule is enforced entirely through `Lead.remainingAttempts` instead (see `docs/Architecture/Domain_Model.md#GenerationAttempt`). The table remains in the schema for a future audit-trail feature; see `BACKLOG_V3.md`.
 
 ### Song
 

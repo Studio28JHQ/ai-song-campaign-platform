@@ -18,7 +18,7 @@ This document describes every external integration used by the platform: purpose
 - **`ClaudeClient`** — minimal HTTP client for Anthropic's Messages API, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the project's "no unnecessary abstractions" principle. Adds the `x-api-key` (from `appConfig.claude.apiKey`) and `anthropic-version` headers and posts the model/prompt.
 - **`PromptBuilder`** — assembles the system prompt (fixed campaign rules, safety/moderation rules, writing instructions, and the required JSON response format) and the user message (baby name, parent message, selected mood, language). This is the only place those rules are defined.
 - **`ResponseParser`** — extracts the text content block from Claude's response, parses it as JSON, and validates it against the expected shape with Zod, including the invariant that an approved result has non-empty lyrics and a rejected result has a non-empty reason.
-- **`ClaudeLyricsService`** — orchestrates the three above: build prompt → send message → parse response. Not yet wired into any Application use case; that wiring is a future task.
+- **`ClaudeLyricsService`** — orchestrates the three above: build prompt → send message → parse response. Satisfies the Application layer's `LyricsGenerator` port, called by `GenerateLyricsForLeadUseCase` (see `docs/Architecture/System_Architecture.md`).
 
 **Request Flow:**
 
@@ -75,18 +75,18 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 **Responsibilities**
 
 - PostgreSQL
-- Storage
-- Authentication
 
-**Purpose** — Primary relational database (via Prisma) for all domain records (Lead, Lyrics, Song, Campaign, Mood, GenerationAttempt); object storage for generated audio files; authentication for the Admin panel.
+**Purpose** — Primary relational database (via Prisma) for all domain records (Lead, Lyrics, Song, Campaign, Mood, GenerationAttempt).
 
-**Expected Inputs** — Reads/writes from repository implementations; audio file uploads; admin login credentials.
+**Note on scope** — `PROJECT_MANIFEST.md` lists Supabase Storage and Supabase Authentication as available infrastructure. Neither is exercised by the delivered V1 flow: generated audio is referenced directly by the URL Suno's API returns (never re-uploaded or mirrored — see the Suno section above and `docs/Product/User_Flow.md`), and the Admin panel uses its own signed-session-cookie authentication (see `docs/Architecture/System_Architecture.md` — Authentication Flow), not Supabase Auth. See `BACKLOG_V3.md` for owning the audio asset independently of the AI provider's hosted URL.
 
-**Expected Outputs** — Persisted/retrieved domain records; stored file URLs; authenticated admin sessions.
+**Expected Inputs** — Reads/writes from repository implementations.
 
-**Failure Scenarios** — Connection failure, constraint violation, storage upload failure, authentication failure.
+**Expected Outputs** — Persisted/retrieved domain records.
 
-**Retry Policy** — Retry transient connection/upload failures a limited number of times; constraint violations (e.g. duplicate email) are not retried — they are translated into the corresponding business error.
+**Failure Scenarios** — Connection failure, constraint violation.
+
+**Retry Policy** — Retry transient connection failures a limited number of times; constraint violations (e.g. duplicate email) are not retried — they are translated into the corresponding business error.
 
 ## Resend
 

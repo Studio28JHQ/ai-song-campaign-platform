@@ -44,10 +44,6 @@ Suno Song Generation
 
 ↓
 
-Store Audio
-
-↓
-
 Send Email
 
 ↓
@@ -74,9 +70,7 @@ Campaign Finished
 
 **Accept Lyrics / Generate Again** — User either approves the lyrics to proceed, or requests regeneration (consuming an attempt).
 
-**Suno Song Generation** — Approved lyrics and the selected mood's fixed prompt are sent to Suno to generate the final audio.
-
-**Store Audio** — The generated audio file is stored in Supabase Storage.
+**Suno Song Generation** — Approved lyrics and the selected mood's fixed prompt are sent to Suno to generate the final audio. Suno's response includes a hosted URL for the audio file; that URL is persisted on the `Song` record as-is (see `docs/Architecture/External_Services.md` — Supabase) and is what the player, download link, and email all point to directly.
 
 **Send Email** — The final song is emailed to the user via Resend.
 
@@ -286,7 +280,6 @@ The Dashboard's summary indicators, the participants table's filters, and the CS
 - **Lyrics generation failure**: Claude API call fails or times out; user is shown an error and may retry without consuming an attempt.
 - **Lyrics regeneration requested**: User rejects the previewed lyrics and requests a new version; an attempt is consumed.
 - **Song generation failure**: Suno API call times out, is unavailable, or returns an unexpected response; the song is persisted as `FAILED` (discovered by the client via polling), is never retried automatically, and does not consume a lyric attempt — the same lead can trigger a fresh attempt via `POST /api/song/generate`.
-- **Audio storage failure**: Upload to Supabase Storage fails; the system retries before proceeding to email delivery.
 - **Email delivery failure**: Resend fails to deliver the final email; the failure is logged for admin follow-up rather than blocking or retrying automatically — the song itself has already completed successfully by this point (see Email Delivery above).
 - **Campaign capacity reached**: The 3,000 song cap is reached; new registrations are declined or queued per campaign rules.
 - **Campaign period ended**: The one-month campaign window has closed; the Landing Page no longer accepts new registrations.

@@ -8,7 +8,7 @@ The system is a modular monolith built on Next.js, following Clean Architecture 
 
 - **Domain** — Core business concepts and rules: leads, emails, attempts, moods, lyrics, songs. No framework or infrastructure dependencies.
 - **Application** — Use cases / orchestration (e.g. register lead, generate lyrics, accept lyrics, generate song, deliver email). Depends only on the domain layer and repository/service interfaces.
-- **Infrastructure** — Implementations of repositories and external service adapters (Prisma/Supabase persistence, Claude client, Suno client, Resend client, Supabase Storage client).
+- **Infrastructure** — Implementations of repositories and external service adapters (Prisma/Supabase persistence, Claude client, Suno client, Resend client).
 - **Presentation** — Next.js Route Handlers and UI (React components, pages) that call into the application layer.
 
 Dependencies point inward: presentation and infrastructure depend on application and domain; domain depends on nothing else.
@@ -17,7 +17,7 @@ Dependencies point inward: presentation and infrastructure depend on application
 
 - **Anthropic Claude API** — content moderation and lyrics generation.
 - **Suno API** — final song (audio) generation.
-- **Supabase** — primary database (via Prisma) and Supabase Storage for audio files.
+- **Supabase** — primary database (via Prisma). Generated audio is referenced directly by the URL Suno's API returns, never uploaded to Supabase Storage — see `docs/Architecture/External_Services.md`.
 - **Resend** — transactional email delivery of the final song.
 - **Vercel** — hosting and deployment.
 - **Cloudflare** — DNS/CDN/edge in front of the deployed application.
@@ -30,17 +30,17 @@ Dependencies point inward: presentation and infrastructure depend on application
 4. On approval, application layer calls Claude to generate lyrics and returns a preview to the user.
 5. User accepts or requests regeneration (consuming an attempt) via another Route Handler call.
 6. On acceptance, application layer calls Suno to generate the song (no attempt consumed).
-7. Generated audio is stored in Supabase Storage.
+7. The song's provider-hosted audio URL is persisted on the `Song` record — see `docs/Architecture/External_Services.md` for why this is not mirrored to separate storage.
 8. Application layer triggers Resend to email the final song to the user.
 9. Lead/campaign state is persisted throughout via the Repository Pattern over Prisma/Supabase.
 
 ## Data Flow
 
-Lead and personalization data, attempt counts, moderation results, lyrics versions, and final song references are persisted in the database via repositories. Audio binaries are stored in Supabase Storage, referenced by URL/key from the database record. The admin panel reads this same persisted data to display submissions and produce CSV exports.
+Lead and personalization data, attempt counts, moderation results, lyrics versions, and final song references are persisted in the database via repositories. Audio itself stays hosted at the URL Suno's API returns; only that URL is persisted on the `Song` record — see `docs/Architecture/External_Services.md`. The admin panel reads this same persisted data to display submissions and produce CSV exports.
 
 ## Deployment Architecture
 
-The Next.js application is deployed as a single unit to Vercel, sitting behind Cloudflare. Supabase hosts the database and object storage. There is no separate backend service, queue, or worker fleet — all orchestration (moderation → lyrics → song → email) happens within the same application via Route Handlers and application-layer use cases.
+The Next.js application is deployed as a single unit to Vercel, sitting behind Cloudflare. Supabase hosts the database. There is no separate backend service, queue, or worker fleet — all orchestration (moderation → lyrics → song → email) happens within the same application via Route Handlers and application-layer use cases.
 
 ## Technology Decisions
 
@@ -48,7 +48,7 @@ See `PROJECT_MANIFEST.md` for the full stack. Key decisions:
 
 - **Next.js Route Handlers** instead of a separate API service — keeps the monolith cohesive and avoids operating a second deployable.
 - **Prisma + Supabase** for a single, managed relational data store — no need for polyglot persistence at this scale.
-- **Repository Pattern + Dependency Injection** to keep domain/application code decoupled from Prisma/Supabase specifics, without introducing a heavier framework.
+- **Repository Pattern + Dependency Injection** to keep domain/application code decoupled from Prisma/Supabase specifics, without introducing a heavier framework. Dependency Injection here means plain constructor injection at each composition root (e.g. `app/api/leads/route.ts` constructs `new CreateLeadUseCase(new PrismaLeadRepository(), campaignConfig)`) — every use case depends only on a repository/service _interface_, never a concrete class, which is what makes each one independently testable with a fake. There is deliberately no DI container/framework: at this scale, one wired at the top of each route is simpler and equally swappable.
 
 ## Lead Persistence Flow
 

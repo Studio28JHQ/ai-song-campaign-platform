@@ -1,22 +1,22 @@
 # Domain Model
 
-This document describes the initial domain model at a conceptual level only. It does not define code, schemas, or implementation details — see `docs/Architecture/Folder_Structure.md` for where this will eventually live (`src/domain/`).
+This document describes the domain model as delivered. See `docs/Architecture/Folder_Structure.md` for where each module lives (`src/domain/`, `src/application/`).
 
 ## Lead
 
 **Purpose** — Represents a person (parent) who registered on the Landing Page to generate a song. Implemented as an aggregate root at `src/domain/lead/entities/Lead.ts`.
 
-**Responsibilities** — Holds the registrant's identity (parent name, baby name, baby age, city, email, phone) and personalization inputs; is the anchor record tying together attempts, lyrics, and the final song. Enforces its own invariants rather than trusting callers to — nothing outside the entity can put a `Lead` into an invalid state.
+**Responsibilities** — Holds the registrant's identity (parent name, baby name, baby age, city, email, phone) and personalization inputs; is the anchor record tying together lyrics and the final song. Enforces its own invariants rather than trusting callers to — nothing outside the entity can put a `Lead` into an invalid state.
 
 **Invariants** (enforced by the entity itself, not by infrastructure):
 
 - `parentName`, `babyName`, and `email` are mandatory — construction fails otherwise.
 - `email`, `phone`, and `babyAge` are represented by self-validating value objects (`Email`, `PhoneNumber`, `BabyAge` in `src/domain/lead/value-objects/`) that reject malformed input. This is _structural_ validation only (is the string shaped like an email/phone? is the age a plausible integer?) — uniqueness of email and any deliverability/carrier checks are infrastructure/application concerns handled elsewhere.
-- `remainingAttempts` can never be negative, and can never exceed the campaign's configured maximum (passed in at creation/rehydration — not stored redundantly on the Lead itself, since it belongs to the `Campaign` aggregate).
+- `remainingAttempts` can never be negative, and can never exceed the campaign's configured maximum (passed in at creation/rehydration — not stored redundantly on the Lead itself).
 - Attempts can only be consumed while the lead is in the `GENERATING` state; consuming the last attempt automatically transitions the lead to `BLOCKED` so that invariant can't be forgotten by a caller.
 - Status transitions are only ever performed through explicit methods (`startGenerating`, `complete`, `block`, `fail`) — there is no public setter for status.
 
-**State Transitions** — `LeadStatus` (`src/domain/lead/types/index.ts`) is intentionally coarser than the persistence-layer `LeadStatus` enum in `prisma/schema.prisma`: the domain-level status only tracks the Lead aggregate's own lifecycle, while the finer-grained states (moderation rejected, lyrics approved, song ready, ...) will belong to the `Lyrics`/`Song` aggregates once they're implemented.
+**State Transitions** — `LeadStatus` (`src/domain/lead/types/index.ts`) is intentionally coarser than the persistence-layer `LeadStatus` enum in `prisma/schema.prisma`: the domain-level status only tracks the Lead aggregate's own lifecycle, while the finer-grained states (lyrics approved, song ready, ...) belong to the `Lyrics`/`Song` aggregates.
 
 ```
 REGISTERED ──▶ GENERATING ──▶ COMPLETED
@@ -27,42 +27,15 @@ REGISTERED ──▶ GENERATING ──▶ COMPLETED
 
 `COMPLETED`, `BLOCKED`, and `FAILED` are terminal — no further transitions are allowed out of them.
 
-**Relationships** — One Lead has one associated email (unique). One Lead has one Campaign context (referenced by `campaignId`; the Campaign's maximum-attempts value is supplied to the Lead rather than looked up by it, keeping the two aggregates decoupled). One Lead has many GenerationAttempts. One Lead has, at most, one accepted Lyrics and one final Song. The persistence contract for this aggregate is `LeadRepository` (`src/domain/lead/repositories/LeadRepository.ts`) — interface only, no implementation yet.
+**Relationships** — One Lead has one associated email (unique, enforced at the database — see `docs/Architecture/Database_Model.md`). One Lead has one Campaign context (referenced by `campaignId`; the Campaign's maximum-attempts value is supplied to the Lead rather than looked up by it, keeping the two decoupled). One Lead has many Lyrics versions. One Lead has, at most, one accepted Lyrics and one final Song. The persistence contract is `LeadRepository` (`src/domain/lead/repositories/LeadRepository.ts`), implemented by `PrismaLeadRepository` (`src/infrastructure/persistence/prisma/lead/`).
 
-## Application Layer — Lead
+### Application Layer — Lead
 
-The Application layer (`src/application/lead/`) orchestrates the `Lead` aggregate. It contains use cases, DTOs, and small application-level contracts — never persistence, HTTP, or infrastructure validation. It depends on the domain layer (entities, value objects, `LeadRepository`); the domain layer never depends back on it.
-
-**Responsibilities of this layer:**
-
-- Translate boundary-facing DTOs (`CreateLeadRequest`) into calls against the domain (`Lead.create`) and the `LeadRepository` contract.
-- Enforce cross-cutting rules that need a repository lookup — the domain entity alone cannot know whether an email is already registered (that requires a query), so the use case checks `LeadRepository.existsByEmail` before creating anything.
-- Supply configuration the domain needs but shouldn't reach for itself. `Lead.create` requires a `maxAttempts` value; the use case obtains it from a small `LeadCampaignConfig` port (`getMaxLyricAttempts()`) rather than importing `@/config` directly, so the use case stays testable with a fake and swappable without touching this layer.
-- Return DTOs (`CreateLeadResponse`, carrying a `LeadSnapshot`) — never the `Lead` entity itself — so nothing outside the application layer can call domain methods directly.
-
-### CreateLeadUseCase
-
-`src/application/lead/use-cases/CreateLeadUseCase.ts`. Given a `CreateLeadRequest`:
-
-1. Validates the email's structural format via the `Email` value object (fails fast, before any repository call).
-2. Calls `LeadRepository.existsByEmail` — if the email is already registered, the use case rejects with a business-rule error. This is the enforcement point for "one email address can participate only once" at the application level (the database-level uniqueness constraint in `docs/Architecture/Database_Model.md` is the final backstop).
-3. Reads the campaign's maximum lyric attempts from `LeadCampaignConfig` and passes it to `Lead.create`, so a new lead's `remainingAttempts` — and its initial `status` of `REGISTERED` — come entirely from the domain entity's own construction logic, not from ad hoc application code.
-4. Persists the new `Lead` via `LeadRepository.create`.
-5. Returns a `CreateLeadResponse` wrapping the persisted lead's snapshot.
-
-No Prisma/Supabase repository, API route, controller, or UI exists yet — `LeadRepository` remains an interface, satisfied only by a test double until the Infrastructure layer implements it.
-
-## Song
-
-**Purpose** — Represents the final, generated audio deliverable for a Lead.
-
-**Responsibilities** — References the accepted Lyrics and selected Mood used to generate it; references the stored audio file; tracks delivery status (emailed or not).
-
-**Relationships** — Belongs to exactly one Lead. Generated from exactly one accepted Lyrics and one Mood. Only one Song exists per Lead.
+`src/application/lead/` orchestrates the `Lead` aggregate: `CreateLeadUseCase` validates the email's structural format, checks `LeadRepository.existsByEmail` (the enforcement point for "one email address can participate only once" — the database's unique constraint on `Lead.email` is the final backstop), reads the campaign's maximum lyric attempts from the small `LeadCampaignConfig` port, and persists the new `Lead` via `LeadRepository.create`. Wired into `POST /api/leads` (`app/api/leads/route.ts`).
 
 ## Lyrics
 
-**Purpose** — Represents one generated lyrics version produced for a Lead's personalization input. Implemented as an aggregate root at `src/domain/lyrics/entities/Lyrics.ts`. This aggregate manages lyrics _versions_ only — it does not generate lyrics text itself; the actual generation (Claude) is a separate, not-yet-implemented concern that will call into this module with already-generated content.
+**Purpose** — Represents one generated lyrics version produced for a Lead's personalization input. Implemented as an aggregate root at `src/domain/lyrics/entities/Lyrics.ts`. This aggregate manages lyrics _versions_ only; the actual generation call to Claude is a separate infrastructure concern (`ClaudeLyricsService`, see `docs/Architecture/External_Services.md`) that calls into this module with already-generated content.
 
 **Responsibilities** — Holds the generated text, the prompt it was generated from, its mood, and whether it has been accepted, rejected, or is still pending. Enforces its own invariants rather than trusting callers to.
 
@@ -73,61 +46,69 @@ No Prisma/Supabase repository, API route, controller, or UI exists yet — `Lead
 - A version cannot be approved twice (`approve()` throws if `approved` is already `true`).
 - A rejected version can never be approved, and an approved version can never be rejected — `approved` and a set `rejectionReason` are mutually exclusive terminal outcomes for a given version.
 
-**Lifecycle / Approval Process** — Each generation attempt for a Lead produces a new Lyrics version (a Lead may have multiple). A version starts pending (`approved: false`, `rejectionReason: null`) and ends in exactly one of two terminal states: **approved** (via `approve()` — the only version a Song may later be generated from) or **rejected** (via `reject(reason)` — e.g. moderation, or superseded by the user requesting a regeneration). "Only one Lyrics record can be marked as approved" is a _cross-record_ rule the entity cannot enforce alone (it would need to know about its siblings); that check belongs to `ApproveLyricsUseCase`, backstopped by a database constraint (see `docs/Architecture/Database_Model.md`) as the final guarantee.
+**Lifecycle / Approval Process** — Each generation call for a Lead produces a new Lyrics version (a Lead may have multiple). A version starts pending (`approved: false`, `rejectionReason: null`) and ends in exactly one of two terminal states: **approved** (via `approve()` — the only version a Song may later be generated from) or **rejected** (via `reject(reason)` — e.g. moderation, or superseded by the user requesting a regeneration). "Only one Lyrics record can be marked as approved" is a _cross-record_ rule the entity cannot enforce alone; that check belongs to `ApproveLyricsUseCase`, backstopped by a database partial unique index (see `docs/Architecture/Database_Model.md`).
 
-**Relationships** — Belongs to one Lead (a Lead may have many Lyrics — one per generation attempt). Produced within the context of one GenerationAttempt (not yet implemented). References one Mood. At most one Lyrics per Lead is ever approved; that approved Lyrics is the only one a Song may later be generated from — enforcing that link is the future Song module's responsibility, not this one's. The persistence contract for this aggregate is `LyricsRepository` (`src/domain/lyrics/repositories/LyricsRepository.ts`) — interface only, no implementation yet.
+**Relationships** — Belongs to one Lead (a Lead may have many Lyrics — one per generation attempt). References one Mood. At most one Lyrics per Lead is ever approved; that approved Lyrics is the only one a Song may later be generated from. The persistence contract is `LyricsRepository` (`src/domain/lyrics/repositories/LyricsRepository.ts`), implemented by `PrismaLyricsRepository` (`src/infrastructure/persistence/prisma/lyrics/`).
 
-## Application Layer — Lyrics
+### Application Layer — Lyrics
 
-The Application layer (`src/application/lyrics/`) orchestrates the `Lyrics` aggregate. Like the Lead application layer, it depends only on the domain (entities, `LyricsRepository`) and never the other way around.
+`src/application/lyrics/` has two use cases: `GenerateLyricsUseCase` (version bookkeeping only — derives the next version number, persists a new `Lyrics`) and `ApproveLyricsUseCase` (looks up the Lyrics by id, checks the lead has no other approved version, calls `lyrics.approve()`, persists). Neither one calls Claude directly. The orchestration that actually validates a lead, consumes attempts, and calls Claude is `GenerateLyricsForLeadUseCase` (see `docs/Architecture/System_Architecture.md` — Lyrics Generation Request Sequence), which composes `GenerateLyricsUseCase` internally. Wired into `POST /api/lyrics/generate` and `POST /api/lyrics/approve`.
 
-### GenerateLyricsUseCase
+## Song
 
-`src/application/lyrics/use-cases/GenerateLyricsUseCase.ts`. Given a `GenerateLyricsRequest` (`leadId`, `moodId`, `prompt`, already-generated `content`):
+**Purpose** — Represents the one final, generated audio deliverable for a Lead. Implemented as an aggregate root at `src/domain/song/entities/Song.ts`.
 
-1. Looks up how many Lyrics versions already exist for the lead (`LyricsRepository.findAllByLead`) and derives the next `version` number — version numbering is bookkeeping the use case owns, not something the caller has to track.
-2. Builds a new `Lyrics` via `Lyrics.create` and persists it via `LyricsRepository.create`.
-3. Returns a `GenerateLyricsResponse` wrapping the persisted version's snapshot.
+**Responsibilities** — References the accepted Lyrics and selected Mood used to generate it; tracks its own generation state machine and the resulting `audioUrl`/`duration`; tracks whether it has been emailed. It only tracks state — it never talks to Suno itself (that is `SunoSongService`'s job, called by the application layer).
 
-### ApproveLyricsUseCase
+**Invariants / State Transitions** (enforced by the entity itself):
 
-`src/application/lyrics/use-cases/ApproveLyricsUseCase.ts`. Given an `ApproveLyricsRequest` (`lyricsId`):
+```
+PENDING ──▶ GENERATING ──▶ READY
+                │  ▲
+                └──┴──▶ FAILED ──▶ PENDING     (manual admin retry)
+                        FAILED ──▶ GENERATING  (parent-initiated retry)
+```
 
-1. Looks up the Lyrics by id (`LyricsRepository.findById`); rejects with a business-rule error if not found.
-2. Checks whether the lead already has a different approved version (`LyricsRepository.findApprovedByLead`) — this is the application-level enforcement point for "only one Lyrics record can be approved per lead," since the entity itself has no visibility into its siblings.
-3. Calls `lyrics.approve()` (the entity's own "cannot be approved twice" / "cannot approve a rejected version" invariants apply here too).
-4. Persists via `LyricsRepository.approve` and returns an `ApproveLyricsResponse`.
+`READY` is terminal — a song can only ever succeed once (`Song.leadId` is unique at the database level, so a lead's one-song slot is never occupied by more than one row). `markReady()` requires a non-empty `providerSongId` and `audioUrl`. `retryFromFailure()` resets a `FAILED` song back to `PENDING` without touching its lyrics/mood/provider references, so a retry always reuses the exact same row.
 
-No Claude client, moderation, Prisma/Supabase repository, API route, or UI exists yet — `LyricsRepository` remains an interface, satisfied only by test doubles until the Infrastructure layer implements it.
+**Relationships** — Belongs to exactly one Lead (unique). Generated from exactly one accepted Lyrics and one Mood. The persistence contract is `SongRepository` (`src/domain/song/repositories/SongRepository.ts`), implemented by `PrismaSongRepository` (`src/infrastructure/persistence/prisma/song/`).
+
+### Application Layer — Song
+
+`src/application/song/` has two use cases, split specifically because song generation runs in the background (see `docs/Architecture/System_Architecture.md` — Asynchronous Song Generation): `GenerateSongUseCase` (synchronous intake — validates the lead/campaign/lyrics state, persists `Song` as `PENDING`, returns immediately) and `ProcessSongGenerationUseCase` (the background half — calls Suno, persists `READY`/`FAILED`, triggers the one-time email). Two narrow ports fill in for concepts with no dedicated aggregate: `CampaignGate` (is the campaign active and generation-enabled?) and `MoodSunoPromptProvider` (the mood's fixed Suno prompt) — see "Campaign" and "Mood" below.
 
 ## Campaign
 
-**Purpose** — Represents the overall one-month marketing campaign and its global constraints.
+**Purpose** — The overall one-month marketing campaign and its global constraints (active window, song cap).
 
-**Responsibilities** — Defines the campaign's active window (start/end date) and the overall song cap (up to 3,000).
+**Implementation status** — There is no `Campaign` domain aggregate in `src/domain/`. `Campaign` exists only as a Prisma model (see `docs/Architecture/Database_Model.md`); the one thing the application layer needs from it — "is this campaign active and is generation enabled?" — is satisfied by the narrow `CampaignGate` port (`src/application/song/contracts/CampaignGate.ts`), backed by a thin Prisma adapter (`PrismaCampaignGate`). This was a deliberate simplification during implementation, not an oversight: a full aggregate would add a repository and lifecycle rules with no current caller.
 
-**Relationships** — One Campaign has many Leads. Leads cannot be registered outside the Campaign's active window or once its song cap is reached.
+**Relationships** — One Campaign has many Leads. Leads cannot be registered outside the Campaign's active window or once its song cap is reached (enforced at the application layer where each rule is actually checked, not by a `Campaign` entity).
 
 ## Mood
 
-**Purpose** — Represents one of the four predefined moods a user can select for their song.
+**Purpose** — One of the four predefined moods a user can select for their song.
 
-**Responsibilities** — Maps to a fixed Suno prompt used during song generation; is a fixed, small reference set (not user-editable).
+**Implementation status** — Like Campaign, there is no `Mood` domain aggregate. `Mood` is a small, fixed Prisma reference table (see `docs/Architecture/Database_Model.md`); the one thing the Song flow needs — a mood's name and fixed Suno prompt — is satisfied by the narrow `MoodSunoPromptProvider` port, backed by a thin Prisma adapter.
 
-**Relationships** — Selected once per Lead's personalization. Used as an input to Song generation alongside the accepted Lyrics.
+**Relationships** — Selected once per Lead's personalization. Used as an input to Lyrics and Song generation.
 
 ## GenerationAttempt
 
-**Purpose** — Represents a single attempt at producing lyrics for a Lead, tracking consumption of the five-attempt budget.
+**Purpose (as designed)** — Intended as a per-attempt audit trail of every interaction with Claude, including attempts that fail before producing lyrics (see `docs/Architecture/Database_Model.md`).
 
-**Responsibilities** — Records whether the attempt was consumed due to moderation rejection or user-requested regeneration, per the rules in `docs/Product/Business_Rules.md`. Never created/consumed for audio (Song) generation.
-
-**Relationships** — Belongs to one Lead. A Lead has up to five GenerationAttempts. Each GenerationAttempt may be associated with one Lyrics record (the output of that attempt, if generation succeeded).
+**Implementation status** — The `GenerationAttempt` Prisma model exists in the schema but is never written to or read by any current code path (verified: no reference outside the generated Prisma client). The five-attempts business rule (see `docs/Product/Business_Rules.md`) is fully enforced today through a simpler mechanism — `Lead.remainingAttempts`, a single counter decremented by `GenerateLyricsForLeadUseCase` — which is sufficient for the rule as written. The practical effect: a moderation-rejected attempt that never produced a `Lyrics` row leaves no individual record of itself (only the decremented counter), so the Admin execution history (see `docs/Product/User_Flow.md`) cannot show it as a distinct timeline event. See `BACKLOG_V3.md` for wiring this table up as a real audit trail.
 
 ## Admin
 
-**Purpose** — Represents the campaign administrator who monitors submissions and exports data.
+**Purpose** — The campaign administrator who monitors submissions and exports data. Implemented as `AdminUser` (`src/domain/admin/entities/AdminUser.ts`) and `AuditLogEntry` (`src/domain/admin/entities/AuditLogEntry.ts`).
 
-**Responsibilities** — Views Leads, Lyrics, and Songs across the Campaign; triggers CSV export. Version 1 supports a single Admin (see `BACKLOG_V2.md` for multiple administrators).
+**`AdminUser`** — Models only the login lifecycle: `assertCanAuthenticate()` (throws if the account is deactivated) and `recordLogin()` (stamps `lastLogin`). There is no create/edit flow — accounts are provisioned directly against the database (see `docs/Architecture/System_Architecture.md` — Authentication Flow). Version 1 supports a single administrator (see `BACKLOG_V2.md` for multiple administrators/roles).
+
+**`AuditLogEntry`** — An immutable record of an administrative action (`login`, `view_lead`, `retry_song`, `resend_email`), backed by the `AuditLog` Prisma model. Persistence contracts: `AdminUserRepository` and `AuditLogRepository` (`src/domain/admin/repositories/`), implemented by `PrismaAdminUserRepository`/`PrismaAuditLogRepository`.
 
 **Relationships** — Not tied to a specific Lead; operates across the whole Campaign.
+
+### Application Layer — Admin
+
+`src/application/admin/` covers authentication (`LoginUseCase`), read-only reporting (`GetDashboardSummaryUseCase`, `SearchLeadsUseCase`, `GetLeadDetailUseCase`, `ExportLeadsUseCase`), and operational recovery (`RetryFailedSongUseCase`, `ResendSongEmailUseCase`). The reporting use cases are pure reads composed directly over the `Lead`/`Lyrics`/`Song` repositories plus two narrow ports for cross-aggregate reads (`AdminDashboardGate`, `AdminLeadSearchGate`) and one for CSV export (`AdminLeadExportGate`) — no parallel read model. See `docs/Architecture/System_Architecture.md` for the full request sequences.

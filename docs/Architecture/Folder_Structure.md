@@ -1,51 +1,70 @@
 # Folder Structure
 
-This document describes the future repository organization. It is documentation only — none of the folders described below are created by this document.
+This document describes the repository organization as delivered.
 
 ## `app/`
 
 Next.js App Router entry point: pages, layouts, and Route Handlers (API endpoints). Contains only routing and thin request/response wiring; delegates business logic to `src/application`.
 
+- `app/page.tsx`, `app/generate/page.tsx`, `app/song/page.tsx` — the public parent-facing flow (Landing, Lyrics Review, Song Result).
+- `app/admin/` — the Administration module's pages (`login`, `dashboard`, `leads/[leadId]`).
+- `app/api/` — Route Handlers: `leads/`, `lyrics/{generate,approve}/`, `song/{generate,[songId]}/`, `admin/{login,logout,dashboard,leads,leads/export,leads/[leadId],songs/[songId]/{retry,resend-email}}/`.
+- `app/layout.tsx`, `app/not-found.tsx`, `app/error.tsx` — root layout and branded error/not-found pages.
+- `app/robots.ts`, `app/sitemap.ts` — file-based SEO conventions.
+- `middleware.ts` (repository root, not under `app/`) — gates every `/admin` and `/api/admin` request; see `docs/Architecture/System_Architecture.md` — Authentication Flow.
+
 ## `src/`
 
-Root of the application source code, organized by layer following Clean Architecture.
+Root of the application source code, organized by layer following Clean Architecture. Four modules exist side by side, each cutting through every layer: `lead/`, `lyrics/`, `song/`, `admin/`.
 
 ### `src/domain/`
 
-Core business entities, value objects, and domain rules (leads, emails, attempts, moods, lyrics, songs). No framework or infrastructure imports. Domain first.
+Core business entities, value objects, and domain rules — one subfolder per module (`lead/`, `lyrics/`, `song/`, `admin/`), each with `entities/`, `repositories/` (interfaces only), and `types/` (plus `value-objects/` for `lead/`). No framework or infrastructure imports — verified by this project's dependency-direction audit (see `docs/Development/Definition_of_Done.md`).
 
 ### `src/application/`
 
-Use cases / application services that orchestrate domain logic (e.g. register lead, moderate content, generate lyrics, accept lyrics, generate song, deliver email). Depends on domain and on repository/service interfaces, not on concrete infrastructure.
+Use cases, DTOs, and narrow ports (`contracts/`) that orchestrate domain logic per module — e.g. `CreateLeadUseCase`, `GenerateLyricsForLeadUseCase`, `GenerateSongUseCase`/`ProcessSongGenerationUseCase`, the Admin module's reporting and recovery use cases. Depends on domain and on repository/service interfaces, never on concrete infrastructure or Next.js.
 
 ### `src/infrastructure/`
 
-Concrete implementations of the interfaces defined in `application`: Prisma-backed repositories, Claude client adapter, Suno client adapter, Resend client adapter, Supabase Storage adapter. This is the only layer allowed to depend on external SDKs directly.
+Concrete implementations of the interfaces defined in `application`/`domain`:
+
+- `persistence/prisma/{lead,lyrics,song,admin}/` — Prisma-backed repositories and mappers, plus the shared Prisma client (`persistence/prisma/client.ts`).
+- `ai/claude/` — `ClaudeClient`, `PromptBuilder`, `ResponseParser`, `ClaudeLyricsService`.
+- `suno/` — `SunoClient`, `PromptBuilder`, `ResponseParser`, `SunoSongService`.
+- `email/` — `ResendClient`, `SongReadyEmailTemplate`, `ResendEmailService`.
+- `auth/` — `ScryptPasswordHasher`, `SignedSessionTokenService`, `sessionCookie.ts`, `getAdminSession.ts`.
+
+This is the only layer allowed to depend on external SDKs/HTTP clients directly.
 
 ### `src/shared/`
 
-Cross-cutting utilities and types shared across layers that do not belong to a single domain concept (e.g. generic result/error types, constants). Kept minimal to avoid becoming a dumping ground.
+Cross-cutting utilities used across every module: `errors/` (the shared error taxonomy — `ValidationError`, `BusinessRuleError`, `DatabaseError`, `ExternalApiError`, `InfrastructureError`), `logger/` (the logging abstraction), `http/` (the timeout/retry HTTP helper used by every provider client), `types/`, `utils/`. Kept minimal by design.
 
-## `components/`
+### `src/config/`
 
-Reusable, presentation-only React/UI components (shadcn/ui-based), with no direct business logic or data-fetching concerns.
+`env.ts` (the only module allowed to read `process.env`, enforced by an ESLint rule) and `app.ts` (the structured `appConfig` built on top of it), plus `constants.ts` for infrastructure-level constants. See `docs/Development/Environment.md`.
 
-## `features/`
+## `src/components/`
 
-Feature-oriented UI modules that compose `components/` and call into `app/` Route Handlers or application use cases for a specific part of the flow (e.g. registration form, lyrics preview, admin dashboard).
+Reusable, presentation-only React/UI components with no business logic: `layout/` (`PageContainer`, `Section`, `ContentWrapper`) and `ui/` (shadcn/ui-based primitives — `button.tsx`, `input.tsx`, `label.tsx` — added only as features required them).
 
-## `lib/`
+## `src/features/`
 
-Framework-adjacent helpers and integration glue (e.g. Prisma client instance, DI wiring/container setup, validation schemas) that support `infrastructure/` and `app/` without containing business rules themselves.
+Feature-oriented UI modules, one per parent-facing/admin concern (`landing/`, `lead/`, `lyrics/`, `song/`, `admin/`), each following the same internal shape: `components/` (React, `"use client"` where interactive), `hooks/` (client-side state/submission logic), `services/` (thin `fetch` wrappers typed against one specific API route, translating HTTP errors into typed error codes).
 
-## `types/`
+## `src/lib/`
 
-Shared TypeScript type definitions used across the frontend and backend where colocating them with a specific layer would create unnecessary coupling.
+`utils.ts` — small, framework-adjacent helpers (e.g. the `cn()` class-name helper used by UI components).
+
+## `src/styles/`
+
+`tokens.ts`, `theme.ts` — the Design System's token definitions (see `docs/Architecture/Design_System.md`).
+
+## `prisma/`
+
+`schema.prisma` (the relational schema — see `docs/Architecture/Database_Model.md`) and `migrations/` (one directory per migration, applied in order).
 
 ## `tests/`
 
-Automated tests: Vitest unit/integration tests mirroring the `src/` layers, and Playwright end-to-end tests covering the main user flow and its failure scenarios.
-
-## `docs/`
-
-Project documentation: `Architecture/`, `Product/`, and `Development/`, as already established in this repository.
+Automated tests, mirroring `src/`'s layers: `domain/`, `application/`, `infrastructure/`, `features/`, `api/` (Route Handler tests), `app/` (page-level component tests), plus `e2e/` (Playwright), `stubs/` (test doubles, e.g. the `server-only` stub), and `setup/` (Vitest setup).

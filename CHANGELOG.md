@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-07-14
+
+Final Version 1 release. The complete campaign flow — Landing → Lead registration → Lyrics generation/approval → Song generation → Email delivery → Administrator monitoring — is implemented and validated end-to-end.
+
+### Added
+
+- Branded `not-found`/`error` pages and a documented final release audit.
+
+### Changed
+
+- Corrected documentation to match delivered behavior: `docs/Architecture/Domain_Model.md` and `docs/Architecture/Folder_Structure.md` rewritten to reflect the actual implemented structure (previously described a pre-implementation, forward-looking design); `docs/Architecture/System_Architecture.md`, `docs/Architecture/External_Services.md`, and `docs/Product/User_Flow.md` corrected to state that generated audio is referenced directly by Suno's hosted URL rather than mirrored to Supabase Storage; `docs/Architecture/Database_Model.md` annotated to note `GenerationAttempt` is currently unused.
+- README rewritten with project overview, architecture summary, prerequisites, installation, environment variables, development, testing, and production deployment sections.
+
+### Fixed
+
+- Removed `src/shared/di/container.ts`, a dead dependency-injection scaffold with zero usages anywhere in the codebase (the project uses plain constructor injection at each route's composition root instead).
+
+### Known Limitations
+
+- Generated audio is served directly from Suno's hosted URL and is not mirrored to owned storage; song availability after the campaign depends on the provider continuing to host the file (see `BACKLOG_V3.md` — Own Audio Storage).
+- The `GenerationAttempt` table is defined in the schema but not populated; the five-attempts rule is fully enforced via `Lead.remainingAttempts` alone, so a moderation-rejected attempt that never produced a `Lyrics` row is not shown as an individual event in the Admin execution history (see `BACKLOG_V3.md` — Generation Attempt Audit Trail).
+- Automated End-to-End coverage is a single landing-page smoke test; the full registration → lyrics → song → email journey is validated via the mocked unit/integration/API test suite rather than a live browser walkthrough, since exercising it live would require real database and AI-provider credentials (see `BACKLOG_V3.md` — Expand End-to-End Test Coverage).
+- `npm audit` reports 5 moderate-severity advisories, all in transitive, build/dev-tool-only dependencies (`prisma`'s bundled `@hono/node-server`, `next`'s bundled `postcss`) with no runtime exposure to campaign visitors; the suggested fixes require downgrading `next`/`prisma` by several major versions and were not applied.
+
 ## [0.7.1] - 2026-07-14
 
 ### Changed
