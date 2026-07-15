@@ -22,8 +22,8 @@ import type { GenerationDispatcherResponse } from "../dto/GenerationDispatcherRe
  * mechanism as before this split: if a Song is already `GENERATING`,
  * this run does nothing and returns `null` — it never submits a second
  * job in parallel. No provider-specific type or logic appears here;
- * that lives entirely in `src/infrastructure/` (e.g. `SunoSongService`
- * today, a future `MurekaSongService` later, with zero changes to this
+ * that lives entirely in `src/infrastructure/` (e.g. `MurekaSongService`
+ * today, a different provider adapter later, with zero changes to this
  * file).
  *
  * RC-2 — Production Hardening: the one-concurrent-generation slot could

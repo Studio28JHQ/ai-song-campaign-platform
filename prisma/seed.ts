@@ -21,7 +21,7 @@ import { CampaignStatus, PrismaClient } from "../src/generated/prisma/client";
  * (the same existing values `src/config/env.ts` validates for the running
  * application) rather than through `@/config/app`, so this standalone
  * script only depends on the two variables it actually needs, not the
- * full application configuration (Claude/Suno/Resend/R2 credentials the
+ * full application configuration (Claude/Mureka/Resend/R2 credentials the
  * seed step has no reason to require).
  */
 

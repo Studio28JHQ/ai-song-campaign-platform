@@ -14,7 +14,7 @@ Errors that indicate a bug or an unhandled condition (e.g. null reference, progr
 
 ## External API Failures
 
-Claude, Suno, and Resend calls can fail or time out. Each integration:
+Claude, Mureka, and Resend calls can fail or time out. Each integration:
 
 - Catches and classifies failures (timeout, rate limit, invalid response, service error).
 - Retries transient failures according to the policy in `docs/Architecture/External_Services.md`.

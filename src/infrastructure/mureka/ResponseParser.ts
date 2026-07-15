@@ -31,8 +31,7 @@ const murekaSubmissionSchema = z.object({
  * song(s)) is only populated once `status` is `"succeeded"`; each
  * choice's `duration` is in milliseconds per Mureka's docs, converted
  * to whole seconds here to match this codebase's `Song.duration`
- * convention (see `Song` — the same convention Suno's adapter already
- * follows).
+ * convention (see `Song`).
  */
 const murekaTaskSchema = z.object({
   id: z.union([z.string(), z.number()]),
@@ -86,9 +85,9 @@ export class ResponseParser {
    * Parses and validates Mureka's `GET /v1/song/query/{task_id}`
    * response into the shared provider-agnostic poll result (Gate 9.3 —
    * Mureka Polling). Never downloads audio or reaches outside this
-   * class — `ready_to_download` still only carries Mureka's own
-   * short-lived `url`, exactly like `completed` does for Suno; it is
-   * `GenerationPoller`'s job, not this one, to do anything with it.
+   * class — `ready_to_download` only ever carries Mureka's own
+   * short-lived `url`; it is `GenerationPoller`'s job, not this one, to
+   * do anything with it.
    *
    * An unrecognized `status` string is deliberately treated as
    * `"pending"` rather than thrown: Mureka's status enum is documented

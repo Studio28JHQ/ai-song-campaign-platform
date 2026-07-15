@@ -14,7 +14,7 @@ export interface TurnstileSiteverifyResponse {
 /**
  * Minimal HTTP client for Cloudflare Turnstile's `siteverify` endpoint —
  * talks to Turnstile and nothing else, via the shared `httpRequest`
- * helper (timeout + retry — same pattern as `ClaudeClient`/`SunoClient`).
+ * helper (timeout + retry — same pattern as `ClaudeClient`/`MurekaClient`).
  * Response interpretation (valid / invalid / expired) is
  * `TurnstileVerifier`'s job, not this class's.
  */

@@ -10,7 +10,7 @@ export class ValidationError extends AppError {
   }
 }
 
-/** A call to an external provider (Claude, Suno, Resend, ...) failed. */
+/** A call to an external provider (Claude, Mureka, Resend, ...) failed. */
 export class ExternalApiError extends AppError {
   constructor(message: string, options: CategoryErrorOptions) {
     super(message, { ...options, category: "external_api" });

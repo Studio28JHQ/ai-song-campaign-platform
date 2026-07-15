@@ -37,12 +37,12 @@
 
 - Only one final song is generated per user (per email).
 - Song generation only begins after the user accepts a set of lyrics.
-- Song generation uses Suno and never consumes a lyric attempt, regardless of success or failure.
+- Song generation uses Mureka and never consumes a lyric attempt, regardless of success or failure.
 
 ## Mood Rules
 
 - The campaign provides exactly four predefined moods.
-- Each mood maps to a fixed Suno prompt.
+- Each mood maps to a fixed generation prompt.
 - Users select one mood per personalization; moods are not combined or customized.
 
 ## Admin Rules

@@ -9,7 +9,7 @@ const SALT_LENGTH = 16;
 /**
  * Password hashing via Node's built-in `scrypt` — no external dependency
  * (bcrypt/argon2), consistent with this project's preference for
- * minimal, self-owned infrastructure (see `SunoClient`/`ClaudeClient`,
+ * minimal, self-owned infrastructure (see `MurekaClient`/`ClaudeClient`,
  * which use the shared `httpRequest` helper instead of vendor SDKs).
  * Stored format: `<saltHex>:<derivedKeyHex>`.
  */

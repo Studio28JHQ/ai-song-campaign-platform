@@ -8,7 +8,8 @@ import {
   type SongSubmissionDetails,
 } from "../types";
 
-const DEFAULT_PROVIDER = "suno";
+/** Mureka is the active music provider for every newly created Song — see PROJECT_MANIFEST.md. */
+const DEFAULT_PROVIDER = "mureka";
 
 /**
  * `FAILED -> GENERATING` is allowed so a transient provider failure can be
@@ -35,7 +36,7 @@ const ALLOWED_TRANSITIONS: Record<SongStatus, ReadonlyArray<SongStatus>> = {
  * Aggregate root for the one final song a Lead may generate, from an
  * already-approved Lyrics version. No persistence, no framework
  * dependency, and — per this module's scope — no provider call: this
- * entity only tracks state, it never talks to Suno itself.
+ * entity only tracks state, it never talks to Mureka itself.
  */
 export class Song {
   private constructor(private props: SongProps) {}

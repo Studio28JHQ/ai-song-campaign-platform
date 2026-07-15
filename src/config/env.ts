@@ -26,7 +26,6 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET: z.string().min(1),
   CLAUDE_API_KEY: z.string().min(1),
-  SUNO_API_KEY: z.string().min(1),
   MUREKA_API_KEY: z.string().min(1),
   ADMIN_EMAIL: z.string().email(),
   ADMIN_SESSION_SECRET: z

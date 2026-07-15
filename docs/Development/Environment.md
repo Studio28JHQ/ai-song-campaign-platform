@@ -22,8 +22,7 @@ This document describes how environment variables and configuration are managed.
 | `R2_SECRET_ACCESS_KEY`      | R2 secret access key.                                                             |
 | `R2_BUCKET`                 | Name of the private R2 bucket generated audio is stored in.                       |
 | `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics generation).                        |
-| `SUNO_API_KEY`              | Suno API key — the active music provider for V1 (see `PROJECT_MANIFEST.md`).      |
-| `MUREKA_API_KEY`            | Mureka API key — integration built and tested, not wired into the live pipeline.  |
+| `MUREKA_API_KEY`            | Mureka API key — the active music provider (see `PROJECT_MANIFEST.md`).           |
 | `ADMIN_EMAIL`               | Email address used to access/notify the admin panel.                              |
 | `ADMIN_SESSION_SECRET`      | Long, random secret (32+ chars) used to sign admin session cookies.               |
 | `CAMPAIGN_NAME`             | Display name of the current campaign.                                             |
@@ -85,5 +84,5 @@ This document describes how environment variables and configuration are managed.
 
 - Environment variables are configured directly in Vercel's project settings (per environment: Production/Preview), not committed to the repository.
 - Only variables prefixed `NEXT_PUBLIC_` are ever exposed to the browser; every other variable stays server-only, matching how `src/config/env.ts` and `src/config/app.ts` are structured.
-- Rotating a key (Claude, Suno, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
+- Rotating a key (Claude, Mureka, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
 - **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret. Vercel Cron then automatically sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation of the job defined in `vercel.json` — no additional configuration needed on the Vercel side. The same secret also protects `GET /api/internal/health`. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped.

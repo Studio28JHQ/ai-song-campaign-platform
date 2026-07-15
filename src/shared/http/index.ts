@@ -8,7 +8,7 @@ import { sleep } from "@/shared/utils";
 
 /**
  * Provider-agnostic HTTP helper: timeout + retry on top of `fetch`. This is
- * infrastructure only — no provider (Claude, Suno, Resend, Supabase) is
+ * infrastructure only — no provider (Claude, Mureka, Resend, Supabase) is
  * wired up here. Provider adapters will build on top of this later.
  */
 

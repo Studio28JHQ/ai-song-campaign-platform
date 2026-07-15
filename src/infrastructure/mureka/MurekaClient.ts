@@ -13,7 +13,7 @@ const MUREKA_BILLING_PATH = "/v1/account/billing";
  * generation endpoints — talks to Mureka and nothing else, built on the
  * shared `httpRequest` helper (`src/shared/http/`) rather than a vendor
  * SDK or an unofficial wrapper, the same pattern as
- * `ClaudeClient`/`SunoClient`. Adds a bearer token (from
+ * `ClaudeClient`/`ResendClient`. Adds a bearer token (from
  * `appConfig.mureka.apiKey`). Network errors and timeouts are retried
  * transparently by `httpRequest`.
  *

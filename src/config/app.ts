@@ -41,9 +41,6 @@ export const appConfig = {
   claude: {
     apiKey: env.CLAUDE_API_KEY,
   },
-  suno: {
-    apiKey: env.SUNO_API_KEY,
-  },
   mureka: {
     apiKey: env.MUREKA_API_KEY,
   },

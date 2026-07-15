@@ -29,11 +29,15 @@ Use cases, DTOs, and narrow ports (`contracts/`) that orchestrate domain logic p
 
 Concrete implementations of the interfaces defined in `application`/`domain`:
 
-- `persistence/prisma/{lead,lyrics,song,admin}/` — Prisma-backed repositories and mappers, plus the shared Prisma client (`persistence/prisma/client.ts`).
+- `persistence/prisma/{lead,lyrics,song,admin,security}/` — Prisma-backed repositories and mappers, plus the shared Prisma client (`persistence/prisma/client.ts`).
 - `ai/claude/` — `ClaudeClient`, `PromptBuilder`, `ResponseParser`, `ClaudeLyricsService`.
-- `suno/` — `SunoClient`, `PromptBuilder`, `ResponseParser`, `SunoSongService`.
+- `mureka/` — `MurekaClient`, `PromptBuilder`, `ResponseParser`, `MurekaSongService` — the active `SongGenerationProvider`.
+- `storage/` — `StorageClient`, `CloudflareR2Storage`, `R2AudioUrlResolver`, `HttpAudioDownloader`.
 - `email/` — `ResendClient`, `SongReadyEmailTemplate`, `ResendEmailService`.
 - `auth/` — `ScryptPasswordHasher`, `SignedSessionTokenService`, `sessionCookie.ts`, `getAdminSession.ts`.
+- `security/` — `TurnstileClient`, `TurnstileVerifier` (Sprint 8.2 — Abuse Protection).
+- `health/` — `HealthCheckService` (RC-2 — Production Hardening).
+- `http/` — `getClientIp.ts`, `verifyInternalSecret.ts`.
 
 This is the only layer allowed to depend on external SDKs/HTTP clients directly.
 

@@ -14,12 +14,10 @@ const MUREKA_MODEL = "auto";
 const MUREKA_SONG_COUNT = 1;
 
 /**
- * Builds the request payload sent to Mureka from the same
- * `SongGenerationInput` `SunoSongService`'s `PromptBuilder` already
- * consumes (already-approved lyrics text and the Mood's fixed prompt) —
- * only the payload SHAPE is Mureka-specific. Never regenerates or
- * otherwise alters the lyrics text; it is passed through exactly as
- * approved.
+ * Builds the request payload sent to Mureka from `GenerationDispatcher`'s
+ * `SongGenerationInput` (already-approved lyrics text and the Mood's
+ * fixed prompt). Never regenerates or otherwise alters the lyrics text;
+ * it is passed through exactly as approved.
  */
 export class PromptBuilder {
   static build(input: SongGenerationInput): MurekaGenerateRequest {

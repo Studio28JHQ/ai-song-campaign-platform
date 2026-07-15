@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-07-23
+
+Final pre-beta provider switch — Mureka replaces Suno as the active production music provider. `MurekaSongService` (built and validated across Gates 9.2–9.5) is now wired into every composition root that runs the generation pipeline; Suno's infrastructure is deleted outright, not left dormant. No architectural change — `MurekaSongService` already satisfied the `SongGenerationProvider` port structurally; this is a one-line swap repeated at each of the four composition roots.
+
+### Changed
+
+- `app/api/lyrics/approve/route.ts`, `app/api/song/generate/route.ts`, `app/api/admin/songs/[songId]/retry/route.ts`, `app/api/internal/pipeline/run/route.ts` — each now constructs `MurekaSongService` instead of `SunoSongService` as the injected `SongGenerationProvider`. Nothing else in any of these routes changed.
+- `MurekaSongService` now declares `implements SongGenerationProvider` explicitly (previously satisfied it only structurally, never wired in).
+- `Song.create()`'s `DEFAULT_PROVIDER` is now `"mureka"` (was `"suno"`) — every newly created Song is correctly attributed to the provider that will actually generate it.
+- `PROJECT_MANIFEST.md` — "Suno API" replaced with "Mureka API" in the Infrastructure list; "Each mood maps to a fixed Suno prompt" generalized to "a fixed generation prompt" (the domain field itself, `Mood.sunoPrompt`, is intentionally left unrenamed — see Technical debt). The "Do not prepare multiple AI providers" / "Single music provider" constraints, previously violated by Suno and Mureka coexisting in the codebase since Gate 9.2, are genuinely honored again now that Suno is gone.
+
+### Removed
+
+- `src/infrastructure/suno/` (`SunoClient`, `PromptBuilder`, `ResponseParser`, `SunoSongService`, `types.ts`) and `tests/infrastructure/suno/` — deleted outright, not left as dormant dead code.
+- `SUNO_API_KEY` — removed from `src/config/env.ts`/`src/config/app.ts`, `.env.example`, and every documentation reference. No longer a required environment variable anywhere in the codebase.
+
+### Documentation
+
+- Every "Suno" reference across `docs/`, `README.md`, `BACKLOG_V3.md`, and inline code comments updated to "Mureka" (or, for architecture-agnostic prose, genericized) — including correcting several sections (`docs/Architecture/Domain_Model.md`'s Song state diagram, `docs/Product/User_Flow.md`'s Song Generation Endpoints / Song Result Screen sections, `docs/Architecture/System_Architecture.md`'s External Services list) that had drifted stale from an earlier, pre-Sprint-7.5/9.1 architecture (`PENDING`/`READY` statuses that no longer exist, client-side polling that Sprint 7.5 already removed, a raw provider URL persisted directly that Sprint 9.1 already replaced with the R2 object-key model) — these were pre-existing documentation bugs unrelated to the provider switch, corrected while already touching the same sections.
+
+### Technical debt
+
+- `Mood.sunoPrompt` (the Prisma column), `MoodSunoPromptProvider` (the application-layer port), and `PrismaMoodSunoPromptProvider` (its adapter) keep their Suno-era names — renaming them would require a database migration and touch call sites well beyond this switch's scope ("No architectural changes. No redesign."). Business-rule and architecture prose now says "fixed generation prompt" instead of "fixed Suno prompt" to stay accurate without implying the code identifiers changed too.
+
+### Real validation
+
+- Mureka generation credits confirmed still unavailable at switch time (`GET /v1/account/billing` — a free, read-only check — again returned no balance for this account, consistent with every prior gate's finding). A real submission was not attempted.
+- Real, free connectivity/authentication check performed: `GET /v1/account/billing` succeeded with a `200` and the account's real `account_id`, confirming the credentials and network path used by the now-wired-in `MurekaSongService` are live and correct.
+- Full pipeline verified with the mocked-provider fallback, but against the **real** production wiring, not an isolated unit: a new integration test (`tests/application/song/MurekaPipelineIntegration.test.ts`) constructs the real `MurekaSongService`/`MurekaClient` (only `fetch` mocked) and drives it through real `GenerationDispatcher`/`GenerationPoller` instances — submit → poll(`ready_to_download`) → download → R2 upload → `COMPLETED` → email, and the terminal-failure path, both passing end-to-end.
+
 ## [1.9.0] - 2026-07-22
 
 RC-2 — Production Hardening. Closes every production blocker identified in the RC-1 audit: a Song stuck `GENERATING` could permanently block the campaign's one-concurrent-generation slot with no recovery path, the pipeline only ever advanced inside a user request's `after()` callback with no independent scheduler, `POST /api/admin/login` had none of the abuse protection every public endpoint already had, and `.env.example`/environment docs had drifted out of sync with `src/config/env.ts`. No Version 2 features, no architectural redesign — every change extends an existing mechanism.

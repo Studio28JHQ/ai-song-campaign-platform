@@ -9,7 +9,7 @@ const RESEND_DOMAINS_URL = "https://api.resend.com/domains";
 /**
  * Minimal HTTP client for Resend's transactional email API, built on the
  * shared `httpRequest` helper (`src/shared/http/`) rather than the
- * official SDK, consistent with the Claude/Suno integrations and the
+ * official SDK, consistent with the Claude/Mureka integrations and the
  * project's "no unnecessary abstractions" principle. Adds a bearer token
  * (from `appConfig.resend.apiKey`).
  */

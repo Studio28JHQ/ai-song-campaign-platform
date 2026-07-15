@@ -90,8 +90,8 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
   }),
 }));
 
-vi.mock("@/infrastructure/suno/SunoSongService", () => ({
-  SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
+vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
+  MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
     return {
       submitGeneration: mockSubmitGeneration,
       pollGenerationStatus: mockPollGenerationStatus,

@@ -1,12 +1,12 @@
 /**
  * What the generation pipeline needs from a music generation provider —
  * nothing more. Keeps `GenerationDispatcher`/`GenerationPoller` decoupled
- * from any concrete provider (Suno today, Mureka in a future sprint —
- * see PROJECT_MANIFEST.md), so both can be constructed with a fake in
- * tests and the provider swapped later without changing this file or
- * either use case. No provider-specific name, type, or logic belongs in
- * this file — that lives entirely in `src/infrastructure/` (e.g.
- * `SunoSongService`).
+ * from any concrete provider (Mureka, the sole active provider — see
+ * PROJECT_MANIFEST.md), so both can be constructed with a fake in tests
+ * and the provider swapped later without changing this file or either
+ * use case. No provider-specific name, type, or logic belongs in this
+ * file — that lives entirely in `src/infrastructure/` (e.g.
+ * `MurekaSongService`).
  *
  * Sprint 9.1 — Generation Pipeline Refinement: submission and polling
  * are two separate calls, matching how an async, task-based provider
@@ -33,16 +33,15 @@ export interface SongGenerationSubmission {
  * `GenerationPoller`'s job is to download it and persist only the
  * resulting R2 object key; this type never itself gets persisted.
  *
- * `ready_to_download` (Gate 9.3) is a distinct terminal-success signal
- * from `completed`: the provider itself has finished asynchronously,
+ * `ready_to_download` is a distinct terminal-success signal from
+ * `completed`: the provider itself has finished asynchronously,
  * separately from the request that started it, rather than returning
- * the finished result inline like `completed` does. It exists
- * specifically so a genuinely asynchronous provider (Mureka) can report
- * "done" without retroactively changing `SunoSongService`'s existing,
- * synchronous `completed` behavior. As of Gate 9.4 (Audio Download &
- * Storage), `GenerationPoller` handles both variants identically —
- * download, upload to R2, mark `COMPLETED` — except `ready_to_download`
- * skips the "song ready" email (a future gate's job); see
+ * the finished result inline like `completed` does — this is Mureka's
+ * actual result, since it's a genuinely asynchronous, task-based
+ * provider. `completed` remains supported for a hypothetical future
+ * synchronous provider; `GenerationPoller` handles both variants
+ * identically — download, upload to R2, mark `COMPLETED`, deliver the
+ * "song ready" email (Gate 9.5 — Complete End-to-End Song Delivery); see
  * `GenerationPoller` for the full rationale. `providerStatus` on
  * `pending`/`ready_to_download` is the provider's own raw status
  * string, for diagnostics only.

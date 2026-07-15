@@ -12,7 +12,7 @@ import { R2_SIGNED_URL_EXPIRY_SECONDS } from "@/config/constants";
 /**
  * Minimal wrapper around the official `@aws-sdk/client-s3` client, talking
  * to Cloudflare R2's S3-compatible API and nothing else — consistent with
- * the Claude/Suno/Resend clients' "one class per external call" shape.
+ * the Claude/Mureka/Resend clients' "one class per external call" shape.
  * The bucket is never made public: `getSignedDownloadUrl` is the only way
  * this class ever produces a URL, and it always expires.
  */

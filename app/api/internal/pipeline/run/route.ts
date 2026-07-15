@@ -12,7 +12,7 @@ import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/P
 import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
 import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
 import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
-import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
+import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
 import { logger } from "@/shared/logger/logger";
 
 /**
@@ -46,7 +46,7 @@ const songRepository = new PrismaSongRepository();
 const lyricsRepository = new PrismaLyricsRepository();
 const leadRepository = new PrismaLeadRepository();
 const moodProvider = new PrismaMoodSunoPromptProvider();
-const songGenerator = new SunoSongService();
+const songGenerator = new MurekaSongService();
 const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 

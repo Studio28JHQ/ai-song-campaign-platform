@@ -24,31 +24,31 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
  *   provider's raw status for diagnostics; a later invocation will ask
  *   again. No wait, no sleep, no loop — this method returns immediately
  *   either way.
- * - Finished successfully — either `SongGenerationProvider`'s
- *   synchronous `completed` result (today only ever Suno) or its async
- *   `ready_to_download` result (today only ever Mureka, once wired in)
- *   — both go through the same `downloadStoreAndDeliver`: downloads the
- *   audio from the provider's own (short-lived) URL, uploads it to R2,
- *   persists only the resulting object key (`Song.audioStorageKey`) —
- *   never a signed URL, never the provider's URL (see
- *   `AudioUrlResolver`) — marks the Song `COMPLETED`, and only once all
- *   of that has already succeeded, delivers the "song ready" email
- *   (Gate 9.5 — Complete End-to-End Song Delivery), resolving a fresh
- *   signed URL at the moment it's needed and never persisting it. Never
- *   marks `COMPLETED` unless the upload actually succeeded.
+ * - Finished successfully — Mureka's async `ready_to_download` result
+ *   (the port also still structurally supports a hypothetical
+ *   synchronous provider's `completed` result, going through the exact
+ *   same handler) — downloads the audio from the provider's own
+ *   (short-lived) URL, uploads it to R2, persists only the resulting
+ *   object key (`Song.audioStorageKey`) — never a signed URL, never the
+ *   provider's URL (see `AudioUrlResolver`) — marks the Song
+ *   `COMPLETED`, and only once all of that has already succeeded,
+ *   delivers the "song ready" email (Gate 9.5 — Complete End-to-End Song
+ *   Delivery), resolving a fresh signed URL at the moment it's needed
+ *   and never persisting it. Never marks `COMPLETED` unless the upload
+ *   actually succeeded.
  * - Finished with an error → marks the Song `FAILED` with the provider's
  *   reported error, same recovery path as before this split (manual
  *   admin retry via `RetryFailedSongUseCase`).
  *
  * No provider-specific type or logic appears here — that lives entirely
  * in `src/infrastructure/`. How this gets invoked is deliberately not
- * this class's concern: today it is scheduled via Next.js's `after()`
- * right after `GenerationDispatcher` (see `app/api/lyrics/approve/route.ts`),
- * with no persistent worker process or message broker — see
- * PROJECT_MANIFEST.md. A future sprint could invoke the exact same
- * `execute()` from a scheduled job instead, repeatedly, independent of
- * the dispatcher's own schedule — this split is what makes that possible
- * without changing either class.
+ * this class's concern: it is scheduled via Next.js's `after()` right
+ * after `GenerationDispatcher` on every user-facing request that touches
+ * the queue (see `app/api/lyrics/approve/route.ts`), and independently,
+ * on a fixed schedule, by the Vercel Cron pipeline scheduler
+ * (`GET /api/internal/pipeline/run`, RC-2 — Production Hardening) — no
+ * persistent worker process or message broker either way, see
+ * PROJECT_MANIFEST.md.
  */
 export class GenerationPoller {
   constructor(
@@ -99,8 +99,8 @@ export class GenerationPoller {
   /**
    * Shared terminal-success handling for both `SongGenerationPollResult`
    * variants that mean "the provider has finished, here is the audio"
-   * (`completed` — Suno's synchronous result — and `ready_to_download` —
-   * an async provider's result, e.g. Mureka). Downloads the audio,
+   * (`ready_to_download` — Mureka's async result — and `completed`, a
+   * hypothetical synchronous provider's result). Downloads the audio,
    * uploads it to R2, persists only the resulting object key — never a
    * signed URL, never the provider's URL — and marks the Song
    * `COMPLETED`. `COMPLETED` already means "the audio is safely stored,"

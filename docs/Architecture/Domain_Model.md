@@ -58,24 +58,24 @@ REGISTERED ──▶ GENERATING ──▶ COMPLETED
 
 **Purpose** — Represents the one final, generated audio deliverable for a Lead. Implemented as an aggregate root at `src/domain/song/entities/Song.ts`.
 
-**Responsibilities** — References the accepted Lyrics and selected Mood used to generate it; tracks its own generation state machine and the resulting `audioUrl`/`duration`; tracks whether it has been emailed. It only tracks state — it never talks to Suno itself (that is `SunoSongService`'s job, called by the application layer).
+**Responsibilities** — References the accepted Lyrics and selected Mood used to generate it; tracks its own generation state machine and the resulting `audioStorageKey`/`duration`; tracks whether it has been emailed. It only tracks state — it never talks to Mureka itself (that is `MurekaSongService`'s job, called by the application layer).
 
 **Invariants / State Transitions** (enforced by the entity itself):
 
 ```
-PENDING ──▶ GENERATING ──▶ READY
-                │  ▲
-                └──┴──▶ FAILED ──▶ PENDING     (manual admin retry)
-                        FAILED ──▶ GENERATING  (parent-initiated retry)
+QUEUED ──▶ GENERATING ──▶ COMPLETED
+               │  ▲
+               └──┴──▶ FAILED ──▶ QUEUED      (manual admin retry)
+                       FAILED ──▶ GENERATING  (retry re-submission)
 ```
 
-`READY` is terminal — a song can only ever succeed once (`Song.leadId` is unique at the database level, so a lead's one-song slot is never occupied by more than one row). `markReady()` requires a non-empty `providerSongId` and `audioUrl`. `retryFromFailure()` resets a `FAILED` song back to `PENDING` without touching its lyrics/mood/provider references, so a retry always reuses the exact same row.
+`COMPLETED` is terminal — a song can only ever succeed once (`Song.leadId` is unique at the database level, so a lead's one-song slot is never occupied by more than one row). `markCompleted()` requires a non-empty `providerSongId` and `audioStorageKey` (the Cloudflare R2 object key — never a provider or signed URL, see `docs/Architecture/External_Services.md` — Cloudflare R2). `retryFromFailure()` resets a `FAILED` song back to `QUEUED` without touching its lyrics/mood/provider references, so a retry always reuses the exact same row. A `Song` stuck `GENERATING` past `GENERATION_TIMEOUT_MINUTES` is reclaimed automatically by `GenerationDispatcher` (RC-2 — Production Hardening).
 
 **Relationships** — Belongs to exactly one Lead (unique). Generated from exactly one accepted Lyrics and one Mood. The persistence contract is `SongRepository` (`src/domain/song/repositories/SongRepository.ts`), implemented by `PrismaSongRepository` (`src/infrastructure/persistence/prisma/song/`).
 
 ### Application Layer — Song
 
-`src/application/song/` has two use cases, split specifically because song generation runs in the background (see `docs/Architecture/System_Architecture.md` — Asynchronous Song Generation): `GenerateSongUseCase` (synchronous intake — validates the lead/campaign/lyrics state, persists `Song` as `PENDING`, returns immediately) and `ProcessSongGenerationUseCase` (the background half — calls Suno, persists `READY`/`FAILED`, triggers the one-time email). Two narrow ports fill in for concepts with no dedicated aggregate: `CampaignGate` (is the campaign active and generation-enabled?) and `MoodSunoPromptProvider` (the mood's fixed Suno prompt) — see "Campaign" and "Mood" below.
+`src/application/song/` has three use cases, split specifically because song generation runs in the background (see `docs/Architecture/System_Architecture.md` — Asynchronous Song Generation): `GenerateSongUseCase` (synchronous intake — validates the lead/campaign/lyrics state, persists `Song` as `QUEUED`, returns immediately), `GenerationDispatcher` (submits the oldest `QUEUED` song to Mureka, persists the submission details), and `GenerationPoller` (polls for completion, downloads and stores the audio in R2, marks `COMPLETED`/`FAILED`, triggers the one-time email). Two narrow ports fill in for concepts with no dedicated aggregate: `CampaignGate` (is the campaign active and generation-enabled?) and `MoodSunoPromptProvider` (the mood's fixed prompt) — see "Campaign" and "Mood" below.
 
 ## Campaign
 
@@ -89,7 +89,7 @@ PENDING ──▶ GENERATING ──▶ READY
 
 **Purpose** — One of the four predefined moods a user can select for their song.
 
-**Implementation status** — Like Campaign, there is no `Mood` domain aggregate. `Mood` is a small, fixed Prisma reference table (see `docs/Architecture/Database_Model.md`); the one thing the Song flow needs — a mood's name and fixed Suno prompt — is satisfied by the narrow `MoodSunoPromptProvider` port, backed by a thin Prisma adapter.
+**Implementation status** — Like Campaign, there is no `Mood` domain aggregate. `Mood` is a small, fixed Prisma reference table (see `docs/Architecture/Database_Model.md`); the one thing the Song flow needs — a mood's name and fixed generation prompt — is satisfied by the narrow `MoodSunoPromptProvider` port, backed by a thin Prisma adapter.
 
 **Relationships** — Selected once per Lead's personalization. Used as an input to Lyrics and Song generation.
 

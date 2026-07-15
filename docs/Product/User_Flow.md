@@ -40,7 +40,7 @@ Generate Again
 
 ↓
 
-Suno Song Generation
+Song Generation
 
 ↓
 
@@ -70,7 +70,7 @@ Campaign Finished
 
 **Accept Lyrics / Generate Again** — User either approves the lyrics to proceed, or requests regeneration (consuming an attempt).
 
-**Suno Song Generation** — Approved lyrics and the selected mood's fixed prompt are sent to Suno to generate the final audio. Suno's response includes a hosted URL for the audio file; that URL is persisted on the `Song` record as-is and is what the player, download link, and email all point to directly. Private Cloudflare R2 storage infrastructure exists (see `docs/Architecture/External_Services.md` — Cloudflare R2), with downloads served only via short-lived signed URLs, but it is not yet part of this flow.
+**Song Generation** — Approved lyrics and the selected mood's fixed prompt are submitted to Mureka to generate the final audio, in the background (Sprint 7.5/9.1 — see `docs/Architecture/System_Architecture.md`). Once Mureka reports the song ready, the audio is downloaded and stored in Cloudflare R2 — a private bucket; the application only ever persists the resulting R2 object key, never a provider URL or a signed URL. The player, download link, and email all resolve a fresh signed URL at the moment they're needed (see `docs/Architecture/External_Services.md` — Cloudflare R2).
 
 **Send Email** — The final song is emailed to the user via Resend.
 
@@ -178,50 +178,26 @@ or, when rejected:
 
 ## Song Generation Endpoints
 
-The **Suno Song Generation** step of the happy path is asynchronous: the client is never made to wait for Suno to finish. It starts with `POST /api/song/generate` and finishes with the client polling `GET /api/song/{songId}` — there is no WebSocket or Server-Sent Events push; the frontend polls every 5 seconds until the song reaches a final status. See `docs/Architecture/System_Architecture.md` for the full sequence and state machine.
+Song generation is entirely asynchronous and entirely server-driven (Sprint 7.5 — see PROJECT_MANIFEST.md — Architecture exception): the client never triggers it directly and never polls a per-song status endpoint. Approving lyrics (`POST /api/lyrics/approve`) synchronously queues the `Song` job (`QUEUED`) and returns immediately; `GenerationDispatcher` and `GenerationPoller` then run it to completion in the background — scheduled both right after that same request (via `after()`) and independently, every 5 minutes, by the Vercel Cron pipeline scheduler (RC-2 — Production Hardening), so the queue keeps advancing even with no further requests. See `docs/Architecture/System_Architecture.md` for the full sequence and state machine.
 
-**`POST /api/song/generate`** — given just `leadId`, the backend looks up everything else server-side (the lead's approved lyrics, and through it the selected mood and its fixed Suno prompt), persists a new `Song` as `PENDING`, and returns immediately — the actual Suno call happens afterward, in the background.
+A song can only be queued if, in order: the lead exists; the lead has not already generated a final (successfully `COMPLETED`) song; the campaign is active and generation is enabled; and the lead has exactly one approved lyrics version. Exactly one Mureka request is made per attempt — never multiple variations (see `docs/Product/Business_Rules.md` — Song Rules).
 
-A song can only be started if, in order: the lead exists; the lead has not already generated a final (successfully `COMPLETED`) song; the campaign is active and generation is enabled; and the lead has exactly one approved lyrics version. Exactly one Suno request is made per attempt — never multiple variations (see `docs/Product/Business_Rules.md` — Song Rules).
+`POST /api/song/generate` still exists as a standalone way to (re)queue a `Song` for a given `leadId`, kept for `GenerateSongUseCase`'s own idempotency — the current frontend never calls it; approving lyrics is the only path a real user takes. `GET /api/song/{songId}` still exists as a public, session-scoped status read for the same reason — nothing in the current frontend calls it either, since the Song Result screen below gets everything it needs from a single session fetch.
 
-**Success — `202 Accepted`:**
-
-```json
-{
-  "songId": "...",
-  "status": "PENDING",
-  "estimatedNextAction": "Poll GET /api/song/{songId} every 5 seconds until status is COMPLETED or FAILED."
-}
-```
-
-**Errors:** `400 invalid_request`, `404 lead_not_found`, `409 song_already_exists`, `422 lyrics_not_approved` / `campaign_disabled` / `business_rule_violation`, `500 internal_error`. These are all synchronous validation failures — nothing has been sent to Suno yet, so none of them touch a `Song` row.
-
-**`GET /api/song/{songId}`** — the polling endpoint. Returns only the current status while generation is in progress; once the song reaches `COMPLETED`, the response also includes the `audioUrl`. The provider name, the provider's own song id, and any other Suno-internal detail are never exposed.
-
-```json
-{ "songId": "...", "status": "PENDING" }
-{ "songId": "...", "status": "GENERATING" }
-{ "songId": "...", "status": "COMPLETED", "audioUrl": "https://...", "duration": 125 }
-{ "songId": "...", "status": "FAILED" }
-```
-
-**Errors:** `400 invalid_request` (missing `songId`), `404 song_not_found`, `500 internal_error`.
-
-A Suno failure — a timeout, the provider being unavailable, or an unexpected response — is always persisted as `FAILED` (never left stuck on `GENERATING`) so the same lead can retry by calling `POST /api/song/generate` again; retries are never automatic (see `docs/Product/Business_Rules.md` — Song Rules).
+A Mureka failure — a timeout, the provider being unavailable, or an unexpected response — is always persisted as `FAILED` (never left stuck on `GENERATING`; a `Song` that somehow does get stuck past `GENERATION_TIMEOUT_MINUTES` is reclaimed automatically by `GenerationDispatcher`, RC-2 — Production Hardening) so the same lead can retry via the admin recovery flow; retries are never automatic (see `docs/Product/Business_Rules.md` — Song Rules).
 
 ## Song Result Screen
 
-`/song` (`app/song/page.tsx`, driven by `src/features/song/`) is the final screen of the happy path — it both triggers generation and shows its outcome, closing the loop opened by the Lyrics Review screen:
+`/song` (`app/song/page.tsx`, driven by `src/features/song/`) is the final screen of the happy path — a purely informational waiting page that never triggers generation itself and never polls:
 
-1. On mount, `useSongResult` (`src/features/song/hooks/`) reads the `leadId`/`babyName` written to `sessionStorage` at registration (redirecting to `/` if missing, same convention as the Lyrics Review screen). If a `songId` from a previous visit is already in `sessionStorage`, it resumes polling that song instead of starting a new one — a lead can only ever generate one final song (see `docs/Product/Business_Rules.md`), so a page refresh must never trigger a second `POST /api/song/generate`.
-2. Otherwise, it calls `POST /api/song/generate` once, stores the returned `songId`, and — unless the response is already a terminal status — starts polling `GET /api/song/{songId}` every 5 seconds. Polling stops immediately once the status is `COMPLETED` or `FAILED`; there is no WebSocket or Server-Sent Events channel anywhere in this flow.
-3. **While `PENDING`/`GENERATING`** — shows the song title (derived from the baby's name), a loading indicator, and an explanatory message. "Generate Another Song" is shown but always disabled, in every state, since only one final song is ever allowed per lead.
-4. **`COMPLETED`** — shows an embedded HTML `<audio>` player (`controls`, `src` set directly to the stored `audioUrl`), the song duration (when available), a "Download Song" link, and a short share message. The download link points straight at the stored audio file — the application never proxies or re-serves it.
-5. **`FAILED`** — shows a friendly, generic message asking the user to contact support (the support email is passed down from the server-rendered page via `appConfig.admin.email`, never hardcoded client-side) — no internal error detail, provider name, or stack trace is ever surfaced.
+1. On mount, `useSongResult` (`src/features/song/hooks/`) makes a single `GET /api/leads/session` fetch (redirecting to `/` if there's no active session). The Lead is identified only by the session cookie — no Lead id or Song id is ever read from or sent by the browser.
+2. **`QUEUED`/`GENERATING`** — shows the song title (derived from the baby's name), a loading indicator, and an explanatory message. The parent is not made to wait on this page or refresh it — they're notified by email once the song is ready. "Generate Another Song" is shown but always disabled, in every state, since only one final song is ever allowed per lead.
+3. **`COMPLETED`** — shows an embedded HTML `<audio>` player (`controls`, `src` set to a freshly resolved signed R2 URL), the song duration (when available), a "Download Song" link, and a short share message. The download link points straight at the resolved audio URL — the application never proxies or re-serves the file itself, and never persists that URL.
+4. **`FAILED`** — shows a friendly, generic message asking the user to contact support (the support email is passed down from the server-rendered page via `appConfig.admin.email`, never hardcoded client-side) — no internal error detail, provider name, or stack trace is ever surfaced.
 
 ## Email Delivery
 
-Once a Song reaches `COMPLETED` (the `GENERATING -> READY` transition, internally — see `docs/Architecture/System_Architecture.md`), exactly one email is sent to the lead's address via Resend, still as part of the same background job that called Suno — the user is never made to wait for it. See `docs/Architecture/External_Services.md` for the full Resend integration and the idempotency mechanism that guarantees the email is never sent twice, even if the background job were ever to run more than once for the same song.
+Once a Song reaches `COMPLETED`, exactly one email is sent to the lead's address via Resend, as part of the same background pipeline run that downloaded and stored the audio — the user is never made to wait for it (see "Song Generation Endpoints" above; the full state machine and unification of the completion paths is in `docs/Architecture/System_Architecture.md`). See `docs/Architecture/External_Services.md` for the full Resend integration and the idempotency mechanism that guarantees the email is never sent twice, even if the background job were ever to run more than once for the same song.
 
 **Subject:** "Your personalized song is ready!"
 
@@ -279,7 +255,7 @@ The Dashboard's summary indicators, the participants table's filters, and the CS
 - **Attempts exhausted**: User has used all five lyric attempts (via regenerations and/or moderation rejections) without accepting lyrics; the flow ends without a song.
 - **Lyrics generation failure**: Claude API call fails or times out; user is shown an error and may retry without consuming an attempt.
 - **Lyrics regeneration requested**: User rejects the previewed lyrics and requests a new version; an attempt is consumed.
-- **Song generation failure**: Suno API call times out, is unavailable, or returns an unexpected response; the song is persisted as `FAILED` (discovered by the client via polling), is never retried automatically, and does not consume a lyric attempt — the same lead can trigger a fresh attempt via `POST /api/song/generate`.
+- **Song generation failure**: Mureka call times out, is unavailable, or returns an unexpected response; the song is persisted as `FAILED` (the parent finds out by email — see Song Result Screen above), is never retried automatically, and does not consume a lyric attempt — recovery is via the admin retry flow (see `docs/Architecture/System_Architecture.md` — Operational Recovery Workflow).
 - **Email delivery failure**: Resend fails to deliver the final email; the failure is logged for admin follow-up rather than blocking or retrying automatically — the song itself has already completed successfully by this point (see Email Delivery above).
 - **Campaign capacity reached**: The 3,000 song cap is reached; new registrations are declined or queued per campaign rules.
 - **Campaign period ended**: The one-month campaign window has closed; the Landing Page no longer accepts new registrations.

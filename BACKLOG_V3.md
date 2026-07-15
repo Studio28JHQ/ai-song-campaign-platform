@@ -32,4 +32,4 @@ The `GenerationAttempt` table is defined in the schema but not populated — the
 
 ## Expand End-to-End Test Coverage
 
-The current Playwright suite is a single landing-page smoke test. Expanding it to cover the full registration → lyrics → song → email journey would require mocking the Claude/Suno/Resend provider boundaries at the network level — worth doing once a dedicated E2E test environment/strategy is planned.
+The current Playwright suite is a single landing-page smoke test. Expanding it to cover the full registration → lyrics → song → email journey would require mocking the Claude/Mureka/Resend provider boundaries at the network level — worth doing once a dedicated E2E test environment/strategy is planned.

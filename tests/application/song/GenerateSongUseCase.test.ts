@@ -172,7 +172,7 @@ describe("GenerateSongUseCase", () => {
     expect(await songRepository.findByLead(lead.id)).toBeNull();
   });
 
-  it("persists a new song as QUEUED and returns immediately, without calling Suno", async () => {
+  it("persists a new song as QUEUED and returns immediately, without calling the provider", async () => {
     const lead = createLead();
     leadRepository.seed(lead);
     const lyrics = createApprovedLyrics(lead.id);

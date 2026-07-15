@@ -9,7 +9,7 @@ describe("Song.create", () => {
     const song = Song.create(validInput);
 
     expect(song.status).toBe(SongStatus.QUEUED);
-    expect(song.provider).toBe("suno");
+    expect(song.provider).toBe("mureka");
     expect(song.providerSongId).toBeNull();
     expect(song.providerTaskId).toBeNull();
     expect(song.providerTraceId).toBeNull();

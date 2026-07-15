@@ -9,7 +9,7 @@ import { SongReadyEmailTemplate } from "./SongReadyEmailTemplate";
 /**
  * Sends the one-time "song ready" email via Resend. Orchestrates
  * building the template and calling the client — mirrors
- * `SunoSongService`'s "build payload → call provider" shape.
+ * `MurekaSongService`'s "build payload → call provider" shape.
  */
 export class ResendEmailService implements SongEmailSender {
   constructor(private readonly client: ResendClient = new ResendClient()) {}

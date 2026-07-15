@@ -88,7 +88,7 @@ Infrastructure
 - Supabase
 - Cloudflare R2 (object storage for generated audio)
 - Anthropic Claude API
-- Suno API
+- Mureka API
 - Resend
 - Vercel
 - Cloudflare
@@ -158,7 +158,7 @@ generation.
 
 The campaign provides exactly four predefined moods.
 
-Each mood maps to a fixed Suno prompt.
+Each mood maps to a fixed generation prompt.
 
 # Roadmap
 

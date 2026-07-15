@@ -92,8 +92,8 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
   }),
 }));
 
-vi.mock("@/infrastructure/suno/SunoSongService", () => ({
-  SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
+vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
+  MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
     return {
       submitGeneration: mockSubmitGeneration,
       pollGenerationStatus: mockPollGenerationStatus,
@@ -243,7 +243,7 @@ describe("POST /api/song/generate", () => {
       "The song has entered the generation queue. You will be notified by email once it is ready.",
     );
     expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
-    // Suno must never be called synchronously as part of the request.
+    // The provider must never be called synchronously as part of the request.
     expect(mockSubmitGeneration).not.toHaveBeenCalled();
   });
 
@@ -308,14 +308,14 @@ describe("POST /api/song/generate", () => {
     expect(mockSendSongReadyEmail).not.toHaveBeenCalled();
   });
 
-  it("persists a FAILED status when Suno fails in the background, without crashing, and never sends an email", async () => {
+  it("persists a FAILED status when the provider fails in the background, without crashing, and never sends an email", async () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockSubmitGeneration.mockRejectedValue(new Error("Suno API responded with status 503."));
+    mockSubmitGeneration.mockRejectedValue(new Error("Mureka API responded with status 503."));
 
     const response = await POST(postRequest());
     expect(response.status).toBe(202);

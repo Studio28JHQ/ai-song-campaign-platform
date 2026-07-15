@@ -1,6 +1,7 @@
 import type {
   SongGenerationInput,
   SongGenerationPollResult,
+  SongGenerationProvider,
 } from "@/application/song/contracts/SongGenerationProvider";
 import { ExternalApiError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -27,20 +28,18 @@ const RETRYABLE_ERROR_CODES = new Set([
 ]);
 
 /**
- * Official Mureka async music generation provider. Orchestrates the
- * three classes above: build payload → call Mureka → parse response —
- * the same "build payload → call provider → parse response" shape as
- * `SunoSongService`/`ClaudeLyricsService`.
+ * Official Mureka async music generation provider — the active
+ * `SongGenerationProvider` for the live pipeline as of the final
+ * pre-beta provider switch. Orchestrates the three classes above:
+ * build payload → call Mureka → parse response, the same shape
+ * `ClaudeLyricsService` uses for its own external call.
  *
- * Gate 9.2 (Mureka Foundation) covers submission only. Gate 9.3
- * (Mureka Polling) adds `pollGenerationStatus`, matching the shared
- * `SongGenerationProvider` port's poll method signature — but this
- * class still does not `implements SongGenerationProvider` and is not
- * wired into `GenerationDispatcher`/`GenerationPoller` (untouched by
- * this gate, still exclusively using `SunoSongService`); swapping the
- * active provider is a future gate's decision, not this one's.
+ * `submitGeneration` returns `MurekaSubmissionResult`, a strict
+ * superset of `SongGenerationSubmission` (adds `submittedAt`,
+ * `providerStatus`), so it satisfies the port's declared return type
+ * structurally without a separate mapping step.
  */
-export class MurekaSongService {
+export class MurekaSongService implements SongGenerationProvider {
   constructor(private readonly client: MurekaClient = new MurekaClient()) {}
 
   async submitGeneration(input: SongGenerationInput): Promise<MurekaSubmissionResult> {

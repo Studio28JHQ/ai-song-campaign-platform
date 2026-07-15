@@ -16,7 +16,7 @@ Modular monolith on Next.js 15 (App Router), following Clean Architecture and li
 
 - **Domain** (`src/domain/`) — entities, value objects, repository interfaces. No framework dependencies.
 - **Application** (`src/application/`) — use cases orchestrating domain logic, depending only on domain + repository/service interfaces.
-- **Infrastructure** (`src/infrastructure/`) — Prisma repositories, and the Claude/Suno/Resend client adapters.
+- **Infrastructure** (`src/infrastructure/`) — Prisma repositories, and the Claude/Mureka/Resend client adapters.
 - **Presentation** (`app/`) — Next.js Route Handlers and pages; thin wiring only.
 
 Dependency Injection is plain constructor injection at each route's composition root (no DI container/framework). Full details: `docs/Architecture/System_Architecture.md`, `docs/Architecture/Domain_Model.md`, `docs/Architecture/Folder_Structure.md`, `docs/Architecture/Database_Model.md`.
@@ -25,7 +25,7 @@ Dependency Injection is plain constructor injection at each route's composition 
 
 **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS 4, shadcn/ui
 **Backend:** Next.js Route Handlers, Prisma ORM
-**Infrastructure:** Supabase (PostgreSQL), Anthropic Claude API, Suno API, Resend, Vercel, Cloudflare
+**Infrastructure:** Supabase (PostgreSQL), Anthropic Claude API, Mureka API, Resend, Vercel, Cloudflare
 **Quality:** Vitest, Playwright, ESLint, Prettier, Husky
 
 ## Prerequisites
@@ -33,7 +33,7 @@ Dependency Injection is plain constructor injection at each route's composition 
 - Node.js 22.23.1 (pinned in `.nvmrc` and `package.json`'s `engines.node` — use `nvm use` to match it locally)
 - npm
 - A PostgreSQL database (e.g. a Supabase project)
-- API keys for Anthropic Claude, Suno, and Resend
+- API keys for Anthropic Claude, Mureka, and Resend
 
 ## Installation
 
@@ -66,8 +66,7 @@ All variables are validated by a Zod schema (`src/config/env.ts`) at startup —
 | `R2_SECRET_ACCESS_KEY`                                    | R2 secret access key.                                                                              |
 | `R2_BUCKET`                                               | R2 bucket name. Private — no public access; downloads are served via short-lived signed URLs.      |
 | `CLAUDE_API_KEY`                                          | Anthropic Claude API key (moderation + lyrics).                                                    |
-| `SUNO_API_KEY`                                            | Suno API key — the active music provider for V1.                                                   |
-| `MUREKA_API_KEY`                                          | Mureka API key — integration built and tested, not wired into the live pipeline.                   |
+| `MUREKA_API_KEY`                                          | Mureka API key — the active music provider.                                                        |
 | `ADMIN_EMAIL`                                             | Admin panel contact/notification address.                                                          |
 | `ADMIN_SESSION_SECRET`                                    | 32+ char secret signing admin session cookies.                                                     |
 | `CAMPAIGN_NAME`                                           | Display name of the current campaign.                                                              |
