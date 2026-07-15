@@ -1,0 +1,8 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <pattern id="dots-tile" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="2.25" fill="#8FD3FF" fill-opacity="0.55"/>
+    </pattern>
+  </defs>
+  <rect width="240" height="240" fill="url(#dots-tile)"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <pattern id="soft-grid-tile" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 L40 40 L0 40" fill="none" stroke="#D6EAF8" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="240" height="240" fill="url(#soft-grid-tile)"/>
+</svg>

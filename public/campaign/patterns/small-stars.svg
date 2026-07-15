@@ -1,0 +1,9 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <pattern id="small-stars-tile" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M12 6 L13.6 10.4 L18 12 L13.6 13.6 L12 18 L10.4 13.6 L6 12 L10.4 10.4 Z" fill="#8B5CF6" fill-opacity="0.5"/>
+      <path d="M34 26 L35.1 29.1 L38 30 L35.1 30.9 L34 34 L32.9 30.9 L30 30 L32.9 29.1 Z" fill="#8FD3FF" fill-opacity="0.6"/>
+    </pattern>
+  </defs>
+  <rect width="240" height="240" fill="url(#small-stars-tile)"/>
+</svg>

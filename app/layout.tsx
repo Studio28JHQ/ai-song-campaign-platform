@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fredoka, Geist, Geist_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,6 +29,37 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
 });
+
+// Sprint UI-2.5 — Campaign Asset Library. The client's actual campaign
+// typefaces (local OTF files, not Google Fonts), loaded here to expose
+// three new CSS variables — `--font-display`, `--font-section-heading`,
+// `--font-body-campaign` — for UI-3 to consume. Deliberately NOT wired
+// into `.theme-campaign`'s `--font-heading`/`--font-sans` bindings yet:
+// this sprint prepares assets only ("no UI redesign yet"), so the live
+// theme keeps using Fredoka/Inter (Sprint UI-1/UI-2) until UI-3
+// explicitly decides to switch. See docs/Design/Asset_Library.md.
+const roundedRobin = localFont({
+  src: "../public/campaign/fonts/rounded-robin.otf",
+  variable: "--font-display",
+  display: "swap",
+});
+
+const gothamMedium = localFont({
+  src: "../public/campaign/fonts/gotham-medium.otf",
+  variable: "--font-section-heading",
+  display: "swap",
+});
+
+const gothamBook = localFont({
+  src: "../public/campaign/fonts/gotham-book.otf",
+  variable: "--font-body-campaign",
+  display: "swap",
+});
+
+// Myriad Pro (`public/campaign/fonts/myriad-pro-regular.otf`) is kept as
+// a renamed asset only — no font loader/CSS variable, since nothing in
+// the brief calls for it ("Do not use Myriad Pro unless already
+// required somewhere else").
 
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — reading the two
@@ -96,7 +128,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} ${inter.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} ${inter.variable} ${roundedRobin.variable} ${gothamMedium.variable} ${gothamBook.variable} antialiased`}
       >
         {children}
       </body>

@@ -1,0 +1,8 @@
+<svg width="240" height="200" viewBox="0 0 240 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <pattern id="waves-tile" width="60" height="20" patternUnits="userSpaceOnUse">
+      <path d="M0 10 C 15 0, 45 20, 60 10" fill="none" stroke="#8B5CF6" stroke-opacity="0.35" stroke-width="2" stroke-linecap="round"/>
+    </pattern>
+  </defs>
+  <rect width="240" height="200" fill="url(#waves-tile)"/>
+</svg>

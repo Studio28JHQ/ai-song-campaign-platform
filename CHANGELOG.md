@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-07-27
+
+Sprint UI-2.5 — Campaign Asset Library. Purely a preparation sprint: normalizes, optimizes, and catalogs every campaign visual asset (photos, fonts, new SVG illustrations/patterns) and stands up the infrastructure (`CampaignIllustration`, three new font CSS variables) UI-3 will consume. No backend, database, or API changes; **no UI redesign** — nothing new is rendered anywhere yet, and `.theme-campaign`'s live font bindings (Fredoka/Inter, Sprint UI-1/UI-2) are untouched.
+
+### Added
+
+- `public/campaign/illustrations/` — 8 hand-authored flat/pastel SVGs (`stars`, `sparkles`, `heart`, `moon`, `cloud`, `bubble`, `leaf`, `circle-decoration`), built from the exact `.theme-campaign` hex palette.
+- `public/campaign/patterns/` — 4 hand-authored tileable SVG patterns (`dots`, `waves`, `small-stars`, `soft-grid`), each a self-contained `<pattern>` tile.
+- `scripts/optimize-campaign-assets.mjs` — a `sharp`-based script generating AVIF+WEBP for backgrounds and WEBP for products/animals alongside (never replacing) the PNG masters; re-runnable whenever a master changes. Measured savings: backgrounds ~2.3–3.0 MB PNG → ~37–44 KB AVIF (~97–98% smaller); products/animals ~220 KB–930 KB PNG → ~23–72 KB WEBP (~90–92% smaller).
+- `src/components/campaign/CampaignIllustration.tsx` — the single source of truth for animal/product asset paths, wrapping `next/image` behind six named variants (`penguin`, `seal`, `booby`, `product-blue`, `product-crema`, `product-infant`); no other file may hardcode a `/campaign/animals/...` or `/campaign/products/...` path.
+- Three new campaign font CSS variables (`--font-display` / Rounded Robin, `--font-section-heading` / Gotham Medium, `--font-body-campaign` / Gotham Book), loaded via `next/font/local` in `app/layout.tsx` following the exact pattern already used for Fredoka/Inter — self-hosted, no network request. Deliberately not wired into `.theme-campaign` yet.
+- `docs/Design/Asset_Library.md` — folder structure, naming convention, illustration/pattern catalogs, typography table, optimization strategy with measured before/after sizes, a CSS-only-decorations reference table (cloud blobs/bubbles/glows/gradients/wave separators — explicitly _not_ shipped as image assets), and `CampaignIllustration` usage.
+
+### Changed
+
+- Every asset under `public/campaign/` renamed to a consistent lowercase/hyphen-separated/ASCII convention (`git mv`, history preserved): `Sensy-Derm-Infant.png` → `sensy-derm-infant.png`, `bassaLogoColor.svg` → `bassa-logo-color.svg`, `Gotham-Book.otf`/`Gotham-Medium.otf`/`MyriadPro-Regular.otf` → `gotham-book.otf`/`gotham-medium.otf`/`myriad-pro-regular.otf`, `"Rounded Robin.otf"` (had a literal space) → `rounded-robin.otf`. Backgrounds additionally prefixed (`ba-da-ba.png` → `background-ba-da-ba.png`, and the same for `gu-gu-ga`/`plup-pup`) per the sprint's explicit naming examples. Files already compliant (`foca.png`, `packshot-sensyderm-crema.png`, `packshot-sensyderm.png`) were left unchanged.
+
+### Known limitations (accepted, out of scope this sprint)
+
+- `myriad-pro-regular.otf` is renamed but has no font loader/CSS variable — unused per the brief ("Do not use Myriad Pro unless already required somewhere else").
+- Nothing in the app currently renders any illustration, pattern, `CampaignIllustration` variant, or the three new font variables — wiring them into actual screens is UI-3's job, not this sprint's.
+
 ## [1.13.0] - 2026-07-26
 
 HOTFIX — GitHub Actions replaces Vercel Cron as the pipeline scheduler. The Vercel Hobby plan only permits cron jobs to run once per day, which was breaking every deployment now that `vercel.json` asked for a 5-minute schedule (RC-2). The scheduler was always meant to be an interchangeable infrastructure detail sitting in front of `GET /api/internal/pipeline/run` — nothing about the queue, `GenerationDispatcher`, `GenerationPoller`, or the endpoint's own contract changes here, only what calls it.
