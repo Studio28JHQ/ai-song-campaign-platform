@@ -100,19 +100,44 @@ npm run test:e2e        # Playwright end-to-end tests
 ## Production Deployment
 
 ```bash
-npm install              # runs `prisma generate` automatically (postinstall)
-npm run build             # next build --turbopack
-npm run start              # next start
+npm install                  # runs `prisma generate` automatically (postinstall) — does NOT touch the database
+npx prisma migrate deploy    # applies any pending migrations to the production database — see checklist below
+npm run build                # next build --turbopack
+npm run start                # next start
 ```
 
 - The Node.js version is pinned (`.nvmrc`, `package.json`'s `engines.node`) so the hosting provider (e.g. Vercel) uses the same runtime as development, rather than an implicit platform default.
-- Prisma Client generation is guaranteed by the repository itself (a `postinstall` script), not by relying on the hosting provider's automatic framework detection.
+- Prisma Client generation is guaranteed by the repository itself (a `postinstall` script), not by relying on the hosting provider's automatic framework detection. **This is codegen only — `prisma generate` never reads or writes the database**, so it cannot apply a migration; nothing in this repository's build pipeline runs `prisma migrate deploy` automatically (no `postinstall`/`build` script, no CI workflow does it — the only GitHub Actions workflow is the pipeline scheduler below). Applying migrations to production is a deliberate, separate, manual step every time the schema changes — see the Deployment Checklist immediately below.
 - Environment variables are configured in the hosting provider's project settings (e.g. Vercel), not committed to the repository — see `docs/Development/Environment.md`.
-- Apply any pending Prisma migrations (`npx prisma migrate deploy`) against the production database before starting the new build.
 - **Run `npm run db:seed` once against the production database** (a Prisma Client seed script at `prisma/seed.ts`, idempotent — safe to run more than once). It creates the one record required for lead registration to work at all: the default `Campaign` row (`id = 00000000-0000-0000-0000-000000000000`, matching `DEFAULT_CAMPAIGN_ID` in `src/features/lead/components/RegistrationForm.tsx`). Without it, every `POST /api/leads` fails with a Prisma `P2003` foreign key error, since `Lead.campaignId` has no row to reference.
 - Security headers (frame/content-type protections, HSTS, referrer/permissions policy) are configured in `next.config.ts` and apply to every route.
 - **External Scheduler (RC-2 — Production Hardening)**: `.github/workflows/song-pipeline.yml`, a GitHub Actions workflow, hits `GET /api/internal/pipeline/run` every 10 minutes — this is what advances the song generation queue independent of user traffic, and is what lets `GenerationDispatcher` reclaim a Song stuck `GENERATING` past `GENERATION_TIMEOUT_MINUTES`. Requires `CRON_SECRET` set both in the hosting provider's environment configuration (so the app can validate it) and as a GitHub Secret of the same name (so the workflow can send it as `Authorization: Bearer $CRON_SECRET`), plus an `APP_URL` GitHub repository variable pointing at the deployed application — see `docs/Development/Environment.md`. Deploying without `CRON_SECRET` set in the hosting provider fails application startup entirely (see `src/config/env.ts`). The scheduler previously ran as a Vercel Cron job (`vercel.json`); that was replaced because the Vercel Hobby plan only allows cron jobs to run once per day, which broke every deployment at the 5-minute schedule RC-2 originally introduced. Trigger a run manually anytime from the repo's Actions tab (`workflow_dispatch`).
-- **Operational health check**: `GET /api/internal/health` (same `CRON_SECRET`, sent as `Authorization: Bearer <token>`) reports database/R2/Resend/Mureka status — `200` when every dependency is healthy, `503` if any one isn't. Point an external uptime monitor at it once deployed.
+- **Operational health check**: `GET /api/internal/health` (same `CRON_SECRET`, sent as `Authorization: Bearer <token>`) reports database/R2/Resend/Mureka status — `200` when every dependency is healthy, `503` if any one isn't. Point an external uptime monitor at it once deployed. Note this check does **not** currently verify migration state (see checklist below) — a `P2021`/`P2022` ("relation"/"column does not exist") error only surfaces once a request actually touches the missing table or column.
+
+### Deployment Checklist
+
+Added after **HOTFIX-DB-1** (2026-07-30): production hit `P2021: relation "public.rate_limit_events" does not exist` because a Sprint 8.2 migration was never applied to the production database — nothing in the deploy pipeline enforced it, and the one-line mention in this file's own command block was easy to miss on a routine redeploy. Run through this list on **every** deployment that includes new migrations, not just the first one ever:
+
+1. **Back up the production database first.** Supabase takes automatic daily backups, but before applying any migration, also trigger an on-demand backup/snapshot from the Supabase dashboard (Database → Backups) — cheap insurance, especially for a migration with a destructive step (a column rename or drop).
+2. **Check what's pending before touching anything** — run, with the production `DATABASE_URL` in the environment:
+   ```bash
+   npx prisma migrate status
+   ```
+   This is read-only. It lists every migration under `prisma/migrations/` and whether the target database has already applied it — confirm which ones (if any) are pending before deciding to deploy.
+3. **Apply pending migrations**, if step 2 shows any:
+   ```bash
+   npx prisma migrate deploy
+   ```
+   Always use this exact command in production — never `prisma migrate dev` (dev-only; can create new migrations or reset the database) and never `prisma db push` (bypasses the migration history table entirely, causing exactly the kind of drift this incident was about).
+4. **Verify `_prisma_migrations` directly** after deploying — the row count should equal the number of folders under `prisma/migrations/`, and every row's `finished_at` should be non-null:
+   ```sql
+   SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at;
+   ```
+5. **Re-run `npx prisma migrate status`** and confirm it reports "Database schema is up to date!" before proceeding to `npm run build`.
+6. **Deploy verification, after the new build is live**:
+   - `GET /api/internal/health` returns `200` (database/R2/Resend/Mureka all reachable — see `HealthCheckService`).
+   - Perform one real (or, outside a live campaign window, a disposable test) lead registration end to end and confirm no `500`/`P2021`/`P2022` in application logs.
+   - If this deployment's migrations touched the song pipeline's columns (e.g. `songs.audioStorageKey`, `providerTaskId`), also confirm `GET /api/internal/pipeline/run` (with `CRON_SECRET`) returns `200` rather than a database error.
 
 ## License
 

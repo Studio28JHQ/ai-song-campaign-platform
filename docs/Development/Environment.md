@@ -86,6 +86,7 @@ This document describes how environment variables and configuration are managed.
 - Only variables prefixed `NEXT_PUBLIC_` are ever exposed to the browser; every other variable stays server-only, matching how `src/config/env.ts` and `src/config/app.ts` are structured.
 - Rotating a key (Claude, Mureka, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
 - **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret, so the deployed application can validate it. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped. The same secret also protects `GET /api/internal/health`.
+- **Database migrations are not applied automatically by any build step or CI workflow** — `prisma generate` (the `postinstall` script) only regenerates the Prisma Client's TypeScript types from `prisma/schema.prisma`; it never touches the database. `npx prisma migrate deploy` must be run manually against `DATABASE_URL` for every deployment that includes new migrations (HOTFIX-DB-1 — a skipped migration is exactly what caused a production `P2021` error). See README.md's "Deployment Checklist" for the full manual procedure.
 
 ### External Scheduler (GitHub Actions)
 

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-07-30
+
+HOTFIX-DB-1 — Production Database Alignment. Documentation-only fix: production was hitting `P2021: relation "public.rate_limit_events" does not exist` on lead creation. Root cause was operational, not a code defect — no application, domain, infrastructure, or UI code changed.
+
+### Fixed (documentation)
+
+- **Root cause**: the Sprint 8.2 migration `20260716083000_abuse_protection` (creates `rate_limit_events`, makes `audit_logs.admin_id` nullable) was never applied to the production database. Nothing in the deploy pipeline runs `prisma migrate deploy` automatically — the `postinstall` script only runs `prisma generate` (TypeScript codegen from the schema, zero database writes), and no CI workflow applies migrations either. The one existing mention of the required manual step was a prose bullet in README.md, positioned after the copy-pasteable command block rather than inside it — easy to miss on a routine redeploy.
+- Also flagged as very likely equally unapplied for the same reason: `20260717093000_generation_pipeline_refinement` (adds `songs.providerTaskId`/`providerTraceId`/`providerStatus`/`providerError`/`submittedAt`/`completedAt`, renames `audioUrl` → `audioStorageKey`) — every migration after the skipped one would also still be pending, which would additionally break the entire song generation pipeline (`GenerationDispatcher`/`GenerationPoller`), not just lead registration. Confirming and, if needed, resolving this is part of the same recovery procedure below.
+- Verified every table the current schema/application expects (`Campaign`, `Lead`, `LeadSession`, `Mood`, `Lyrics`, `GenerationAttempt`, `Song`, `AdminUser`, `AuditLog`, `RateLimitEvent`) is present and consistent across `prisma/schema.prisma` and all 6 migration directories — the defect is a missing migration _application_ in production, not a missing migration _file_ in the repository. Confirmed via `git log` that no migration file was edited after its original commit (rules out checksum/drift from a post-hoc edit).
+- `README.md`: `npx prisma migrate deploy` moved into the literal Production Deployment command block (was only a prose bullet below it); added a "Deployment Checklist" section (backup, `prisma migrate status` before and after, `_prisma_migrations` verification query, `prisma migrate deploy` — never `migrate dev`/`db push` in production — and post-deploy verification via `/api/internal/health` plus a real registration).
+- `docs/Development/Environment.md`: added a note under "Production Deployment" making explicit that `prisma generate` never touches the database and that migrations are a separate manual step, cross-referencing README's new checklist rather than duplicating it.
+
 ## [1.16.0] - 2026-07-29
 
 Sprint UI-3B — Hero Polish & UX Refinement. A refinement pass on the Sprint UI-3A landing redesign, based on reviewing the live implementation against the client's reference artwork — not a redesign, no new architectural concepts, admin/queue/API/domain/database/infrastructure untouched.
