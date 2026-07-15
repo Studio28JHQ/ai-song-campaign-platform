@@ -45,7 +45,10 @@ export function ApprovedLyricsStatus({
       <p className="text-caption font-medium text-foreground">{SONG_STATUS_LABEL[status]}</p>
 
       {status === "FAILED" ? (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
+        >
           No pudimos crear tu canción en este momento. Por favor contáctanos en{" "}
           <a href={`mailto:${supportEmail}`} className="underline">
             {supportEmail}

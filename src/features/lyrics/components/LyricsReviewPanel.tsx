@@ -32,7 +32,10 @@ export function LyricsReviewPanel({
   return (
     <div className="flex flex-col gap-4">
       {errorMessage ? (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
+        >
           {errorMessage}
         </p>
       ) : null}
@@ -50,7 +53,7 @@ export function LyricsReviewPanel({
           type="button"
           onClick={onApprove}
           disabled={busy}
-          className="w-full rounded-full bg-accent text-accent-foreground hover:bg-accent/85 sm:w-auto"
+          className="h-12 w-full rounded-full px-8 text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)] sm:w-auto"
         >
           {isApproving ? "Creando canción..." : "¡Me encanta! Crear canción"}
         </Button>
@@ -59,7 +62,7 @@ export function LyricsReviewPanel({
           variant="outline"
           onClick={onGenerateAgain}
           disabled={busy || noAttemptsLeft}
-          className="w-full rounded-full sm:w-auto"
+          className="h-12 w-full rounded-full border-2 border-primary bg-card px-8 text-base font-semibold text-primary hover:bg-secondary sm:w-auto"
         >
           {isGenerating ? "Creando..." : "Quiero otra versión"}
         </Button>

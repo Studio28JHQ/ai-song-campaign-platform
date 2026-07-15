@@ -26,7 +26,7 @@ export function RegistrationSection({ turnstileSiteKey }: RegistrationSectionPro
             </p>
           </div>
 
-          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+          <div className="w-full max-w-sm rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-6 sm:p-8">
             <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
           </div>
         </div>

@@ -46,10 +46,11 @@ export function RegistrationField({
         maxLength={maxLength}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
+        className="h-12 rounded-xl bg-card px-4 focus-visible:border-primary focus-visible:ring-primary/25"
         {...registration}
       />
       {error ? (
-        <p id={errorId} role="alert" className="text-sm text-destructive">
+        <p id={errorId} role="alert" className="text-sm text-[var(--destructive-text)]">
           {error}
         </p>
       ) : null}

@@ -13,13 +13,13 @@ This document describes the design principles and visual language behind the cam
 
 Colors are named by role, not by appearance — `primary`, `secondary`, `accent`, `background`, `surface`, `border`, `muted`, `success`, `warning`, `error` — so that a component asking for "the primary action color" keeps working even after the actual color value changes when campaign branding is finalized.
 
-The campaign brand palette (soft blues, white, purple accents — Sprint UI-1) is scoped to `.theme-campaign` in `app/globals.css`, applied once at the root of each public-facing page. `:root`'s own tokens (the original neutral palette) are deliberately left untouched, since the admin panel uses the exact same semantic token names and must render unaffected by the public rebrand. No component or feature should hardcode a color value; everything routes through the semantic color tokens, which is precisely what makes this scoping possible without touching a single component.
+The campaign brand palette (Sprint UI-2 — the client's exact hex specification: Background `#F8FCFF`, Headline `#243B53`, Primary Purple `#8B5CF6`, Secondary Blue `#8FD3FF`, among others) is scoped to `.theme-campaign` in `app/globals.css`, applied once at the root of each public-facing page. `:root`'s own tokens (the original neutral palette) are deliberately left untouched, since the admin panel uses the exact same semantic token names and must render unaffected by the public rebrand. No component or feature should hardcode a color value; everything routes through the semantic color tokens, which is precisely what makes this scoping possible without touching a single component. Unlike the rest of the token system, `.theme-campaign` has no dark-mode variant — the brand direction explicitly calls for avoiding dark interfaces on the public campaign, so it stays on its light palette regardless of OS preference.
 
 ## Typography Hierarchy
 
 Typography is organized by role rather than by raw font size: `display`, `heading`, `title`, `body`, `caption`, `label`, `button`. Each role captures a complete, consistent combination of size, line height, and weight for that purpose (e.g. a page's single dominant statement vs. a form field's caption text).
 
-Public-facing headings (`h1`–`h3` within `.theme-campaign`) use a warm, rounded display face (Fredoka) layered on top of the same type scale — only the font-family binding changed, not the roles or their sizes. Body text and the admin panel keep the original sans-serif binding.
+Public-facing headings (`h1`–`h3` within `.theme-campaign`) use a warm, rounded display face (Fredoka) layered on top of the same type scale — only the font-family binding changed, not the roles or their sizes. Public body text (Sprint UI-2) uses Inter, bound to `--font-sans` only inside `.theme-campaign`; the admin panel keeps the original Geist Sans binding untouched.
 
 ## Spacing System
 

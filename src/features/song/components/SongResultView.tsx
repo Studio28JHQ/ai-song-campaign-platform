@@ -42,16 +42,23 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
 
   if (status === "FAILED") {
     return (
-      <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+      <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
         <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
+        >
           No pudimos crear tu canción en este momento. Por favor contáctanos en{" "}
           <a href={`mailto:${supportEmail}`} className="underline">
             {supportEmail}
           </a>{" "}
           para ayudarte.
         </p>
-        <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+        <Button
+          type="button"
+          disabled
+          className="h-12 w-full rounded-full border-2 border-primary bg-card px-8 text-base font-semibold text-primary sm:w-auto"
+        >
           Crear otra canción
         </Button>
       </div>
@@ -62,7 +69,7 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
     const formattedDuration = formatDuration(duration);
 
     return (
-      <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-gradient-to-b from-secondary/50 to-card p-8 text-center shadow-sm">
+      <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-gradient-to-b from-secondary/50 to-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
         <span aria-hidden className="text-4xl">
           🎉
         </span>
@@ -85,7 +92,8 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
             download
             className={buttonVariants({
               variant: "default",
-              className: "rounded-full bg-accent text-accent-foreground hover:bg-accent/85",
+              className:
+                "h-12 rounded-full px-8 text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]",
             })}
           >
             Descargar canción
@@ -93,10 +101,18 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
         ) : null}
 
         <p className="text-caption text-muted-foreground">
+          También te la enviamos a tu correo, por si quieres volver a escucharla más tarde.
+        </p>
+
+        <p className="text-caption text-muted-foreground">
           Comparte la alegría — ¡cuéntales a tus amigos y familia sobre {title}!
         </p>
 
-        <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+        <Button
+          type="button"
+          disabled
+          className="h-12 w-full rounded-full border-2 border-primary bg-card px-8 text-base font-semibold text-primary sm:w-auto"
+        >
           Crear otra canción
         </Button>
       </div>
@@ -104,7 +120,7 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+    <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
       <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
       <div
         role="status"
@@ -115,7 +131,11 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
         Tu letra fue aprobada. Tu canción está en producción. Te avisaremos por correo en cuanto
         esté lista.
       </p>
-      <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+      <Button
+        type="button"
+        disabled
+        className="h-12 w-full rounded-full border-2 border-primary bg-card px-8 text-base font-semibold text-primary sm:w-auto"
+      >
         Crear otra canción
       </Button>
     </div>

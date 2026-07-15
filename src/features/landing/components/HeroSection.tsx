@@ -13,11 +13,22 @@ export function HeroSection() {
   return (
     <Section
       spacing="xl"
-      className="relative overflow-hidden bg-gradient-to-b from-secondary/60 via-background to-background"
+      className="relative overflow-hidden"
+      style={{
+        background: "linear-gradient(180deg, #F8FCFF 0%, #D9F2FF 55%, #BEE8FF 100%)",
+      }}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-gradient-to-br from-primary/20 via-accent/15 to-transparent blur-3xl"
+        className="pointer-events-none absolute -top-16 -left-16 h-64 w-64 rounded-full bg-accent/30 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-10 -right-20 h-80 w-80 rounded-full bg-secondary/50 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-gradient-to-br from-primary/15 via-accent/20 to-transparent blur-3xl"
       />
       <ContentWrapper className="relative">
         <div className="flex flex-col items-center gap-7 text-center">
@@ -41,7 +52,8 @@ export function HeroSection() {
             href="#register"
             className={buttonVariants({
               size: "lg",
-              className: "h-12 rounded-full px-8 text-base",
+              className:
+                "h-12 rounded-full px-8 text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]",
             })}
           >
             Crear la canción de mi bebé

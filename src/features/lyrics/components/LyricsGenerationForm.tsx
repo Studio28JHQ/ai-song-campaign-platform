@@ -138,7 +138,10 @@ export function LyricsGenerationForm({
       </div>
 
       {errorMessage ? (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
+        >
           {errorMessage}
         </p>
       ) : null}
@@ -147,7 +150,7 @@ export function LyricsGenerationForm({
         <Label htmlFor="moodId">Elige el estilo</Label>
         <select
           id="moodId"
-          className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
+          className="h-12 w-full rounded-xl border border-input bg-card px-4 text-base outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/25 md:text-sm"
           {...register("moodId")}
         >
           {MOODS.map((mood) => (
@@ -157,7 +160,7 @@ export function LyricsGenerationForm({
           ))}
         </select>
         {errors.moodId ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-[var(--destructive-text)]">
             {errors.moodId.message}
           </p>
         ) : null}
@@ -172,11 +175,15 @@ export function LyricsGenerationForm({
           maxLength={FIELD_LIMITS.lyricsMessage}
           aria-invalid={Boolean(errors.parentMessage)}
           aria-describedby={errors.parentMessage ? "parentMessage-error" : undefined}
-          className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
+          className="w-full rounded-xl border border-input bg-card px-4 py-3 text-base outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/25 md:text-sm"
           {...register("parentMessage")}
         />
         {errors.parentMessage ? (
-          <p id="parentMessage-error" role="alert" className="text-sm text-destructive">
+          <p
+            id="parentMessage-error"
+            role="alert"
+            className="text-sm text-[var(--destructive-text)]"
+          >
             {translateMessageFieldError(errors.parentMessage.message)}
           </p>
         ) : null}
@@ -192,7 +199,7 @@ export function LyricsGenerationForm({
           onError={() => setValue("turnstileToken", "", { shouldValidate: true })}
         />
         {errors.turnstileToken ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-[var(--destructive-text)]">
             {errors.turnstileToken.message}
           </p>
         ) : null}
@@ -201,9 +208,9 @@ export function LyricsGenerationForm({
       <Button
         type="submit"
         disabled={isSubmitting || noAttemptsLeft}
-        className="mt-2 h-11 w-full rounded-full text-base"
+        className="mt-2 h-12 w-full rounded-full text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]"
       >
-        {isSubmitting ? "Creando..." : "Crear letra"}
+        {isSubmitting ? "Creando..." : "Crear la letra"}
       </Button>
     </form>
   );

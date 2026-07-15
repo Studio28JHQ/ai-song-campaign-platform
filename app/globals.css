@@ -118,7 +118,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 .dark {
@@ -172,68 +171,67 @@ body {
 }
 
 /**
- * Sprint UI-1 — Spanish Localization & Brand Refresh. The campaign
- * palette (soft blues, white, purple accents) and warm display font are
- * scoped to `.theme-campaign` rather than redefined at `:root`, so the
- * admin panel — which uses the exact same semantic token names — is
- * guaranteed to render exactly as before (objective: "Admin remains
- * functional but visually unchanged"). `.theme-campaign` is applied once,
- * at the root of each public-facing page.
+ * Sprint UI-1 (Spanish Localization & Brand Refresh) introduced this
+ * scoping; Sprint UI-2 (Campaign Visual Identity) replaces the values
+ * with the client's exact supplied palette. Scoped to `.theme-campaign`
+ * rather than redefined at `:root`, so the admin panel — which uses the
+ * exact same semantic token names — is guaranteed to render exactly as
+ * before ("Do NOT redesign the Admin Dashboard"). Applied once, at the
+ * root of each public-facing page.
+ *
+ * Deliberately no `prefers-color-scheme: dark` variant here (Sprint
+ * UI-1 had one) — Sprint UI-2 explicitly asks to "Avoid dark
+ * interfaces", so the public pages stay on this light palette
+ * regardless of OS preference. Admin's own dark mode (`:root`/`.dark`
+ * above) is untouched.
+ *
+ * Two text tiers only (`--foreground` = Headline #243B53,
+ * `--muted-foreground` = Body Text #52667A), not the three the brief
+ * lists — "Muted Text" #7A8A99 measures ~3.4:1 against Background,
+ * under the 4.5:1 WCAG AA floor for normal-sized text ("Maintain WCAG
+ * AA contrast" is this sprint's own explicit requirement), so it's
+ * omitted as a text color rather than shipped non-compliant.
+ * `--primary-hover`/`--success-background`/`--destructive-background`
+ * are additive tokens (not part of shadcn's base set) for the exact
+ * hover and status-banner colors the brief specifies.
  */
 .theme-campaign {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.32 0.045 262);
-  --card: oklch(0.99 0.006 250);
-  --card-foreground: oklch(0.32 0.045 262);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.32 0.045 262);
-  --primary: oklch(0.62 0.135 252);
-  --primary-foreground: oklch(0.99 0.005 250);
-  --secondary: oklch(0.95 0.025 252);
-  --secondary-foreground: oklch(0.38 0.08 258);
-  --muted: oklch(0.965 0.012 245);
-  --muted-foreground: oklch(0.52 0.035 258);
-  --accent: oklch(0.64 0.16 305);
-  --accent-foreground: oklch(0.99 0.005 250);
-  --destructive: oklch(0.58 0.2 25);
-  --success: oklch(0.64 0.13 155);
-  --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.78 0.14 75);
-  --warning-foreground: oklch(0.28 0.03 70);
-  --border: oklch(0.9 0.02 250);
-  --input: oklch(0.92 0.018 250);
-  --ring: oklch(0.62 0.135 252);
-  --radius: 0.875rem;
+  --background: #f8fcff;
+  --foreground: #243b53;
+  --card: #ffffff;
+  --card-foreground: #243b53;
+  --popover: #ffffff;
+  --popover-foreground: #243b53;
+  --primary: #8b5cf6;
+  --primary-hover: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #ede9fe;
+  --secondary-foreground: #6d28d9;
+  --muted: #eef8ff;
+  --muted-foreground: #52667a;
+  --accent: #8fd3ff;
+  --accent-foreground: #243b53;
+  --destructive: #ef4444;
+  --destructive-background: #fdecec;
+  /* #ef4444 measures ~3.8:1 on white — under the 4.5:1 AA floor for
+     normal-sized text. Used for borders/icons (3:1 threshold); small
+     error copy uses this darker shade instead (~4.8:1). */
+  --destructive-text: #dc2626;
+  --success: #34c759;
+  --success-background: #e8f8ec;
+  --success-foreground: #ffffff;
+  --warning: #ffb020;
+  --warning-background: #fff5e0;
+  --warning-foreground: #243b53;
+  --border: #d6eaf8;
+  --input: #d6eaf8;
+  --ring: #8b5cf6;
+  --radius: 1rem;
   --font-heading: var(--font-fredoka), var(--font-sans);
+  --font-sans: var(--font-inter), var(--font-geist-sans);
   background: var(--background);
   color: var(--foreground);
-}
-
-@media (prefers-color-scheme: dark) {
-  .theme-campaign {
-    --background: oklch(0.2 0.03 262);
-    --foreground: oklch(0.96 0.01 250);
-    --card: oklch(0.25 0.035 262);
-    --card-foreground: oklch(0.96 0.01 250);
-    --popover: oklch(0.25 0.035 262);
-    --popover-foreground: oklch(0.96 0.01 250);
-    --primary: oklch(0.7 0.13 252);
-    --primary-foreground: oklch(0.15 0.02 260);
-    --secondary: oklch(0.32 0.04 258);
-    --secondary-foreground: oklch(0.94 0.01 250);
-    --muted: oklch(0.3 0.03 258);
-    --muted-foreground: oklch(0.72 0.02 250);
-    --accent: oklch(0.7 0.14 305);
-    --accent-foreground: oklch(0.15 0.02 260);
-    --destructive: oklch(0.68 0.19 22);
-    --success: oklch(0.68 0.13 155);
-    --success-foreground: oklch(0.15 0 0);
-    --warning: oklch(0.78 0.14 75);
-    --warning-foreground: oklch(0.2 0.02 70);
-    --border: oklch(1 0.01 250 / 12%);
-    --input: oklch(1 0.01 250 / 16%);
-    --ring: oklch(0.7 0.13 252);
-  }
+  font-family: var(--font-sans);
 }
 
 .theme-campaign h1,

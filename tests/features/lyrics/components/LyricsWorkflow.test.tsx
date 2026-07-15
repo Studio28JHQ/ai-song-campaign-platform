@@ -112,7 +112,7 @@ describe("LyricsWorkflow", () => {
 
     expect(await screen.findByText("Baby Doe")).toBeInTheDocument();
     expect(screen.getByText("Intentos restantes: 5")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /crear letra/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear la letra/i })).toBeInTheDocument();
   });
 
   it("generates lyrics successfully and shows the review panel, never sending a Lead id", async () => {
@@ -133,7 +133,7 @@ describe("LyricsWorkflow", () => {
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
-    await user.click(screen.getByRole("button", { name: /crear letra/i }));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
 
     expect(await screen.findByText("Title")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear canción/i })).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe("LyricsWorkflow", () => {
 
     renderWorkflow({ maxAttempts: 7 });
     await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
-    await user.click(screen.getByRole("button", { name: /crear letra/i }));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
 
     expect(await screen.findByText("Intento 1 / 7")).toBeInTheDocument();
   });
@@ -188,11 +188,11 @@ describe("LyricsWorkflow", () => {
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/tu mensaje/i), "bad content");
-    await user.click(screen.getByRole("button", { name: /crear letra/i }));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
 
     expect(await screen.findByText("Contains offensive language.")).toBeInTheDocument();
     expect(screen.getByText("Intentos restantes: 4")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /crear letra/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear la letra/i })).toBeInTheDocument();
   });
 
   it("consumes an attempt and refreshes the UI on Generate Again", async () => {
@@ -226,7 +226,7 @@ describe("LyricsWorkflow", () => {
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
-    await user.click(screen.getByRole("button", { name: /crear letra/i }));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
 
     await screen.findByText("Title");
     await user.click(screen.getByRole("button", { name: /otra versión/i }));
@@ -256,7 +256,7 @@ describe("LyricsWorkflow", () => {
 
     renderWorkflow();
     await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
-    await user.click(screen.getByRole("button", { name: /crear letra/i }));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
 
     await screen.findByText("Title");
     await user.click(screen.getByRole("button", { name: /crear canción/i }));
@@ -273,7 +273,7 @@ describe("LyricsWorkflow", () => {
     install(routedFetch({ session: baseSession({ remainingAttempts: 0 }) }));
     renderWorkflow();
 
-    expect(await screen.findByRole("button", { name: /crear letra/i })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /crear la letra/i })).toBeDisabled();
   });
 
   describe("once a Lyrics version has been approved (reconstructed from the backend)", () => {
@@ -290,7 +290,7 @@ describe("LyricsWorkflow", () => {
       renderWorkflow();
 
       await screen.findByText("Title");
-      expect(screen.queryByRole("button", { name: /crear letra/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/elige el estilo/i)).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/tu mensaje/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/intentos restantes/i)).not.toBeInTheDocument();
@@ -374,7 +374,7 @@ describe("LyricsWorkflow", () => {
 
       expect(await screen.findByText("No pudimos crear tu canción")).toBeInTheDocument();
       expect(screen.getByText("help@campaign.example")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /crear letra/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /otra versión/i })).not.toBeInTheDocument();
     });
 
@@ -392,7 +392,7 @@ describe("LyricsWorkflow", () => {
       renderWorkflow();
 
       expect(await screen.findByText("Title")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /crear letra/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
     });
   });
 });

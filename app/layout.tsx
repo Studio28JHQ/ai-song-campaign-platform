@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fredoka, Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,6 +18,14 @@ const geistMono = Geist_Mono({
 // `--font-sans` for headings, unaffected by this variable existing.
 const fredoka = Fredoka({
   variable: "--font-fredoka",
+  subsets: ["latin"],
+});
+
+// Sprint UI-2 — Campaign Visual Identity. Body face for public-facing
+// text (scoped via `.theme-campaign`, same pattern as `fredoka` above)
+// — admin keeps `--font-sans` (Geist) for body text, unaffected.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -88,7 +96,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} ${inter.variable} antialiased`}
       >
         {children}
       </body>

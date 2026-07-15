@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-07-25
+
+Sprint UI-2 — Campaign Visual Identity. Purely visual sprint replacing Sprint UI-1's approximated palette with the client's exact supplied brand system: exact hex colors, Fredoka/Inter typography, exact button/input/card specs, and an exact 3-stop hero gradient. No backend, domain, application-logic, API, or database changes; the admin panel is untouched, both visually and in copy.
+
+### Changed
+
+- `.theme-campaign` (`app/globals.css`) rewritten with the client's exact hex palette (Background `#F8FCFF`, Headline `#243B53`, Primary `#8B5CF6`/hover `#7C3AED`, Secondary Blue `#8FD3FF`, borders `#D6EAF8`, etc.) in place of Sprint UI-1's OKLCH approximations. `:root`/`.dark` (admin's tokens) untouched.
+- Deliberately no `prefers-color-scheme: dark` variant for `.theme-campaign` (Sprint UI-1 had one) — the brief's "avoid dark interfaces" direction means public pages stay on the light palette regardless of OS preference. Admin's own dark mode is unaffected.
+- Added `Inter` (`next/font/google`) as the public body font, bound to `--font-sans` only inside `.theme-campaign`, following the same scoped-variable pattern already used for the Fredoka heading font — admin keeps Geist Sans.
+- All public primary/secondary buttons (Registration submit, "Crear la letra", "¡Me encanta! Crear canción", "Quiero otra versión", hero CTA, "Descargar canción") now follow the brief's exact button spec: `h-12`, pill radius, `font-semibold`, soft `shadow-primary/25`, and an exact `#7C3AED` hover via a new `--primary-hover` token (the shared `Button` component's default `hover:bg-primary/80` opacity trick doesn't hit the exact hex, so this is applied per-instance).
+- All public text inputs/select/textarea bumped to `h-12`/`rounded-xl`, white (`bg-card`) background, and an exact `focus-visible:border-primary` + `ring-primary/25` focus state, replacing the shared `Input` component's default sizing/ring color per-instance (the shared component itself, used by admin, is untouched).
+- Card wrapper radius (`RegistrationSection`, `app/generate/page.tsx`, all three `SongResultView` states) changed from `rounded-3xl` to an explicit `rounded-[24px]` — this codebase's `@theme inline` block scales `rounded-3xl` off `--radius` (`calc(var(--radius) * 2.2)`), so it no longer equals a fixed 24px once `--radius` changed; a soft diffuse `shadow-[0_8px_30px_rgba(139,92,246,0.08)]` was added at the same time, replacing `shadow-sm`.
+- Hero section (`HeroSection.tsx`) background replaced with the brief's exact 3-stop gradient (`#F8FCFF → #D9F2FF → #BEE8FF`) and two additional soft blurred decorative circles, on top of the existing blob.
+- "Crear letra" → "Crear la letra" (`LyricsGenerationForm.tsx`), matching the brief's updated copy example; the corresponding `LyricsWorkflow.test.tsx` matcher updated from `/crear letra/i` to `/crear la letra/i` (the old regex required "crear" immediately followed by " letra", which no longer matches with "la" in between).
+- Added a short reassurance line to the completed-song screen ("También te la enviamos a tu correo...") — one of the brief's listed screens ("Email sent") that had no explicit copy before.
+- Fixed a pre-existing bug (not introduced by this sprint, but blocking its own body-font requirement): an unlayered `body { font-family: Arial, Helvetica, sans-serif }` rule in `globals.css` was a direct declaration on `body`, which always wins over an inherited `--font-sans`/`html { @apply font-sans }` value regardless of CSS layers — meaning body text sitewide (admin included) was rendering in Arial, not Geist Sans as intended, this whole time. Removed the hardcoded `font-family`, letting `--font-sans` (Geist for admin, Inter inside `.theme-campaign`) take effect as designed.
+
+### Accessibility
+
+- Two text tiers only (`--foreground`/Headline `#243B53`, `--muted-foreground`/Body `#52667A`), not the three hex values the brief lists — "Muted Text" `#7A8A99` measures ~3.4:1 against Background, under the 4.5:1 WCAG AA floor for normal-sized text, so it's omitted as a text color rather than shipped non-compliant.
+- Added a `--destructive-text` token (`#DC2626`) for small error copy — the brief's exact `--destructive` (`#EF4444`) measures ~3.8:1 on white, under the 4.5:1 floor for normal text (though it clears 3:1 for borders/icons, where it's still used).
+- Status banners (form/lyrics/song error alerts) changed from colored text on a tinted background to dark body text + a colored left border + tinted background, using new `--destructive-background`/`--success-background` tokens — avoids the contrast failure of colored-text-on-tinted-background while keeping the exact brand hex values as accents.
+- Primary buttons are `font-semibold` at `text-base` — white-on-`#8B5CF6` measures ~4.2:1, under 4.5:1 for normal text but clearing 3:1 for bold/large text, so button labels are sized/weighted to qualify.
+- Focus-visible states on all public inputs/selects/textareas now show both an exact-color border (`--primary`) and a ring, not just the default ring — a more visible, brand-consistent keyboard-focus indicator than the shared `Input` component's default.
+
 ## [1.11.0] - 2026-07-24
 
 Sprint UI-1 — Spanish Localization & Brand Refresh. Purely visual/copy sprint preparing the application for the first customer demo: the complete public experience (Landing, Registration, Lyrics generation/review, Song result, every error/waiting state) is now in Spanish, and the monochrome placeholder palette is replaced with the campaign brand palette (soft blues, white, purple accents — no black buttons). No backend, domain, application-logic, API, or database changes; the admin panel is untouched, both visually and in copy.

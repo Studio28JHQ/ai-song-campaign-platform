@@ -153,7 +153,10 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
       {formError ? (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
+        >
           {formError}
         </p>
       ) : null}
@@ -223,7 +226,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
           onError={() => setValue("turnstileToken", "", { shouldValidate: true })}
         />
         {errors.turnstileToken ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-[var(--destructive-text)]">
             {errors.turnstileToken.message}
           </p>
         ) : null}
@@ -232,7 +235,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
       <Button
         type="submit"
         disabled={isSubmitting}
-        className="mt-2 h-11 w-full rounded-full text-base"
+        className="mt-2 h-12 w-full rounded-full text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]"
       >
         {isSubmitting ? "Registrando..." : "Registrarme"}
       </Button>
