@@ -4,7 +4,7 @@ interface LyricsContentProps {
 
 function extractTitle(content: string): string {
   const [firstLine] = content.split("\n");
-  return firstLine?.trim() || "Your song";
+  return firstLine?.trim() || "Tu canción";
 }
 
 /**
@@ -21,9 +21,9 @@ export function LyricsContent({ content }: LyricsContentProps) {
   const body = bodyLines.join("\n").trim();
 
   return (
-    <article className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-5">
-      <h2 className="text-title font-semibold text-foreground">{title}</h2>
-      <p className="whitespace-pre-line text-body leading-relaxed text-foreground">{body}</p>
+    <article className="flex flex-col gap-4 rounded-2xl border border-border bg-gradient-to-b from-secondary/50 to-secondary/20 p-6">
+      <h2 className="font-heading text-title font-semibold text-foreground">{title}</h2>
+      <p className="whitespace-pre-line text-body leading-loose text-foreground">{body}</p>
     </article>
   );
 }

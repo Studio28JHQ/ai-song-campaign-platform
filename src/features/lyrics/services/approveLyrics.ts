@@ -21,11 +21,15 @@ const KNOWN_ERROR_CODES: readonly ApproveLyricsErrorCode[] = [
   "internal_error",
 ];
 
+// Sprint UI-1 — Spanish Localization. Keyed by the server's stable error
+// `code` (never its raw `message`) — see `approveLyrics` below, which
+// prefers this Spanish text unconditionally, without needing any change
+// to the API itself.
 const DEFAULT_MESSAGES: Record<ApproveLyricsErrorCode, string> = {
-  invalid_request: "Please try again.",
-  lyrics_not_found: "We couldn't find these lyrics. Please generate them again.",
-  business_rule_violation: "This request could not be completed.",
-  internal_error: "Something went wrong. Please try again.",
+  invalid_request: "Inténtalo de nuevo.",
+  lyrics_not_found: "No encontramos esta letra. Por favor créala de nuevo.",
+  business_rule_violation: "No pudimos completar esta solicitud.",
+  internal_error: "Algo salió mal. Inténtalo de nuevo.",
 };
 
 export class ApproveLyricsError extends Error {
@@ -56,7 +60,7 @@ export async function approveLyrics(input: ApproveLyricsInput): Promise<ApproveL
     });
   } catch {
     throw new ApproveLyricsError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
       "internal_error",
     );
   }
@@ -64,10 +68,11 @@ export async function approveLyrics(input: ApproveLyricsInput): Promise<ApproveL
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const record = (body ?? {}) as { error?: unknown; message?: unknown };
+    const record = (body ?? {}) as { error?: unknown };
     const code = toErrorCode(record.error);
-    const message = typeof record.message === "string" ? record.message : DEFAULT_MESSAGES[code];
-    throw new ApproveLyricsError(message, code);
+    // Always the local, Spanish, code-keyed message — never the server's
+    // own (English) `message` field. See `DEFAULT_MESSAGES` above.
+    throw new ApproveLyricsError(DEFAULT_MESSAGES[code], code);
   }
 
   return body as ApproveLyricsResult;

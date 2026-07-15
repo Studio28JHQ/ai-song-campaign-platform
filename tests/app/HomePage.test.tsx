@@ -12,17 +12,17 @@ describe("HomePage (Landing Page)", () => {
 
     const h1s = screen.getAllByRole("heading", { level: 1 });
     expect(h1s).toHaveLength(1);
-    expect(h1s[0]).toHaveTextContent(/personalized song/i);
+    expect(h1s[0]).toHaveTextContent(/canción/i);
 
     expect(
-      screen.getByRole("heading", { level: 2, name: /what is this campaign/i }),
+      screen.getByRole("heading", { level: 2, name: /qué es esta campaña/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: /how it works/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /cómo funciona/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: /get your baby's song/i }),
+      screen.getByRole("heading", { level: 2, name: /consigue la canción/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: /frequently asked questions/i }),
+      screen.getByRole("heading", { level: 2, name: /preguntas frecuentes/i }),
     ).toBeInTheDocument();
   });
 
@@ -30,12 +30,12 @@ describe("HomePage (Landing Page)", () => {
     render(<HomePage />);
 
     const steps = [
-      "Register",
-      "Describe the baby",
-      "AI generates lyrics",
-      "You approve the lyrics",
-      "AI generates the song",
-      "Delivered by email",
+      "Regístrate",
+      "Cuéntanos sobre tu bebé",
+      "La IA escribe la letra",
+      "Tú apruebas la letra",
+      "La IA crea la canción",
+      "La recibes por correo",
     ];
 
     const stepHeadings = screen.getAllByRole("heading", { level: 3 });
@@ -45,25 +45,25 @@ describe("HomePage (Landing Page)", () => {
   it("includes the legal disclaimer and a footer landmark", () => {
     render(<HomePage />);
 
-    expect(screen.getByText(/limited-time promotional campaign/i)).toBeInTheDocument();
+    expect(screen.getByText(/campaña promocional por tiempo limitado/i)).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
-    expect(screen.getByText(/all rights reserved/i)).toBeInTheDocument();
+    expect(screen.getByText(/todos los derechos reservados/i)).toBeInTheDocument();
   });
 
   it("reuses the existing registration form as the single entry point, without a duplicate flow", () => {
     render(<HomePage />);
 
     // Exactly one submit control for registration anywhere on the page.
-    expect(screen.getAllByRole("button", { name: /^register$/i })).toHaveLength(1);
-    expect(screen.getByLabelText("Parent name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Baby name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^registrarme$/i })).toHaveLength(1);
+    expect(screen.getByLabelText("Tu nombre")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre del bebé")).toBeInTheDocument();
+    expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
   });
 
   it("the Hero CTA is a plain anchor to the registration section (no client JS required to scroll)", () => {
     render(<HomePage />);
 
-    const cta = screen.getByRole("link", { name: /create your baby's song/i });
+    const cta = screen.getByRole("link", { name: /crear la canción de mi bebé/i });
     expect(cta).toHaveAttribute("href", "#register");
   });
 
@@ -76,7 +76,7 @@ describe("HomePage (Landing Page)", () => {
   it("uses responsive grid utility classes for the how-it-works layout", () => {
     render(<HomePage />);
 
-    const heading = screen.getByRole("heading", { level: 2, name: /how it works/i });
+    const heading = screen.getByRole("heading", { level: 2, name: /cómo funciona/i });
     const list = heading.parentElement?.querySelector("ol");
 
     expect(list?.className).toContain("grid-cols-1");
@@ -99,7 +99,7 @@ describe("HomePage (Landing Page)", () => {
   it("FAQ items are native, keyboard-accessible disclosure elements", () => {
     render(<HomePage />);
 
-    const summary = screen.getByText(/how much does it cost/i);
+    const summary = screen.getByText(/cuánto cuesta/i);
     expect(summary.tagName).toBe("SUMMARY");
     expect(summary.closest("details")).not.toBeNull();
   });

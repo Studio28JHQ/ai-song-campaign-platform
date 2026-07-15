@@ -11,27 +11,40 @@ import { buttonVariants } from "@/components/ui/button";
  */
 export function HeroSection() {
   return (
-    <Section spacing="xl" className="bg-muted/30">
-      <ContentWrapper>
-        <div className="flex flex-col items-center gap-6 text-center">
+    <Section
+      spacing="xl"
+      className="relative overflow-hidden bg-gradient-to-b from-secondary/60 via-background to-background"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-gradient-to-br from-primary/20 via-accent/15 to-transparent blur-3xl"
+      />
+      <ContentWrapper className="relative">
+        <div className="flex flex-col items-center gap-7 text-center">
           <div
             aria-hidden
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-2xl font-semibold text-muted-foreground"
+            className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-accent text-3xl font-semibold text-primary-foreground shadow-lg shadow-primary/25"
           >
             ♪
           </div>
 
-          <h1 className="max-w-2xl text-display font-bold text-foreground">
-            A personalized song, written for your baby
+          <h1 className="max-w-2xl font-heading text-display font-semibold text-foreground">
+            Una canción única, creada especialmente para tu bebé
           </h1>
 
           <p className="max-w-prose text-body text-muted-foreground">
-            Tell us a little about your family, and our AI will write and produce a one-of-a-kind
-            song for your little one — free, in minutes, delivered straight to your inbox.
+            Cuéntanos un poco sobre tu familia y nuestra IA escribirá y producirá una canción
+            irrepetible para tu pequeño — gratis, en minutos, directo a tu correo.
           </p>
 
-          <a href="#register" className={buttonVariants({ size: "lg" })}>
-            Create your baby&apos;s song
+          <a
+            href="#register"
+            className={buttonVariants({
+              size: "lg",
+              className: "h-12 rounded-full px-8 text-base",
+            })}
+          >
+            Crear la canción de mi bebé
           </a>
         </div>
       </ContentWrapper>

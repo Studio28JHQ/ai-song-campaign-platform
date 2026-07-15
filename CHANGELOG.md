@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-07-24
+
+Sprint UI-1 — Spanish Localization & Brand Refresh. Purely visual/copy sprint preparing the application for the first customer demo: the complete public experience (Landing, Registration, Lyrics generation/review, Song result, every error/waiting state) is now in Spanish, and the monochrome placeholder palette is replaced with the campaign brand palette (soft blues, white, purple accents — no black buttons). No backend, domain, application-logic, API, or database changes; the admin panel is untouched, both visually and in copy.
+
+### Added
+
+- `.theme-campaign` (`app/globals.css`) — the campaign palette and a warm display font (Fredoka, public headings only), scoped to a single class applied at the root of each public page (`app/page.tsx`, `app/generate/page.tsx`, `app/song/page.tsx`). `:root`'s original tokens — which the admin panel uses via the exact same semantic class names — are untouched, so admin renders byte-for-byte as before; verified directly against the built dev server (`curl` of `/admin/login` shows zero trace of `.theme-campaign` or any copy change).
+- A local, frontend-only validation-message translator in `RegistrationForm.tsx`/`LyricsGenerationForm.tsx`, re-translating the finite, fixed-shape set of messages the _shared_ `src/shared/validation/` module (also used server-side, out of scope for this sprint) can produce — without editing that module. Falls back to the original message for anything it doesn't recognize, so a future wording change there degrades gracefully instead of mistranslating.
+- Every frontend error-message service (`registerLead.ts`, `generateLyrics.ts`, `approveLyrics.ts`) now prefers a local, Spanish, error-`code`-keyed message unconditionally, ignoring the server's own (English) `message` field entirely — the API itself is untouched; only which of its two already-returned fields the frontend chooses to render changed.
+
+### Changed
+
+- Mood display labels (`LyricsGenerationForm.tsx`) are now Spanish ("Alegre", "Tranquilo", "Juguetón", "Sentimental") — but the underlying `name`/`description` values submitted to `POST /api/lyrics/generate` are deliberately left in English, unchanged, since they flow directly into `GenerateLyricsForLeadUseCase`'s Claude prompt and are persisted on `Lyrics.prompt` server-side; changing them would be an observable backend behavior change from a frontend file, which this sprint's "no backend changes" explicitly rules out.
+
+### Known limitations (accepted, out of scope this sprint)
+
+- A moderation-rejected message's reason (`GenerateLyricsForLeadUseCase`'s Claude response, surfaced verbatim in `LyricsWorkflow.tsx`) remains in whatever language Claude responds in — English, in practice — since translating it would mean changing the Claude prompt itself, a backend change.
+- `Mood.sunoPrompt`/`MoodSunoPromptProvider`/`PrismaMoodSunoPromptProvider` keep their pre-existing names (see the 1.10.0 entry above) — unrelated to this sprint, not touched.
+
 ## [1.10.0] - 2026-07-23
 
 Final pre-beta provider switch — Mureka replaces Suno as the active production music provider. `MurekaSongService` (built and validated across Gates 9.2–9.5) is now wired into every composition root that runs the generation pipeline; Suno's infrastructure is deleted outright, not left dormant. No architectural change — `MurekaSongService` already satisfied the `SongGenerationProvider` port structurally; this is a one-line swap repeated at each of the four composition roots.

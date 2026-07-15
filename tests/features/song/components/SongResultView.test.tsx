@@ -52,9 +52,9 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/your song has entered production/i)).toBeInTheDocument();
-    expect(screen.getByText(/we will notify you by email/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /generate another song/i })).toBeDisabled();
+    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
+    expect(screen.getByText(/te avisaremos por correo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear otra canción/i })).toBeDisabled();
     // Only one call — the single session fetch. No polling endpoint exists.
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
@@ -70,7 +70,7 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/your song has entered production/i)).toBeInTheDocument();
+    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
   });
 
   it("renders the player, duration, download, and share message once the song is COMPLETED", async () => {
@@ -89,15 +89,15 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/your personalized song is ready/i)).toBeInTheDocument();
-    expect(screen.getByText(/duration: 2:05/i)).toBeInTheDocument();
-    expect(screen.getByText(/download song/i)).toBeInTheDocument();
-    expect(screen.getByText(/share the joy/i)).toBeInTheDocument();
+    expect(await screen.findByText(/canción personalizada está lista/i)).toBeInTheDocument();
+    expect(screen.getByText(/duración: 2:05/i)).toBeInTheDocument();
+    expect(screen.getByText(/descargar canción/i)).toBeInTheDocument();
+    expect(screen.getByText(/comparte la alegría/i)).toBeInTheDocument();
 
     const audio = document.querySelector("audio");
     expect(audio).toHaveAttribute("src", "https://cdn.example.com/song.mp3");
 
-    const downloadLink = screen.getByText(/download song/i).closest("a");
+    const downloadLink = screen.getByText(/descargar canción/i).closest("a");
     expect(downloadLink).toHaveAttribute("href", "https://cdn.example.com/song.mp3");
     expect(downloadLink).toHaveAttribute("download");
   });
@@ -114,10 +114,10 @@ describe("SongResultView", () => {
     render(<SongResultView supportEmail="support@example.com" />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/couldn't generate your song/i);
+    expect(alert).toHaveTextContent(/no pudimos crear tu canción/i);
     expect(alert).not.toHaveTextContent(/error|exception|stack/i);
     expect(screen.getByText("support@example.com")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /generate another song/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /crear otra canción/i })).toBeDisabled();
   });
 
   it("treats a lead with no song yet as QUEUED, without ever calling a generation endpoint", async () => {
@@ -131,7 +131,7 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/your song has entered production/i)).toBeInTheDocument();
+    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 });

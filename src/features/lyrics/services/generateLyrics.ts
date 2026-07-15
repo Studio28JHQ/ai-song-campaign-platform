@@ -48,19 +48,24 @@ const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
   "internal_error",
 ];
 
+// Sprint UI-1 — Spanish Localization. Keyed by the server's stable error
+// `code` (never its raw `message`) — see `generateLyrics` below, which
+// prefers this Spanish text unconditionally, without needing any change
+// to the API itself.
 const DEFAULT_MESSAGES: Record<GenerateLyricsErrorCode, string> = {
-  invalid_request: "Please check your message and try again.",
-  no_session: "We couldn't find your registration. Please register again.",
-  lead_not_found: "We couldn't find your registration. Please register again.",
-  no_remaining_attempts: "You have no attempts left to generate lyrics.",
-  lyrics_already_approved: "You have already approved a lyrics version.",
-  business_rule_violation: "This request could not be completed.",
+  invalid_request: "Revisa tu mensaje e inténtalo de nuevo.",
+  no_session: "No encontramos tu registro. Por favor regístrate de nuevo.",
+  lead_not_found: "No encontramos tu registro. Por favor regístrate de nuevo.",
+  no_remaining_attempts: "Ya no tienes intentos disponibles para crear la letra.",
+  lyrics_already_approved: "Ya aprobaste una versión de la letra.",
+  business_rule_violation: "No pudimos completar esta solicitud.",
   claude_unavailable:
-    "The lyrics generation service is temporarily unavailable. Please try again shortly.",
-  too_many_requests: "Too many requests. Please wait a few minutes before trying again.",
-  human_verification_failed: "We couldn't verify you're not a robot. Please try again.",
-  verification_unavailable: "Verification is temporarily unavailable. Please try again shortly.",
-  internal_error: "Something went wrong. Please try again.",
+    "El servicio de creación de letras no está disponible en este momento. Inténtalo en unos minutos.",
+  too_many_requests: "Demasiados intentos. Espera unos minutos antes de volver a intentarlo.",
+  human_verification_failed: "No pudimos verificar que no eres un robot. Inténtalo de nuevo.",
+  verification_unavailable:
+    "La verificación no está disponible en este momento. Inténtalo en unos minutos.",
+  internal_error: "Algo salió mal. Inténtalo de nuevo.",
 };
 
 export class GenerateLyricsError extends Error {
@@ -95,7 +100,7 @@ export async function generateLyrics(input: GenerateLyricsInput): Promise<Genera
     });
   } catch {
     throw new GenerateLyricsError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
       "internal_error",
     );
   }
@@ -103,10 +108,11 @@ export async function generateLyrics(input: GenerateLyricsInput): Promise<Genera
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const record = (body ?? {}) as { error?: unknown; message?: unknown };
+    const record = (body ?? {}) as { error?: unknown };
     const code = toErrorCode(record.error);
-    const message = typeof record.message === "string" ? record.message : DEFAULT_MESSAGES[code];
-    throw new GenerateLyricsError(message, code);
+    // Always the local, Spanish, code-keyed message — never the server's
+    // own (English) `message` field. See `DEFAULT_MESSAGES` above.
+    throw new GenerateLyricsError(DEFAULT_MESSAGES[code], code);
   }
 
   return body as GenerateLyricsResult;

@@ -7,12 +7,12 @@ export function LegalDisclaimer() {
     <Section spacing="sm">
       <ContentWrapper>
         <p className="text-caption text-muted-foreground">
-          This is a limited-time promotional campaign and is not an ongoing product or service.
-          Songs are generated with the help of artificial intelligence based on the information you
-          provide; content is reviewed automatically before generation. One song is available per
-          email address, while campaign capacity lasts. By registering, you consent to being
-          contacted at the email address you provide for the sole purpose of delivering your
-          personalized song.
+          Esta es una campaña promocional por tiempo limitado y no representa un producto o servicio
+          continuo. Las canciones se generan con ayuda de inteligencia artificial a partir de la
+          información que proporcionas; el contenido se revisa automáticamente antes de la
+          generación. Hay una canción disponible por correo electrónico, mientras dure la capacidad
+          de la campaña. Al registrarte, aceptas ser contactado en el correo electrónico
+          proporcionado únicamente para la entrega de tu canción personalizada.
         </p>
       </ContentWrapper>
     </Section>

@@ -50,7 +50,7 @@ function loadTurnstileScript(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load the verification widget."));
+    script.onerror = () => reject(new Error("No se pudo cargar el widget de verificación."));
     document.head.appendChild(script);
   });
 

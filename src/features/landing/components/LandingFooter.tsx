@@ -12,7 +12,7 @@ export function LandingFooter({ campaignName }: LandingFooterProps) {
     <footer className="border-t border-border py-8">
       <ContentWrapper>
         <p className="text-center text-caption text-muted-foreground">
-          &copy; {year} {campaignName}. All rights reserved.
+          &copy; {year} {campaignName}. Todos los derechos reservados.
         </p>
       </ContentWrapper>
     </footer>

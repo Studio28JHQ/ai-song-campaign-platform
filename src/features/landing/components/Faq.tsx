@@ -3,26 +3,27 @@ import { Section } from "@/components/layout/Section";
 
 const FAQ_ITEMS = [
   {
-    question: "How much does it cost?",
-    answer: "Nothing. This is a free campaign gift — there is no payment at any step.",
+    question: "¿Cuánto cuesta?",
+    answer: "Nada. Este es un regalo de la campaña — no hay ningún pago en ningún momento.",
   },
   {
-    question: "How long does it take to get my song?",
+    question: "¿Cuánto tiempo tarda en llegar mi canción?",
     answer:
-      "Lyrics are ready in moments. Once you approve them, the final song is generated and emailed to you shortly after — most songs arrive within minutes.",
+      "La letra está lista en instantes. Una vez que la apruebes, la canción final se genera y se envía a tu correo poco después — la mayoría llegan en minutos.",
   },
   {
-    question: "Can I change the lyrics if I don't like them?",
+    question: "¿Puedo cambiar la letra si no me gusta?",
     answer:
-      "Yes. If the lyrics aren't quite right, you can request a new version before approving. Each account has a limited number of attempts.",
+      "Sí. Si la letra no queda como esperabas, puedes pedir una nueva versión antes de aprobarla. Cada cuenta tiene un número limitado de intentos.",
   },
   {
-    question: "Can I generate more than one song?",
-    answer: "Each email address can generate one final song as part of this campaign.",
+    question: "¿Puedo generar más de una canción?",
+    answer: "Cada correo electrónico puede generar una canción final como parte de esta campaña.",
   },
   {
-    question: "How will I receive my song?",
-    answer: "Your finished song is emailed to the address you registered with, ready to play.",
+    question: "¿Cómo recibo mi canción?",
+    answer:
+      "Tu canción terminada se envía al correo con el que te registraste, lista para escuchar.",
   },
 ] as const;
 
@@ -35,15 +36,15 @@ export function Faq() {
   return (
     <Section spacing="lg">
       <ContentWrapper>
-        <h2 className="text-center text-heading font-bold text-foreground">
-          Frequently asked questions
+        <h2 className="text-center font-heading text-heading font-semibold text-foreground">
+          Preguntas frecuentes
         </h2>
 
         <div className="mt-8 flex flex-col gap-3">
           {FAQ_ITEMS.map((item) => (
             <details
               key={item.question}
-              className="group rounded-lg border border-border p-4 open:bg-muted/30"
+              className="group rounded-2xl border border-border bg-card p-5 open:border-primary/30 open:bg-secondary/40"
             >
               <summary className="cursor-pointer text-body font-semibold text-foreground marker:content-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {item.question}

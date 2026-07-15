@@ -27,7 +27,7 @@ export function useApproveLyrics() {
         const message =
           error instanceof ApproveLyricsError
             ? error.message
-            : "Something went wrong. Please try again.";
+            : "Algo salió mal. Inténtalo de nuevo.";
         return { success: false, message };
       } finally {
         setIsSubmitting(false);

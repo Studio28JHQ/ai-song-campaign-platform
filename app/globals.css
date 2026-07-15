@@ -170,3 +170,74 @@ body {
     @apply font-sans;
   }
 }
+
+/**
+ * Sprint UI-1 — Spanish Localization & Brand Refresh. The campaign
+ * palette (soft blues, white, purple accents) and warm display font are
+ * scoped to `.theme-campaign` rather than redefined at `:root`, so the
+ * admin panel — which uses the exact same semantic token names — is
+ * guaranteed to render exactly as before (objective: "Admin remains
+ * functional but visually unchanged"). `.theme-campaign` is applied once,
+ * at the root of each public-facing page.
+ */
+.theme-campaign {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.32 0.045 262);
+  --card: oklch(0.99 0.006 250);
+  --card-foreground: oklch(0.32 0.045 262);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.32 0.045 262);
+  --primary: oklch(0.62 0.135 252);
+  --primary-foreground: oklch(0.99 0.005 250);
+  --secondary: oklch(0.95 0.025 252);
+  --secondary-foreground: oklch(0.38 0.08 258);
+  --muted: oklch(0.965 0.012 245);
+  --muted-foreground: oklch(0.52 0.035 258);
+  --accent: oklch(0.64 0.16 305);
+  --accent-foreground: oklch(0.99 0.005 250);
+  --destructive: oklch(0.58 0.2 25);
+  --success: oklch(0.64 0.13 155);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.28 0.03 70);
+  --border: oklch(0.9 0.02 250);
+  --input: oklch(0.92 0.018 250);
+  --ring: oklch(0.62 0.135 252);
+  --radius: 0.875rem;
+  --font-heading: var(--font-fredoka), var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-campaign {
+    --background: oklch(0.2 0.03 262);
+    --foreground: oklch(0.96 0.01 250);
+    --card: oklch(0.25 0.035 262);
+    --card-foreground: oklch(0.96 0.01 250);
+    --popover: oklch(0.25 0.035 262);
+    --popover-foreground: oklch(0.96 0.01 250);
+    --primary: oklch(0.7 0.13 252);
+    --primary-foreground: oklch(0.15 0.02 260);
+    --secondary: oklch(0.32 0.04 258);
+    --secondary-foreground: oklch(0.94 0.01 250);
+    --muted: oklch(0.3 0.03 258);
+    --muted-foreground: oklch(0.72 0.02 250);
+    --accent: oklch(0.7 0.14 305);
+    --accent-foreground: oklch(0.15 0.02 260);
+    --destructive: oklch(0.68 0.19 22);
+    --success: oklch(0.68 0.13 155);
+    --success-foreground: oklch(0.15 0 0);
+    --warning: oklch(0.78 0.14 75);
+    --warning-foreground: oklch(0.2 0.02 70);
+    --border: oklch(1 0.01 250 / 12%);
+    --input: oklch(1 0.01 250 / 16%);
+    --ring: oklch(0.7 0.13 252);
+  }
+}
+
+.theme-campaign h1,
+.theme-campaign h2,
+.theme-campaign h3 {
+  font-family: var(--font-heading);
+}

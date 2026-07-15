@@ -111,7 +111,7 @@ export function LyricsWorkflow({
       setLyrics(null);
       setErrorMessage(
         outcome.result.reason ??
-          "This message could not be approved. Please revise it and try again.",
+          "Este mensaje no pudo ser aprobado. Por favor revísalo e inténtalo de nuevo.",
       );
       return;
     }

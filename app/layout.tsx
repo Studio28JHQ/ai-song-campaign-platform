@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,6 +12,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Sprint UI-1 — Spanish Localization & Brand Refresh. A warm, rounded
+// display face for public-facing headings only (scoped via
+// `.theme-campaign` in globals.css) — the admin panel keeps using
+// `--font-sans` for headings, unaffected by this variable existing.
+const fredoka = Fredoka({
+  variable: "--font-fredoka",
+  subsets: ["latin"],
+});
+
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — reading the two
 // NEXT_PUBLIC_ variables directly here is the one place metadata needs
@@ -19,25 +28,25 @@ const geistMono = Geist_Mono({
 const appName = process.env.NEXT_PUBLIC_APP_NAME || "AI Song Campaign";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const description =
-  "Get a free, personalized AI-generated song for your baby. Register in minutes, approve the lyrics, and receive your one-of-a-kind song by email.";
+  "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: `${appName} — A personalized song for your baby`,
+    default: `${appName} — Una canción personalizada para tu bebé`,
     template: `%s — ${appName}`,
   },
   description,
   openGraph: {
     type: "website",
     siteName: appName,
-    title: `${appName} — A personalized song for your baby`,
+    title: `${appName} — Una canción personalizada para tu bebé`,
     description,
-    locale: "en_US",
+    locale: "es_ES",
   },
   twitter: {
     card: "summary",
-    title: `${appName} — A personalized song for your baby`,
+    title: `${appName} — Una canción personalizada para tu bebé`,
     description,
   },
   robots: {
@@ -66,7 +75,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <script
           type="application/ld+json"
@@ -78,7 +87,11 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

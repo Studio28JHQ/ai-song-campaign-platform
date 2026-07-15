@@ -6,17 +6,19 @@ import { appConfig } from "@/config/app";
 import { SongResultView } from "@/features/song/components/SongResultView";
 
 export const metadata: Metadata = {
-  title: "Your song — AI Song Campaign",
+  title: "Tu canción — AI Song Campaign",
 };
 
 export default function SongPage() {
   return (
-    <PageContainer>
-      <Section spacing="lg">
-        <ContentWrapper>
-          <SongResultView supportEmail={appConfig.admin.email} />
-        </ContentWrapper>
-      </Section>
-    </PageContainer>
+    <div className="theme-campaign min-h-dvh">
+      <PageContainer>
+        <Section spacing="lg">
+          <ContentWrapper>
+            <SongResultView supportEmail={appConfig.admin.email} />
+          </ContentWrapper>
+        </Section>
+      </PageContainer>
+    </div>
   );
 }

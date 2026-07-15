@@ -31,7 +31,7 @@ export function useGenerateLyrics() {
       return {
         success: false,
         code: "internal_error",
-        message: "Something went wrong. Please try again.",
+        message: "Algo salió mal. Inténtalo de nuevo.",
       };
     } finally {
       setIsSubmitting(false);

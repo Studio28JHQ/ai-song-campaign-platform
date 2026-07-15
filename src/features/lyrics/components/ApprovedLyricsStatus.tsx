@@ -10,10 +10,10 @@ interface ApprovedLyricsStatusProps {
 }
 
 const SONG_STATUS_LABEL: Record<LeadSessionSongStatus, string> = {
-  QUEUED: "Song queued",
-  GENERATING: "Song generating",
-  COMPLETED: "Song ready",
-  FAILED: "Song generation failed",
+  QUEUED: "Canción en cola",
+  GENERATING: "Creando tu canción",
+  COMPLETED: "¡Tu canción está lista!",
+  FAILED: "No pudimos crear tu canción",
 };
 
 /**
@@ -37,7 +37,7 @@ export function ApprovedLyricsStatus({
   return (
     <div className="flex flex-col gap-4">
       <span className="text-label text-muted-foreground">
-        Attempt {version} / {maxAttempts}
+        Intento {version} / {maxAttempts}
       </span>
 
       <LyricsContent content={content} />
@@ -45,12 +45,12 @@ export function ApprovedLyricsStatus({
       <p className="text-caption font-medium text-foreground">{SONG_STATUS_LABEL[status]}</p>
 
       {status === "FAILED" ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          We couldn&apos;t generate your song right now. Please contact support at{" "}
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          No pudimos crear tu canción en este momento. Por favor contáctanos en{" "}
           <a href={`mailto:${supportEmail}`} className="underline">
             {supportEmail}
           </a>{" "}
-          for help.
+          para ayudarte.
         </p>
       ) : null}
     </div>

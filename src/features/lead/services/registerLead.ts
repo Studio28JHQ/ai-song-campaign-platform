@@ -33,14 +33,19 @@ const KNOWN_ERROR_CODES: readonly RegisterLeadErrorCode[] = [
   "internal_error",
 ];
 
+// Sprint UI-1 — Spanish Localization. Keyed by the server's stable error
+// `code` (never its raw `message`) — see `registerLead` below, which
+// prefers this Spanish text unconditionally, without needing any change
+// to the API itself.
 const DEFAULT_MESSAGES: Record<RegisterLeadErrorCode, string> = {
-  invalid_request: "Please check the form and try again.",
-  email_already_registered: "This email has already been used to register.",
-  business_rule_violation: "This request could not be completed.",
-  too_many_requests: "Too many requests. Please wait a few minutes before trying again.",
-  human_verification_failed: "We couldn't verify you're not a robot. Please try again.",
-  verification_unavailable: "Verification is temporarily unavailable. Please try again shortly.",
-  internal_error: "Something went wrong. Please try again.",
+  invalid_request: "Revisa el formulario e inténtalo de nuevo.",
+  email_already_registered: "Este correo ya fue utilizado para registrarse.",
+  business_rule_violation: "No pudimos completar esta solicitud.",
+  too_many_requests: "Demasiados intentos. Espera unos minutos antes de volver a intentarlo.",
+  human_verification_failed: "No pudimos verificar que no eres un robot. Inténtalo de nuevo.",
+  verification_unavailable:
+    "La verificación no está disponible en este momento. Inténtalo en unos minutos.",
+  internal_error: "Algo salió mal. Inténtalo de nuevo.",
 };
 
 export class RegisterLeadError extends Error {
@@ -76,7 +81,7 @@ export async function registerLead(input: RegisterLeadInput): Promise<RegisterLe
     });
   } catch {
     throw new RegisterLeadError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
       "internal_error",
     );
   }
@@ -84,10 +89,11 @@ export async function registerLead(input: RegisterLeadInput): Promise<RegisterLe
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const record = (body ?? {}) as { error?: unknown; message?: unknown };
+    const record = (body ?? {}) as { error?: unknown };
     const code = toErrorCode(record.error);
-    const message = typeof record.message === "string" ? record.message : DEFAULT_MESSAGES[code];
-    throw new RegisterLeadError(message, code);
+    // Always the local, Spanish, code-keyed message — never the server's
+    // own (English) `message` field. See `DEFAULT_MESSAGES` above.
+    throw new RegisterLeadError(DEFAULT_MESSAGES[code], code);
   }
 
   return body as RegisterLeadResult;

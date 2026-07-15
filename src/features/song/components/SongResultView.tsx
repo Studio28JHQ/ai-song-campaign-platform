@@ -26,14 +26,14 @@ function formatDuration(seconds: number | null): string | null {
  */
 export function SongResultView({ supportEmail }: SongResultViewProps) {
   const { babyName, status, audioUrl, duration, loading } = useSongResult();
-  const title = babyName ? `${babyName}'s Song` : "Your Song";
+  const title = babyName ? `La canción de ${babyName}` : "Tu canción";
 
   if (loading) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <div
           role="status"
-          aria-label="Loading"
+          aria-label="Cargando"
           className="size-10 animate-spin rounded-full border-4 border-muted border-t-primary"
         />
       </div>
@@ -42,17 +42,17 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
 
   if (status === "FAILED") {
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-heading font-bold text-foreground">{title}</h1>
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          We couldn&apos;t generate your song right now. Please contact support at{" "}
+      <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+        <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          No pudimos crear tu canción en este momento. Por favor contáctanos en{" "}
           <a href={`mailto:${supportEmail}`} className="underline">
             {supportEmail}
           </a>{" "}
-          for help.
+          para ayudarte.
         </p>
-        <Button type="button" disabled className="w-full sm:w-auto">
-          Generate Another Song
+        <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+          Crear otra canción
         </Button>
       </div>
     );
@@ -62,51 +62,61 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
     const formattedDuration = formatDuration(duration);
 
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-heading font-bold text-foreground">{title}</h1>
-        <p className="text-body text-muted-foreground">Your personalized song is ready!</p>
+      <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-gradient-to-b from-secondary/50 to-card p-8 text-center shadow-sm">
+        <span aria-hidden className="text-4xl">
+          🎉
+        </span>
+        <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
+        <p className="text-body text-muted-foreground">¡Tu canción personalizada está lista!</p>
 
         {audioUrl ? (
           <audio controls src={audioUrl} className="w-full max-w-sm">
-            Your browser does not support the audio element.
+            Tu navegador no admite el elemento de audio.
           </audio>
         ) : null}
 
         {formattedDuration ? (
-          <p className="text-caption text-muted-foreground">Duration: {formattedDuration}</p>
+          <p className="text-caption text-muted-foreground">Duración: {formattedDuration}</p>
         ) : null}
 
         {audioUrl ? (
-          <a href={audioUrl} download className={buttonVariants({ variant: "default" })}>
-            Download Song
+          <a
+            href={audioUrl}
+            download
+            className={buttonVariants({
+              variant: "default",
+              className: "rounded-full bg-accent text-accent-foreground hover:bg-accent/85",
+            })}
+          >
+            Descargar canción
           </a>
         ) : null}
 
         <p className="text-caption text-muted-foreground">
-          Share the joy — let friends and family know about {title}!
+          Comparte la alegría — ¡cuéntales a tus amigos y familia sobre {title}!
         </p>
 
-        <Button type="button" disabled className="w-full sm:w-auto">
-          Generate Another Song
+        <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+          Crear otra canción
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 text-center">
-      <h1 className="text-heading font-bold text-foreground">{title}</h1>
+    <div className="flex flex-col items-center gap-5 rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+      <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
       <div
         role="status"
-        aria-label="Your song has entered production"
+        aria-label="Tu canción está en producción"
         className="size-10 animate-spin rounded-full border-4 border-muted border-t-primary"
       />
       <p className="text-body text-muted-foreground">
-        Your lyrics have been approved. Your song has entered production. We will notify you by
-        email as soon as it is ready.
+        Tu letra fue aprobada. Tu canción está en producción. Te avisaremos por correo en cuanto
+        esté lista.
       </p>
-      <Button type="button" disabled className="w-full sm:w-auto">
-        Generate Another Song
+      <Button type="button" disabled className="w-full rounded-full sm:w-auto">
+        Crear otra canción
       </Button>
     </div>
   );

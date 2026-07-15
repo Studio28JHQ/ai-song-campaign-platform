@@ -18,13 +18,15 @@ export function RegistrationSection({ turnstileSiteKey }: RegistrationSectionPro
       <ContentWrapper>
         <div className="flex flex-col items-center gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="text-heading font-bold text-foreground">Get your baby&apos;s song</h2>
+            <h2 className="font-heading text-heading font-semibold text-foreground">
+              Consigue la canción de tu bebé
+            </h2>
             <p className="max-w-prose text-body text-muted-foreground">
-              Registration takes less than a minute — no payment required.
+              Registrarte toma menos de un minuto — sin necesidad de pago.
             </p>
           </div>
 
-          <div className="w-full max-w-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
             <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
           </div>
         </div>

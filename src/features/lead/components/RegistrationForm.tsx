@@ -27,7 +27,13 @@ const DEFAULT_CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
 // Client-side validation — instant feedback before a network round-trip,
 // built from the same Sprint 8.1 hardening rules (`@/shared/validation`)
 // enforced by the API and domain layers. The server remains the
-// authoritative source of truth for every business rule.
+// authoritative source of truth for every business rule. Field labels
+// passed in here stay in English ("Parent's name", etc.) — they flow
+// into the *shared* `src/shared/validation/` module, also used by the
+// API and domain layers, which this sprint's "no backend/domain
+// changes" constraint puts out of scope for translation. `translateFieldError`
+// below re-translates the resulting message for display, purely on the
+// frontend, without touching that shared module.
 const registrationFormSchema = z.object({
   parentName: plainTextField("Parent's name", FIELD_LIMITS.parentName),
   babyName: plainTextField("Baby's name", FIELD_LIMITS.babyName),
@@ -35,12 +41,12 @@ const registrationFormSchema = z.object({
     .string()
     .trim()
     .refine((value) => value === "" || (/^\d+$/.test(value) && Number(value) > 0), {
-      message: "Enter a positive whole number of months.",
+      message: "Ingresa un número entero positivo de meses.",
     }),
   city: optionalPlainTextField("City", FIELD_LIMITS.city),
   email: emailField(),
   phone: optionalPhoneField(),
-  turnstileToken: z.string().min(1, "Please complete the verification challenge."),
+  turnstileToken: z.string().min(1, "Completa la verificación de seguridad."),
 });
 
 type RegistrationFormInput = z.input<typeof registrationFormSchema>;
@@ -55,6 +61,53 @@ const defaultValues: RegistrationFormInput = {
   phone: "",
   turnstileToken: "",
 };
+
+/**
+ * Translates the finite set of messages `src/shared/validation/text.ts`
+ * (`describeTextValidationFailure`) and `zodFields.ts` (`emailField`/
+ * `optionalPhoneField`) can produce — English field label plus a fixed
+ * sentence shape — into Spanish, purely at render time. Frontend-only:
+ * the shared module itself, and every message the server can return
+ * over the wire, are untouched. Any message that doesn't match a known
+ * shape (e.g. the shared module's wording changes later) is returned
+ * as-is rather than mistranslated.
+ */
+const FIELD_LABEL_ES: Record<string, string> = {
+  "Parent's name": "Tu nombre",
+  "Baby's name": "Nombre del bebé",
+  City: "Ciudad",
+  Email: "Correo electrónico",
+  Phone: "Teléfono",
+};
+
+function translateFieldError(message: string | undefined): string | undefined {
+  if (!message) return message;
+
+  for (const [labelEn, labelEs] of Object.entries(FIELD_LABEL_ES)) {
+    if (message === `${labelEn} is required.`) {
+      return `${labelEs} es obligatorio.`;
+    }
+    const tooLong = message.match(
+      new RegExp(
+        `^${labelEn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} must be at most (\\d+) characters\\.$`,
+      ),
+    );
+    if (tooLong) {
+      return `${labelEs} debe tener como máximo ${tooLong[1]} caracteres.`;
+    }
+    if (message === `${labelEn} contains characters that are not allowed.`) {
+      return `${labelEs} contiene caracteres no permitidos.`;
+    }
+    if (message === `${labelEn} cannot contain HTML tags or the characters < and >.`) {
+      return `${labelEs} no puede contener etiquetas HTML ni los caracteres < y >.`;
+    }
+  }
+
+  if (message === "Enter a valid email address.") return "Ingresa un correo electrónico válido.";
+  if (message === "Enter a valid phone number.") return "Ingresa un número de teléfono válido.";
+
+  return message;
+}
 
 interface RegistrationFormProps {
   turnstileSiteKey: string;
@@ -100,65 +153,65 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
       {formError ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {formError}
         </p>
       ) : null}
 
       <RegistrationField
-        label="Parent name"
-        placeholder="Jane Doe"
+        label="Tu nombre"
+        placeholder="Ej. María Fernández"
         autoComplete="name"
         maxLength={FIELD_LIMITS.parentName}
-        error={errors.parentName?.message}
+        error={translateFieldError(errors.parentName?.message)}
         registration={register("parentName")}
       />
 
       <RegistrationField
-        label="Baby name"
-        placeholder="Baby Doe"
+        label="Nombre del bebé"
+        placeholder="Ej. Sofía"
         autoComplete="off"
         maxLength={FIELD_LIMITS.babyName}
-        error={errors.babyName?.message}
+        error={translateFieldError(errors.babyName?.message)}
         registration={register("babyName")}
       />
 
       <RegistrationField
-        label="Baby age (months)"
+        label="Edad del bebé (meses)"
         placeholder="6"
         type="number"
         inputMode="numeric"
         autoComplete="off"
-        error={errors.babyAge?.message}
+        error={translateFieldError(errors.babyAge?.message)}
         registration={register("babyAge")}
       />
 
       <RegistrationField
-        label="City"
-        placeholder="Austin"
+        label="Ciudad"
+        placeholder="Ej. Guadalajara"
         autoComplete="address-level2"
         maxLength={FIELD_LIMITS.city}
-        error={errors.city?.message}
+        error={translateFieldError(errors.city?.message)}
         registration={register("city")}
       />
 
       <RegistrationField
-        label="Email"
-        placeholder="jane@example.com"
+        label="Correo electrónico"
+        placeholder="maria@ejemplo.com"
         type="email"
         autoComplete="email"
         maxLength={FIELD_LIMITS.email}
-        error={errors.email?.message}
+        error={translateFieldError(errors.email?.message)}
         registration={register("email")}
       />
 
       <RegistrationField
-        label="Phone"
-        placeholder="+1 555 123 4567"
+        label="Teléfono"
+        placeholder="+52 55 1234 5678"
         type="tel"
         autoComplete="tel"
         maxLength={FIELD_LIMITS.phone}
-        error={errors.phone?.message}
+        error={translateFieldError(errors.phone?.message)}
         registration={register("phone")}
       />
 
@@ -176,8 +229,12 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         ) : null}
       </div>
 
-      <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
-        {isSubmitting ? "Registering..." : "Register"}
+      <Button
+        type="submit"
+        disabled={isSubmitting}
+        className="mt-2 h-11 w-full rounded-full text-base"
+      >
+        {isSubmitting ? "Registrando..." : "Registrarme"}
       </Button>
     </form>
   );

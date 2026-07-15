@@ -28,9 +28,9 @@ function renderForm() {
 }
 
 async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Parent name"), "Jane Doe");
-  await user.type(screen.getByLabelText("Baby name"), "Baby Doe");
-  await user.type(screen.getByLabelText("Email"), "jane@example.com");
+  await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
+  await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
+  await user.type(screen.getByLabelText("Correo electrónico"), "jane@example.com");
 }
 
 function mockFetchOnce(response: { ok: boolean; status?: number; body: unknown }) {
@@ -56,7 +56,7 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/generate"));
     expect(window.sessionStorage.length).toBe(0);
@@ -71,11 +71,11 @@ describe("RegistrationForm", () => {
     global.fetch = vi.fn();
 
     renderForm();
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
-    expect(await screen.findByText("Parent's name is required.")).toBeInTheDocument();
-    expect(screen.getByText("Baby's name is required.")).toBeInTheDocument();
-    expect(screen.getByText("Email is required.")).toBeInTheDocument();
+    expect(await screen.findByText("Tu nombre es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("Nombre del bebé es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("Correo electrónico es obligatorio.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -84,12 +84,12 @@ describe("RegistrationForm", () => {
     global.fetch = vi.fn();
 
     renderForm();
-    await user.type(screen.getByLabelText("Parent name"), "Jane Doe");
-    await user.type(screen.getByLabelText("Baby name"), "Baby Doe");
-    await user.type(screen.getByLabelText("Email"), "not-an-email");
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
+    await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
+    await user.type(screen.getByLabelText("Correo electrónico"), "not-an-email");
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
-    expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument();
+    expect(await screen.findByText("Ingresa un correo electrónico válido.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -98,18 +98,18 @@ describe("RegistrationForm", () => {
     mockFetchOnce({
       ok: false,
       status: 409,
-      body: {
-        error: "email_already_registered",
-        message: "This email has already been used to register a lead.",
-      },
+      // The server's own `message` is deliberately ignored in favor of a
+      // local, Spanish, code-keyed message (Sprint UI-1) — see
+      // `registerLead.ts`. This value is irrelevant to the assertion below.
+      body: { error: "email_already_registered", message: "irrelevant — never rendered" },
     });
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
     expect(
-      await screen.findByText("This email has already been used to register a lead."),
+      await screen.findByText("Este correo ya fue utilizado para registrarse."),
     ).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -119,15 +119,15 @@ describe("RegistrationForm", () => {
     mockFetchOnce({
       ok: false,
       status: 500,
-      body: { error: "internal_error", message: "Something went wrong. Please try again." },
+      body: { error: "internal_error", message: "irrelevant — never rendered" },
     });
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Something went wrong. Please try again.",
+      "Algo salió mal. Inténtalo de nuevo.",
     );
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -144,9 +144,9 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /register/i }));
+    await user.click(screen.getByRole("button", { name: /registr/i }));
 
-    expect(await screen.findByRole("button", { name: /registering/i })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /registrando/i })).toBeDisabled();
 
     resolveFetch({
       ok: true,

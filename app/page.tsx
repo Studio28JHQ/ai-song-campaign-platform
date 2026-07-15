@@ -13,21 +13,21 @@ import { RegistrationSection } from "@/features/landing/components/RegistrationS
 // same as `app/layout.tsx`.
 const appName = process.env.NEXT_PUBLIC_APP_NAME || "AI Song Campaign";
 const description =
-  "Get a free, personalized AI-generated song for your baby. Register in minutes, approve the lyrics, and receive your one-of-a-kind song by email.";
+  "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
 
 export const metadata: Metadata = {
-  title: `${appName} — A personalized song for your baby`,
+  title: `${appName} — Una canción personalizada para tu bebé`,
   description,
   alternates: {
     canonical: "/",
   },
   openGraph: {
     url: "/",
-    title: `${appName} — A personalized song for your baby`,
+    title: `${appName} — Una canción personalizada para tu bebé`,
     description,
   },
   twitter: {
-    title: `${appName} — A personalized song for your baby`,
+    title: `${appName} — Una canción personalizada para tu bebé`,
     description,
   },
 };
@@ -38,10 +38,13 @@ export const metadata: Metadata = {
  * `src/features/lead/`, not duplicated here), FAQ, legal disclaimer, and
  * footer (see docs/Product/User_Flow.md). Entirely Server Components:
  * the only client-side island is `RegistrationForm` itself.
+ *
+ * `.theme-campaign` (Sprint UI-1) scopes the soft-blue/white/purple
+ * brand palette to this page only — see `app/globals.css`.
  */
 export default function HomePage() {
   return (
-    <main>
+    <main className="theme-campaign">
       <HeroSection />
       <CampaignExplanation />
       <HowItWorks />

@@ -2,49 +2,53 @@ import { ContentWrapper } from "@/components/layout/ContentWrapper";
 import { Section } from "@/components/layout/Section";
 
 const STEPS = [
-  { title: "Register", description: "Share your email and a few details about your family." },
+  { title: "Regístrate", description: "Comparte tu correo y algunos datos sobre tu familia." },
   {
-    title: "Describe the baby",
-    description: "Tell us your baby's name and pick the mood for the song.",
+    title: "Cuéntanos sobre tu bebé",
+    description: "Dinos el nombre de tu bebé y elige el estilo de la canción.",
   },
   {
-    title: "AI generates lyrics",
-    description: "Our AI writes personalized lyrics based on what you shared.",
+    title: "La IA escribe la letra",
+    description: "Nuestra IA crea una letra personalizada con lo que nos compartiste.",
   },
   {
-    title: "You approve the lyrics",
-    description: "Review the lyrics and approve them, or ask for a new version.",
+    title: "Tú apruebas la letra",
+    description: "Revisa la letra y apruébala, o pide una nueva versión.",
   },
   {
-    title: "AI generates the song",
-    description: "Once approved, the lyrics are turned into a fully produced song.",
+    title: "La IA crea la canción",
+    description: "Una vez aprobada, la letra se convierte en una canción totalmente producida.",
   },
   {
-    title: "Delivered by email",
-    description: "Your finished song is emailed to you, ready to play and keep.",
+    title: "La recibes por correo",
+    description: "Tu canción terminada llega a tu correo, lista para escuchar y guardar.",
   },
 ] as const;
 
 /** The campaign flow, in order — see docs/Product/User_Flow.md — Happy Path. */
 export function HowItWorks() {
   return (
-    <Section spacing="lg">
+    <Section spacing="lg" className="bg-muted/40">
       <ContentWrapper className="max-w-(--container-content)">
-        <h2 className="text-center text-heading font-bold text-foreground">How it works</h2>
+        <h2 className="text-center font-heading text-heading font-semibold text-foreground">
+          Cómo funciona
+        </h2>
 
-        <ol className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <ol className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {STEPS.map((step, index) => (
             <li
               key={step.title}
-              className="flex flex-col gap-2 rounded-xl border border-border bg-background p-6"
+              className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
             >
               <span
                 aria-hidden
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-sm font-semibold text-primary-foreground"
               >
                 {index + 1}
               </span>
-              <h3 className="text-title font-semibold text-foreground">{step.title}</h3>
+              <h3 className="font-heading text-title font-semibold text-foreground">
+                {step.title}
+              </h3>
               <p className="text-body text-muted-foreground">{step.description}</p>
             </li>
           ))}
