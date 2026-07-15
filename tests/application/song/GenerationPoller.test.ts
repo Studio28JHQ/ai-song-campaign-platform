@@ -217,7 +217,7 @@ describe("GenerationPoller", () => {
     expect(persisted?.providerStatus).toBe("running");
   });
 
-  describe("ready_to_download (Gate 9.4 — Audio Download & Storage)", () => {
+  describe("ready_to_download (Gate 9.4 — Audio Download & Storage; Gate 9.5 — email delivery)", () => {
     function readyToDownloadPoller(overrides: Parameters<typeof buildPoller>[0] = {}) {
       return buildPoller({
         songGenerator: fakeSongGenerator({
@@ -261,14 +261,48 @@ describe("GenerationPoller", () => {
       expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("provider.example.com");
     });
 
-    it("never sends an email for the ready_to_download outcome", async () => {
+    it("sends the song-ready email exactly once, using a resolved signed URL, once the song completes", async () => {
       seedGeneratingSong(lead.id, songRepository);
       const emailSender = fakeEmailSender();
       const poller = readyToDownloadPoller({ emailSender });
 
       await poller.execute();
 
-      expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+      expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
+      const input = (emailSender.sendSongReadyEmail as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as SongReadyEmailInput;
+      expect(input.to).toBe("jane@example.com");
+      expect(input.parentName).toBe("Jane Doe");
+      expect(input.babyName).toBe("Baby Doe");
+      expect(input.audioUrl).toMatch(/^https:\/\/signed\.example\.com\/songs\//);
+      expect(input.duration).toBe(90);
+    });
+
+    it("resolves the signed URL only through AudioUrlResolver, and never persists it", async () => {
+      const song = seedGeneratingSong(lead.id, songRepository);
+      const audioUrlResolver = fakeAudioUrlResolver();
+      const poller = readyToDownloadPoller({ audioUrlResolver });
+
+      await poller.execute();
+
+      expect(audioUrlResolver.resolve).toHaveBeenCalledWith(`songs/${song.id}.mp3`);
+      const persisted = await songRepository.findById(song.id);
+      expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("signed.example.com");
+    });
+
+    it("does not fail the use case, and keeps the song COMPLETED with its audio intact, when the email fails to send", async () => {
+      const song = seedGeneratingSong(lead.id, songRepository);
+      const emailSender = fakeEmailSender(new Error("Resend API responded with status 500."));
+      const poller = readyToDownloadPoller({ emailSender });
+
+      const response = await poller.execute();
+
+      expect(response?.song.status).toBe(SongStatus.COMPLETED);
+      expect(emailSender.sendSongReadyEmail).toHaveBeenCalledTimes(1);
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.COMPLETED);
+      expect(persisted?.audioStorageKey).toBe(`songs/${song.id}.mp3`);
     });
 
     it("marks the song FAILED and re-throws when the download fails", async () => {

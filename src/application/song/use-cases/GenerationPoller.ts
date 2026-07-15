@@ -24,25 +24,18 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
  *   provider's raw status for diagnostics; a later invocation will ask
  *   again. No wait, no sleep, no loop — this method returns immediately
  *   either way.
- * - Finished successfully (`SongGenerationProvider`'s synchronous
- *   `completed` result, today only ever Suno) → downloads the audio
- *   from the provider's own (short-lived) URL, uploads it to R2,
+ * - Finished successfully — either `SongGenerationProvider`'s
+ *   synchronous `completed` result (today only ever Suno) or its async
+ *   `ready_to_download` result (today only ever Mureka, once wired in)
+ *   — both go through the same `downloadStoreAndDeliver`: downloads the
+ *   audio from the provider's own (short-lived) URL, uploads it to R2,
  *   persists only the resulting object key (`Song.audioStorageKey`) —
  *   never a signed URL, never the provider's URL (see
- *   `AudioUrlResolver`) — marks the Song `COMPLETED`, and delivers the
- *   "song ready" email, resolving a fresh signed URL at the moment it's
- *   needed and never persisting it.
- * - Provider itself finished, but async (`ready_to_download`, Gate 9.4
- *   — Audio Download & Storage; today only ever Mureka) → the exact
- *   same download/upload/`COMPLETED` sequence as above, but with **no
- *   email** — delivering it is a future gate's job. `COMPLETED` already
- *   meant "the audio is safely stored," decoupled from whether an email
- *   was ever sent (see `prisma/schema.prisma`'s reserved, unused
- *   `DELIVERED` value and `SongMapper`'s collapse-to-`COMPLETED`
- *   comment) — so no new `SongStatus` was introduced for this. Never
- *   marks `COMPLETED` unless the upload actually succeeded — any
- *   download or upload failure here follows the exact same
- *   catch-and-`FAILED` path as the branch below.
+ *   `AudioUrlResolver`) — marks the Song `COMPLETED`, and only once all
+ *   of that has already succeeded, delivers the "song ready" email
+ *   (Gate 9.5 — Complete End-to-End Song Delivery), resolving a fresh
+ *   signed URL at the moment it's needed and never persisting it. Never
+ *   marks `COMPLETED` unless the upload actually succeeded.
  * - Finished with an error → marks the Song `FAILED` with the provider's
  *   reported error, same recovery path as before this split (manual
  *   admin retry via `RetryFailedSongUseCase`).
@@ -99,37 +92,36 @@ export class GenerationPoller {
       return { song: updated.toSnapshot(), outcome: "failed" };
     }
 
-    if (result.status === "ready_to_download") {
-      try {
-        const audio = await this.audioDownloader.download(result.audioUrl);
-        const storageKey = `songs/${song.id}.mp3`;
+    const outcome = result.status === "ready_to_download" ? "ready" : "completed";
+    return this.downloadStoreAndDeliver(song, result, outcome);
+  }
 
-        await this.audioStorage.upload(
-          storageKey,
-          audio.bytes,
-          audio.contentType || AUDIO_STORAGE_CONTENT_TYPE_FALLBACK,
-        );
-
-        song.markCompleted({
-          providerSongId: result.providerSongId,
-          audioStorageKey: storageKey,
-          duration: result.duration,
-        });
-        const updated = await this.songRepository.update(song);
-
-        logger.info("Generation poller: audio downloaded and stored in R2 — no email sent yet", {
-          songId: song.id,
-          providerSongId: result.providerSongId,
-        });
-
-        return { song: updated.toSnapshot(), outcome: "ready" };
-      } catch (error) {
-        song.markFailed(error instanceof Error ? error.message : String(error));
-        await this.songRepository.update(song);
-        throw error;
-      }
-    }
-
+  /**
+   * Shared terminal-success handling for both `SongGenerationPollResult`
+   * variants that mean "the provider has finished, here is the audio"
+   * (`completed` — Suno's synchronous result — and `ready_to_download` —
+   * an async provider's result, e.g. Mureka). Downloads the audio,
+   * uploads it to R2, persists only the resulting object key — never a
+   * signed URL, never the provider's URL — and marks the Song
+   * `COMPLETED`. `COMPLETED` already means "the audio is safely stored,"
+   * decoupled from whether an email was ever sent (see
+   * `prisma/schema.prisma`'s reserved, unused `DELIVERED` value and
+   * `SongMapper`'s collapse-to-`COMPLETED` comment), so no new
+   * `SongStatus` exists for this.
+   *
+   * The email is sent only after the download, the R2 upload, and the
+   * repository `update` (the "database transaction committed" moment)
+   * have all already succeeded — never before (Gate 9.5). Any failure
+   * up to that point marks the Song `FAILED` and rethrows, before ever
+   * reaching the email step; an email failure, by contrast, is caught
+   * entirely inside `deliverReadyEmail` and never undoes the
+   * already-successful, already-persisted generation.
+   */
+  private async downloadStoreAndDeliver(
+    song: Song,
+    result: { providerSongId: string; audioUrl: string; duration: number | null },
+    outcome: "completed" | "ready",
+  ): Promise<GenerationPollerResponse> {
     try {
       const audio = await this.audioDownloader.download(result.audioUrl);
       const storageKey = `songs/${song.id}.mp3`;
@@ -149,7 +141,7 @@ export class GenerationPoller {
 
       await this.deliverReadyEmail(updated);
 
-      return { song: updated.toSnapshot(), outcome: "completed" };
+      return { song: updated.toSnapshot(), outcome };
     } catch (error) {
       song.markFailed(error instanceof Error ? error.message : String(error));
       await this.songRepository.update(song);

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-21
+
+Gate 9.5 — Complete End-to-End Song Delivery. The final integration gate: closes the one remaining gap between Gate 9.4's `ready_to_download` handling and Suno's existing `completed` path by sending the "song ready" email after a provider-async completion too. Both paths are now unified into a single, shared terminal-success handler. `GenerationDispatcher`, Mureka submission, Mureka polling, and `CloudflareR2Storage` are all untouched. Mureka still isn't wired into the live pipeline — Suno remains the only active provider.
+
+### Changed
+
+- `GenerationPoller`'s two near-identical terminal-success branches (`completed` and `ready_to_download`) are unified into one private `downloadStoreAndDeliver` method: download → upload to R2 → persist storage key only → mark `COMPLETED` → **send the "song ready" email**. The email is sent strictly after the download, the R2 upload, and the repository `update` (the "committed" moment) have all already succeeded — reusing the existing `SongReadyEmailTemplate`, `ResendEmailService`/`SongEmailSender`, and `AudioUrlResolver` completely unchanged. A fresh signed URL is resolved on demand and never persisted; the email never contains a provider URL, a signed URL, or any other temporary URL.
+- `Song.recordProviderStatus` is unchanged from Gate 9.4 (still diagnostics-only for a still-pending poll); no new domain status was introduced — `COMPLETED` continues to mean exactly what it always has.
+- **Failure isolation, unchanged in behavior, now exercised by both paths**: a download or upload failure marks the Song `FAILED` and rethrows _before_ the email step is ever reached. An email failure, by contrast, is caught entirely inside the existing `deliverReadyEmail` and never rolls back the already-persisted `COMPLETED` generation — the Song stays `COMPLETED`, the audio stays available, and the existing admin resend-email flow (`ResendSongEmailUseCase`, untouched) remains the recovery path, exactly as it already worked for Suno.
+
+### Added
+
+- Test coverage for the previously-Suno-only guarantees, now also asserted for the `ready_to_download` path: exactly one email sent with a resolved signed URL, the signed URL resolved only through `AudioUrlResolver` and never persisted, and the Song staying `COMPLETED` with its audio intact when the email send fails.
+- **Real validation**: with Mureka generation credits still unavailable, the provider step was mocked (a `ready_to_download` result standing in for a Mureka completion), but `GenerationPoller` was run against the **real** `CloudflareR2Storage`, `R2AudioUrlResolver`, and `ResendEmailService` — a genuine end-to-end run of download → R2 upload → persist → `COMPLETED` → real Resend email send, authorized by and sent to the developer's own address. The R2 object was deleted immediately after. Confirmed: the poller returned `outcome: "ready"`, the Song reached `COMPLETED` with only its storage key persisted, the R2 object existed, and the real Resend call completed without error.
+
 ## [1.7.0] - 2026-07-20
 
 Gate 9.4 — Audio Download & Storage. Completes the provider pipeline's storage half: on a `ready_to_download` poll result, `GenerationPoller` now downloads the audio and uploads it to Cloudflare R2 via the existing `CloudflareR2Storage` abstraction, exactly like it already does for Suno's synchronous `completed` path. No email is sent for this outcome yet — that remains a future gate's job. `GenerationDispatcher`, Mureka submission, and email delivery are all untouched. Still not wired into the live pipeline — Suno remains the only active provider.
