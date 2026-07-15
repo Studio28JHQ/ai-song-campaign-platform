@@ -131,17 +131,15 @@ export class Song {
   }
 
   /**
-   * Records the provider's latest reported status (Gate 9.3 — Mureka
-   * Polling) without transitioning `Song`'s own status. Used for two
-   * cases: a still-in-progress poll (diagnostics only — e.g. "preparing"
-   * vs "running"), and the moment a provider itself finishes generating
-   * (`completed: true`, which stamps `completedAt`) — even then, the
-   * `Song` stays `GENERATING` until the audio is actually downloaded and
-   * stored (see `GenerationPoller`'s `ready_to_download` handling); only
-   * `markCompleted` ever moves a Song to `COMPLETED`. Valid only while
+   * Records the provider's latest reported status for a still-in-progress
+   * poll (Gate 9.3 — Mureka Polling), without transitioning `Song`'s own
+   * status — diagnostics only (e.g. "preparing" vs "running"). A
+   * provider-side completion is not recorded here: `GenerationPoller`
+   * moves straight to `markCompleted` once the audio is downloaded and
+   * stored (see Gate 9.4 — Audio Download & Storage). Valid only while
    * `GENERATING`.
    */
-  recordProviderStatus(providerStatus: string, options: { completed?: boolean } = {}): void {
+  recordProviderStatus(providerStatus: string): void {
     if (this.props.status !== SongStatus.GENERATING) {
       throw new BusinessRuleError("A provider status can only be recorded while generating.", {
         code: "song.provider_status_invalid_state",
@@ -150,9 +148,6 @@ export class Song {
     }
 
     this.props.providerStatus = Song.requireNonEmpty(providerStatus, "providerStatus");
-    if (options.completed) {
-      this.props.completedAt = new Date();
-    }
     this.props.updatedAt = new Date();
   }
 

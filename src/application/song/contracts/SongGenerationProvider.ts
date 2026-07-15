@@ -34,14 +34,18 @@ export interface SongGenerationSubmission {
  * resulting R2 object key; this type never itself gets persisted.
  *
  * `ready_to_download` (Gate 9.3) is a distinct terminal-success signal
- * from `completed`: the provider itself has finished, but
- * `GenerationPoller` does not yet act on it (no download, no R2 upload,
- * no email — that remains a future gate's job). It exists specifically
- * so a genuinely asynchronous provider (Mureka) can report "done" without
- * retroactively changing `SunoSongService`'s existing, synchronous
- * `completed` behavior, which still triggers the full download/store/
- * email flow unchanged. `providerStatus` on `pending`/`ready_to_download`
- * is the provider's own raw status string, for diagnostics only.
+ * from `completed`: the provider itself has finished asynchronously,
+ * separately from the request that started it, rather than returning
+ * the finished result inline like `completed` does. It exists
+ * specifically so a genuinely asynchronous provider (Mureka) can report
+ * "done" without retroactively changing `SunoSongService`'s existing,
+ * synchronous `completed` behavior. As of Gate 9.4 (Audio Download &
+ * Storage), `GenerationPoller` handles both variants identically —
+ * download, upload to R2, mark `COMPLETED` — except `ready_to_download`
+ * skips the "song ready" email (a future gate's job); see
+ * `GenerationPoller` for the full rationale. `providerStatus` on
+ * `pending`/`ready_to_download` is the provider's own raw status
+ * string, for diagnostics only.
  */
 export type SongGenerationPollResult =
   | { status: "pending"; providerStatus?: string }

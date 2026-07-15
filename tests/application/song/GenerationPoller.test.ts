@@ -217,38 +217,93 @@ describe("GenerationPoller", () => {
     expect(persisted?.providerStatus).toBe("running");
   });
 
-  it("records provider-complete status and returns ready_to_download without downloading, uploading, or emailing", async () => {
-    const song = seedGeneratingSong(lead.id, songRepository);
-    const audioDownloader = fakeAudioDownloader();
-    const audioStorage = fakeAudioStorage();
-    const emailSender = fakeEmailSender();
-    const poller = buildPoller({
-      songGenerator: fakeSongGenerator({
-        status: "ready_to_download",
-        providerSongId: "mureka-123",
-        audioUrl: "https://provider.example.com/short-lived.mp3",
-        duration: 90,
-        providerStatus: "succeeded",
-      }),
-      audioDownloader,
-      audioStorage,
-      emailSender,
+  describe("ready_to_download (Gate 9.4 — Audio Download & Storage)", () => {
+    function readyToDownloadPoller(overrides: Parameters<typeof buildPoller>[0] = {}) {
+      return buildPoller({
+        songGenerator: fakeSongGenerator({
+          status: "ready_to_download",
+          providerSongId: "mureka-123",
+          audioUrl: "https://provider.example.com/short-lived.mp3",
+          duration: 90,
+          providerStatus: "succeeded",
+        }),
+        ...overrides,
+      });
+    }
+
+    it("downloads the audio, uploads it to R2, persists only the storage key, and marks the song COMPLETED", async () => {
+      const song = seedGeneratingSong(lead.id, songRepository);
+      const audioDownloader = fakeAudioDownloader({
+        bytes: new Uint8Array([4, 5, 6]),
+        contentType: "audio/mpeg",
+      });
+      const audioStorage = fakeAudioStorage();
+      const poller = readyToDownloadPoller({ audioDownloader, audioStorage });
+
+      const response = await poller.execute();
+
+      expect(response?.outcome).toBe("ready");
+      expect(response?.song.status).toBe(SongStatus.COMPLETED);
+      expect(audioDownloader.download).toHaveBeenCalledWith(
+        "https://provider.example.com/short-lived.mp3",
+      );
+      expect(audioStorage.upload).toHaveBeenCalledWith(
+        `songs/${song.id}.mp3`,
+        expect.any(Uint8Array),
+        "audio/mpeg",
+      );
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.COMPLETED);
+      expect(persisted?.audioStorageKey).toBe(`songs/${song.id}.mp3`);
+      expect(persisted?.providerSongId).toBe("mureka-123");
+      expect(persisted?.duration).toBe(90);
+      expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("provider.example.com");
     });
 
-    const response = await poller.execute();
+    it("never sends an email for the ready_to_download outcome", async () => {
+      seedGeneratingSong(lead.id, songRepository);
+      const emailSender = fakeEmailSender();
+      const poller = readyToDownloadPoller({ emailSender });
 
-    expect(response?.outcome).toBe("ready_to_download");
-    expect(response?.song.status).toBe(SongStatus.GENERATING);
+      await poller.execute();
 
-    const persisted = await songRepository.findById(song.id);
-    expect(persisted?.status).toBe(SongStatus.GENERATING);
-    expect(persisted?.providerStatus).toBe("succeeded");
-    expect(persisted?.completedAt).not.toBeNull();
-    expect(persisted?.audioStorageKey).toBeNull();
+      expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+    });
 
-    expect(audioDownloader.download).not.toHaveBeenCalled();
-    expect(audioStorage.upload).not.toHaveBeenCalled();
-    expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+    it("marks the song FAILED and re-throws when the download fails", async () => {
+      const song = seedGeneratingSong(lead.id, songRepository);
+      const poller = readyToDownloadPoller({
+        audioDownloader: fakeAudioDownloader(new Error("download failed")),
+      });
+
+      await expect(poller.execute()).rejects.toThrow();
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.FAILED);
+      expect(persisted?.audioStorageKey).toBeNull();
+    });
+
+    it("marks the song FAILED and re-throws when the R2 upload fails", async () => {
+      const song = seedGeneratingSong(lead.id, songRepository);
+      const poller = readyToDownloadPoller({
+        audioStorage: fakeAudioStorage(new Error("R2 upload failed")),
+      });
+
+      await expect(poller.execute()).rejects.toThrow();
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.FAILED);
+      expect(persisted?.audioStorageKey).toBeNull();
+    });
+
+    it("never marks the song COMPLETED when the upload fails partway through", async () => {
+      seedGeneratingSong(lead.id, songRepository);
+      const audioStorage = fakeAudioStorage(new Error("R2 upload failed"));
+      const poller = readyToDownloadPoller({ audioStorage });
+
+      await expect(poller.execute()).rejects.toThrow();
+
+      expect(audioStorage.upload).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("marks the song FAILED with the provider's error when polling reports failure", async () => {
