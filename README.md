@@ -143,18 +143,42 @@ Added after **HOTFIX-DB-1** (2026-07-30): production hit `P2021: relation "publi
 
 #### Recovering from a failed migration
 
-If `prisma migrate status` (step 2 above) reports a migration as **failed** rather than merely pending, `prisma migrate deploy` will refuse to run _anything_ — including later, unrelated migrations — until that failed attempt is explicitly resolved. This is a distinct condition from "pending" and needs its own procedure:
+If `prisma migrate status` (step 2 above) reports a migration as **failed** rather than merely pending, `prisma migrate deploy` will refuse to run _anything_ — including later, unrelated migrations — until that failed attempt is explicitly resolved. This is a distinct condition from "pending" and needs its own procedure. (HOTFIX-DB-4 below is the concrete worked example; the mechanics generalize to any future failed migration.)
 
-1. **Confirm the migration file itself is actually correct now.** A failed migration is failed because either the SQL was wrong (HOTFIX-DB-3: `20260716083000_abuse_protection` referenced `"admin_id"`, a column that never existed — the real column, matching `schema.prisma`, is `"adminId"`) or the target database's state didn't match what the migration assumed. Fix the migration file first; only proceed once you're confident the corrected SQL will actually succeed against the real production schema.
-2. **Tell Prisma the failed attempt was rolled back**, not applied — Postgres migrations run inside a transaction by default, so a mid-script failure rolls back every statement in that file; nothing from it exists in the database, which is exactly what `--rolled-back` (not `--applied`) communicates:
-   ```bash
-   npx prisma migrate resolve --rolled-back "20260716083000_abuse_protection"
-   ```
-   Never use `--applied` for a migration that didn't actually finish — that tells Prisma to trust the schema already reflects it, which would be false here and would permanently desync `_prisma_migrations` from reality.
-3. **Re-run `npx prisma migrate status`** — it should now show the corrected migration (and anything after it) as pending, not failed.
-4. **Continue from step 3 of the checklist above** (`npx prisma migrate deploy`).
+**What a failed migration (`P3018`) actually leaves behind.** Prisma tracks migrations in a table it creates for itself, `_prisma_migrations`, with (among others) these columns: `id`, `checksum`, `migration_name`, `started_at`, `finished_at`, `applied_steps_count`, `logs`, `rolled_back_at`. When `migrate deploy` attempts a migration, it first inserts a row (`started_at = now()`, `finished_at = NULL`, `checksum` computed from that migration's `migration.sql` content _at the moment of the attempt_), then executes the file's statements one at a time inside a database transaction, incrementing `applied_steps_count` as each one succeeds. If a statement fails:
 
-This is a **checksum-safe** edit: Prisma only rejects modifying a migration file when that file has a `finished_at` timestamp recorded somewhere (i.e., it actually succeeded once) — editing it afterward would invalidate the checksum the CLI already trusted. `20260716083000_abuse_protection` has never recorded a `finished_at` anywhere, in any environment, because the original SQL could never have succeeded against a schema created by the `init` migration (which has always used `"adminId"`, never `"admin_id"`) — so there is no prior "trusted" checksum to invalidate. Editing an unapplied/failed migration file is exactly the case Prisma's own migration workflow expects to be resolved this way.
+- Postgres rolls back the whole transaction — every schema change the migration attempted (including ones after the failing statement, and any earlier statements in the _same_ file) is undone at the database level. Nothing from the migration persists in the actual schema.
+- The `_prisma_migrations` **tracking row itself is not part of that rolled-back transaction** and survives: `finished_at` stays `NULL`, `rolled_back_at` stays `NULL` (Prisma never sets this automatically — only a human running `migrate resolve` does), the Postgres error text lands in `logs`, and `applied_steps_count` reflects how many statements got through before the failure (`0` here, since the very first statement — the `ALTER COLUMN` — is the one that failed).
+- Every later `migrate deploy`/`migrate status` invocation sees this unfinished row and refuses to proceed with anything else. This is a deliberate safety gate, not a bug: Prisma has no safe way to know on its own whether it's fine to just retry, so it stops and waits for a human decision.
+
+**Is `prisma migrate resolve` required?** Yes — there is no other supported way to clear an unfinished row from `_prisma_migrations`; retrying `migrate deploy` directly will keep refusing until the failed attempt is explicitly resolved.
+
+**Mark it `rolled-back`, never `applied`.** `migrate resolve` supports exactly two flags, and they mean opposite things:
+
+- `--rolled-back` tells Prisma "this attempt's changes are _not_ in the database — next `migrate deploy`, run the (now-corrected) file from scratch." This matches reality here: Postgres's transaction rollback means neither the `adminId` nullability change nor the `rate_limit_events` table exist yet.
+- `--applied` tells Prisma "trust that this migration's changes already exist — mark it done, don't run its SQL again." Using this here would be false (nothing from the migration ever committed) and would permanently desync `_prisma_migrations` from the real schema: Prisma would report the schema as fully up to date while `audit_logs.adminId` is still `NOT NULL` and `rate_limit_events` still doesn't exist — the exact same failure, just hidden instead of surfaced.
+
+**Exact command sequence** (run with the production `DATABASE_URL` in the environment; nothing here has been executed by this assistant):
+
+```
+step 1 — confirm the current state (read-only)
+  npx prisma migrate status
+
+step 2 — resolve the failed attempt as rolled back
+  npx prisma migrate resolve --rolled-back "20260716083000_abuse_protection"
+
+step 3 — confirm the resolve worked: the migration should now show as
+         pending, not failed
+  npx prisma migrate status
+
+step 4 — apply it (and anything after it) using the corrected file
+  npx prisma migrate deploy
+
+step 5 — confirm a clean result
+  npx prisma migrate status   # "Database schema is up to date!"
+```
+
+**Can the corrected migration safely run now?** Yes. Resolving as `--rolled-back` only stamps `rolled_back_at` on the existing failed row — it does not delete it, and it does not carry the old (buggy) checksum forward as something future runs must match. The _next_ `migrate deploy` treats `20260716083000_abuse_protection` as never having successfully completed, computes a fresh checksum from the file on disk (now corrected — see HOTFIX-DB-3), inserts a brand-new tracking row, and executes the corrected SQL from scratch. Checksum _enforcement_ (Prisma refusing to proceed because a file's content no longer matches a previously recorded value) only applies to migrations that have a **successful** (`finished_at` set) row already on record — this migration has never had one, in any environment, so there is nothing for the corrected file's checksum to conflict with.
 
 ## License
 

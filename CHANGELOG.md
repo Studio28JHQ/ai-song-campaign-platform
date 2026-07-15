@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.3] - 2026-08-01
+
+HOTFIX-DB-4 — Recover Failed Prisma Migration. Documentation-only: the migration file itself was already corrected (HOTFIX-DB-3); this expands the recovery procedure with the exact `_prisma_migrations` mechanics and command sequence needed to clear the failed attempt Prisma recorded before that fix. No code, schema, or migration changed.
+
+### Documentation
+
+- `README.md`'s "Recovering from a failed migration" section expanded with: how Prisma records a failed migration (`_prisma_migrations` columns — `checksum`, `started_at`, `finished_at`, `applied_steps_count`, `logs`, `rolled_back_at` — and which ones a `P3018` failure leaves set/unset, including that `applied_steps_count` is `0` here since the first statement is the one that failed); why `prisma migrate resolve` is required (no other way to clear an unfinished row); why `--rolled-back` is correct and `--applied` would be actively dangerous (it would make Prisma report the schema as up to date while `rate_limit_events`/`adminId` nullability still don't exist); the exact numbered command sequence (`migrate status` → `migrate resolve --rolled-back` → `migrate status` → `migrate deploy` → `migrate status`); and confirmation that the corrected file is safe to run now, since checksum enforcement only applies to migrations with a recorded successful run, which this one has never had.
+
 ## [1.16.2] - 2026-07-31
 
 HOTFIX-DB-3 — Repair Failed Production Migration. Corrects the actual root cause behind HOTFIX-DB-1/DB-2: not a skipped migration, but an authoring typo inside migration `20260716083000_abuse_protection` that referenced a column that never existed, so the migration could never have completed successfully anywhere. Fixes the migration file and documents the exact Prisma recovery workflow; no application, domain, infrastructure, or UI code changed.
