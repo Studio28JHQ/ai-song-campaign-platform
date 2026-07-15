@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] - 2026-07-31
+
+HOTFIX-DB-3 — Repair Failed Production Migration. Corrects the actual root cause behind HOTFIX-DB-1/DB-2: not a skipped migration, but an authoring typo inside migration `20260716083000_abuse_protection` that referenced a column that never existed, so the migration could never have completed successfully anywhere. Fixes the migration file and documents the exact Prisma recovery workflow; no application, domain, infrastructure, or UI code changed.
+
+### Fixed
+
+- `prisma/migrations/20260716083000_abuse_protection/migration.sql`: `ALTER TABLE "audit_logs" ALTER COLUMN "admin_id" DROP NOT NULL` corrected to `"adminId"` (camelCase) — the column the `init` migration actually created and `schema.prisma`'s `AuditLog.adminId` field (no `@map`) has always expected. The prose comment referencing `AuditLog.admin_id` was corrected to match. Nothing else in the file changed (the `rate_limit_events` table/index are unaffected).
+- **Checksum safety**: confirmed safe to edit. Prisma only rejects modifying a migration whose checksum is already recorded as `finished_at`-set (i.e., it actually succeeded) somewhere. This migration has never recorded a `finished_at` in any environment — the original SQL could never succeed against a schema created by `init` (which has always used `adminId`, never `admin_id`) — so there is no prior trusted checksum being invalidated.
+- `README.md`'s Deployment Checklist gained a "Recovering from a failed migration" subsection: `prisma migrate status` reporting a migration as **failed** (not merely pending) blocks `migrate deploy` entirely until resolved via `prisma migrate resolve --rolled-back "<migration_name>"` — `--rolled-back`, not `--applied`, since Postgres's default per-migration transaction rolled back every statement in the failed file, so nothing from it exists in the database yet. Documented as a distinct recovery path from the simpler "pending migration" case HOTFIX-DB-1 originally covered.
+
 ## [1.16.1] - 2026-07-30
 
 HOTFIX-DB-1 — Production Database Alignment. Documentation-only fix: production was hitting `P2021: relation "public.rate_limit_events" does not exist` on lead creation. Root cause was operational, not a code defect — no application, domain, infrastructure, or UI code changed.

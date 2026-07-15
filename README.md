@@ -123,8 +123,10 @@ Added after **HOTFIX-DB-1** (2026-07-30): production hit `P2021: relation "publi
    ```bash
    npx prisma migrate status
    ```
-   This is read-only. It lists every migration under `prisma/migrations/` and whether the target database has already applied it — confirm which ones (if any) are pending before deciding to deploy.
-3. **Apply pending migrations**, if step 2 shows any:
+   This is read-only. It lists every migration under `prisma/migrations/` and whether the target database has already applied it. Two different outcomes need two different next steps — read the output carefully:
+   - **Pending** (never attempted) → go straight to step 3.
+   - **Failed** (attempted, didn't finish — the actual HOTFIX-DB-1/DB-2/DB-3 situation, caused by a typo in migration `20260716083000_abuse_protection` referencing a column that never existed) → this **blocks** `migrate deploy` entirely until resolved. See "Recovering from a failed migration" below before doing anything else.
+3. **Apply pending migrations**:
    ```bash
    npx prisma migrate deploy
    ```
@@ -138,6 +140,21 @@ Added after **HOTFIX-DB-1** (2026-07-30): production hit `P2021: relation "publi
    - `GET /api/internal/health` returns `200` (database/R2/Resend/Mureka all reachable — see `HealthCheckService`).
    - Perform one real (or, outside a live campaign window, a disposable test) lead registration end to end and confirm no `500`/`P2021`/`P2022` in application logs.
    - If this deployment's migrations touched the song pipeline's columns (e.g. `songs.audioStorageKey`, `providerTaskId`), also confirm `GET /api/internal/pipeline/run` (with `CRON_SECRET`) returns `200` rather than a database error.
+
+#### Recovering from a failed migration
+
+If `prisma migrate status` (step 2 above) reports a migration as **failed** rather than merely pending, `prisma migrate deploy` will refuse to run _anything_ — including later, unrelated migrations — until that failed attempt is explicitly resolved. This is a distinct condition from "pending" and needs its own procedure:
+
+1. **Confirm the migration file itself is actually correct now.** A failed migration is failed because either the SQL was wrong (HOTFIX-DB-3: `20260716083000_abuse_protection` referenced `"admin_id"`, a column that never existed — the real column, matching `schema.prisma`, is `"adminId"`) or the target database's state didn't match what the migration assumed. Fix the migration file first; only proceed once you're confident the corrected SQL will actually succeed against the real production schema.
+2. **Tell Prisma the failed attempt was rolled back**, not applied — Postgres migrations run inside a transaction by default, so a mid-script failure rolls back every statement in that file; nothing from it exists in the database, which is exactly what `--rolled-back` (not `--applied`) communicates:
+   ```bash
+   npx prisma migrate resolve --rolled-back "20260716083000_abuse_protection"
+   ```
+   Never use `--applied` for a migration that didn't actually finish — that tells Prisma to trust the schema already reflects it, which would be false here and would permanently desync `_prisma_migrations` from reality.
+3. **Re-run `npx prisma migrate status`** — it should now show the corrected migration (and anything after it) as pending, not failed.
+4. **Continue from step 3 of the checklist above** (`npx prisma migrate deploy`).
+
+This is a **checksum-safe** edit: Prisma only rejects modifying a migration file when that file has a `finished_at` timestamp recorded somewhere (i.e., it actually succeeded once) — editing it afterward would invalidate the checksum the CLI already trusted. `20260716083000_abuse_protection` has never recorded a `finished_at` anywhere, in any environment, because the original SQL could never have succeeded against a schema created by the `init` migration (which has always used `"adminId"`, never `"admin_id"`) — so there is no prior "trusted" checksum to invalidate. Editing an unapplied/failed migration file is exactly the case Prisma's own migration workflow expects to be resolved this way.
 
 ## License
 
