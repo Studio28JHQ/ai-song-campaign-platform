@@ -1,11 +1,11 @@
 "use client";
 
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CampaignInput } from "@/components/campaign/CampaignInput";
+import { CampaignLabel } from "@/components/campaign/CampaignLabel";
 
-interface RegistrationFieldProps {
+interface CampaignFieldProps {
   label: string;
   placeholder?: string;
   type?: string;
@@ -13,15 +13,21 @@ interface RegistrationFieldProps {
   autoComplete?: string;
   maxLength?: number;
   error?: string;
+  icon?: ReactNode;
   registration: UseFormRegisterReturn;
 }
 
 /**
- * One labeled input with its own error message, wired for accessibility:
- * label/input association via `htmlFor`/`id`, `aria-invalid` and
- * `aria-describedby` pointing at the error text when present.
+ * Sprint UI-3A — Landing Experience. One labeled campaign-styled input
+ * with its own error message — the same accessibility wiring
+ * `RegistrationField` (Sprint UI-1) had: label/input association via
+ * `htmlFor`/`id`, `aria-invalid` and `aria-describedby` pointing at the
+ * error text when present. Supersedes `RegistrationField` as the
+ * landing page's field component; the same `react-hook-form`
+ * `registration` spread means no form-behavior change at all, only
+ * presentation.
  */
-export function RegistrationField({
+export function CampaignField({
   label,
   placeholder,
   type = "text",
@@ -29,24 +35,25 @@ export function RegistrationField({
   autoComplete,
   maxLength,
   error,
+  icon,
   registration,
-}: RegistrationFieldProps) {
+}: CampaignFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
+    <div className="flex flex-col gap-2">
+      <CampaignLabel htmlFor={id}>{label}</CampaignLabel>
+      <CampaignInput
         id={id}
         type={type}
         inputMode={inputMode}
         placeholder={placeholder}
         autoComplete={autoComplete}
         maxLength={maxLength}
+        icon={icon}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
-        className="h-12 rounded-xl bg-card px-4 focus-visible:border-primary focus-visible:ring-primary/25"
         {...registration}
       />
       {error ? (

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import HomePage from "../../app/page";
 
@@ -19,7 +19,7 @@ describe("HomePage (Landing Page)", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /cómo funciona/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: /consigue la canción/i }),
+      screen.getByRole("heading", { level: 2, name: /crea la canción de tu bebé/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: /preguntas frecuentes/i }),
@@ -50,27 +50,14 @@ describe("HomePage (Landing Page)", () => {
     expect(screen.getByText(/todos los derechos reservados/i)).toBeInTheDocument();
   });
 
-  it("reuses the existing registration form as the single entry point, without a duplicate flow", () => {
+  it("embeds the existing registration form directly in the Hero, as the single entry point", () => {
     render(<HomePage />);
 
     // Exactly one submit control for registration anywhere on the page.
-    expect(screen.getAllByRole("button", { name: /^registrarme$/i })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /crear la canción de mi bebé/i })).toHaveLength(1);
     expect(screen.getByLabelText("Tu nombre")).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre del bebé")).toBeInTheDocument();
     expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
-  });
-
-  it("the Hero CTA is a plain anchor to the registration section (no client JS required to scroll)", () => {
-    render(<HomePage />);
-
-    const cta = screen.getByRole("link", { name: /crear la canción de mi bebé/i });
-    expect(cta).toHaveAttribute("href", "#register");
-  });
-
-  it("gives the registration section the #register id the Hero CTA targets", () => {
-    render(<HomePage />);
-
-    expect(document.getElementById("register")).toBeInTheDocument();
   });
 
   it("uses responsive grid utility classes for the how-it-works layout", () => {
@@ -84,10 +71,11 @@ describe("HomePage (Landing Page)", () => {
     expect(list?.className).toContain("lg:grid-cols-3");
   });
 
-  it("accessibility smoke: main/footer landmarks, single h1, and every image has alt text", () => {
+  it("accessibility smoke: main/footer/banner landmarks, single h1, and every image has alt text", () => {
     render(<HomePage />);
 
     expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 
@@ -104,10 +92,19 @@ describe("HomePage (Landing Page)", () => {
     expect(summary.closest("details")).not.toBeNull();
   });
 
-  it("decorative icons are hidden from assistive technology", () => {
+  it("decorative illustrations are hidden from assistive technology", () => {
     render(<HomePage />);
 
-    const note = screen.getByText("♪");
-    expect(note).toHaveAttribute("aria-hidden", "true");
+    document.querySelectorAll('img[alt=""]').forEach((img) => {
+      expect(img).toHaveAttribute("aria-hidden", "true");
+    });
+  });
+
+  it("the navigation bar renders only the campaign logo — no technical navigation links", () => {
+    render(<HomePage />);
+
+    const nav = screen.getByRole("banner");
+    expect(nav.querySelectorAll("a, button")).toHaveLength(0);
+    expect(within(nav).getByRole("img", { name: "Bassa" })).toBeInTheDocument();
   });
 });

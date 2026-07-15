@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-07-28
+
+Sprint UI-3A — Landing Experience. Rebuilds the public landing page into a marketing landing experience — using the Sprint UI-2.5 asset library for the first time — instead of recoloring the previous SaaS-shaped layout. No backend, database, API, business-rule, or security changes; Lyrics Workflow, Song Result, and Admin are untouched. `RegistrationForm`'s own validation/submit logic is unchanged — only how and where it's presented.
+
+### Added
+
+- 16 reusable `Campaign*` components (`src/components/campaign/`): `CampaignContainer`, `CampaignSection`, `CampaignCard`, `CampaignHeading`, `CampaignBackground`, `CampaignBubble`, `CampaignCloud`, `CampaignGlow`, `CampaignProduct`, `CampaignAnimal`, `CampaignButton`, `CampaignInput`, `CampaignLabel`, `CampaignField`, `CampaignFieldIcons`, `CampaignHero` — each either wraps an existing primitive (`Section`, `Button`, `Input`, `Label`, `PageContainer`/`ContentWrapper`, `CampaignIllustration`) or is genuinely new decoration, never a second implementation of the same layout/behavior.
+- A small motion system (`app/globals.css`): `animate-float-slow`/`-medium`, `animate-fade-up`/`-in`, `animate-soft-glow`, `animate-bubble-drift`, `animate-cloud-drift`, `animate-scale-hover` — slow, low-amplitude by design, all disabled at once under `prefers-reduced-motion: reduce`.
+- `.campaign-landing` (`app/globals.css`) activates Gotham Book (`--font-body-campaign`, loaded but dormant since UI-2.5) as the landing page's body font; `CampaignHeading` activates Rounded Robin (`display`) and Gotham Medium (`section`/`title`) for headings, via inline `style` so it wins regardless of the existing `.theme-campaign h1,h2,h3` rule (Fredoka) — that rule, and `.theme-campaign`'s own `--font-sans` (Inter), stay untouched for `/generate` and `/song`, both out of scope this sprint.
+- `Navigation` (`src/features/landing/components/`) — logo only, no links, replacing the previous scroll-anchor CTA pattern.
+- `next.config.ts`: `images.formats` now lists AVIF before WEBP (`next/image` negotiates the smallest the browser supports); `images.dangerouslyAllowSVG` + a matching `contentSecurityPolicy` enabled so `next/image` can serve the UI-2.5 decorative SVGs at all (safe here — every SVG under `public/campaign/` is hand-authored, committed source, never user-supplied).
+
+### Changed
+
+- `HeroSection` rebuilt on `CampaignHero`: a single responsive grid whose item `order` (mobile) and `col-start`/`row-start` (desktop) are set independently per slot, producing the brief's two different orderings (desktop: headline → description → form left, product → animal right; mobile: animal → headline → description → form → product) from one markup tree. The registration form is now embedded directly in the Hero as a `CampaignCard`, not a separate scrolled-to section.
+- `RegistrationForm` restyled on `CampaignField`/`CampaignButton` (same `register()`/error wiring as before, only presentation changed), gained a leading SVG icon per field, and its submit button now reads "Crear la canción de mi bebé" (was "Registrarme") — sized and positioned to visually dominate the card, per the brief.
+- `CampaignExplanation`, `HowItWorks`, `Faq`, `LegalDisclaimer`, `LandingFooter` rebuilt on the new `Campaign*` primitives (24px-radius cards, generous spacing, the brand logo in the footer); copy lightly warmed in a couple of spots (e.g. "Escribimos, con cariño, una letra pensada solo para tu pequeño").
+- `app/page.tsx`: added `Navigation`, removed the separate `RegistrationSection`, added `.campaign-landing` alongside `.theme-campaign` on the root `<main>`.
+
+### Removed
+
+- `RegistrationSection` and `RegistrationField` — both fully superseded (`CampaignHero`'s embedded form card, and `CampaignField`, respectively); no remaining import of either anywhere in the app.
+
+### Accessibility
+
+- Every decorative image (`CampaignCloud`, illustration accents) is `alt=""` + `aria-hidden`; every content image (`CampaignAnimal`/`CampaignProduct`, the logo) has real, Spanish alt text — verified by the same "every image has alt text" smoke test the landing page already had, extended to also check decorative ones are actually hidden from assistive technology.
+- Focus-visible states are unchanged from Sprint UI-2/UI-2.5 (`CampaignInput`/`CampaignButton` build on the same shared `Input`/`Button` primitives) — no new focus trap or keyboard path introduced anywhere in the Hero's embedded form.
+- `Navigation` is a real `<header>` landmark with zero interactive elements — "minimal, no technical navigation" — so it adds no new tab stops.
+
+### Performance
+
+- Every foreground photo (animals/products, via `CampaignIllustration`) goes through `next/image`, which now also considers AVIF first (see `next.config.ts` above); every background photo (`CampaignBackground`) uses the Sprint UI-2.5 pre-generated static AVIF with a WEBP fallback layer, never the 2–3 MB PNG masters.
+- Decorative-only elements (bubbles, glow, clouds) are CSS/SVG, not additional photographs — no extra photographic payload for pure decoration.
+
 ## [1.14.0] - 2026-07-27
 
 Sprint UI-2.5 — Campaign Asset Library. Purely a preparation sprint: normalizes, optimizes, and catalogs every campaign visual asset (photos, fonts, new SVG illustrations/patterns) and stands up the infrastructure (`CampaignIllustration`, three new font CSS variables) UI-3 will consume. No backend, database, or API changes; **no UI redesign** — nothing new is rendered anywhere yet, and `.theme-campaign`'s live font bindings (Fredoka/Inter, Sprint UI-1/UI-2) are untouched.

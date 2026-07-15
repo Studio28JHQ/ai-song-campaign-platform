@@ -239,3 +239,150 @@ body {
 .theme-campaign h3 {
   font-family: var(--font-heading);
 }
+
+/**
+ * Sprint UI-3A — Landing Experience. Activates Gotham Book
+ * (`--font-body-campaign`, loaded but dormant since UI-2.5) as the body
+ * font for the landing page only — applied on `app/page.tsx`'s root
+ * `<main>` alongside `.theme-campaign`. Deliberately a second, more
+ * specific class rather than a change to `.theme-campaign`'s own
+ * `--font-sans` (still Inter): `/generate` and `/song` also use
+ * `.theme-campaign` and are explicitly out of scope this sprint ("No
+ * changes to Lyrics Workflow. No changes to Song Result."), so the
+ * shared token must stay untouched. `CampaignHeading` (display/section
+ * variants — Rounded Robin/Gotham Medium) overrides `h1`/`h2`/`h3`
+ * locally via inline style, for the same reason.
+ */
+.campaign-landing {
+  font-family: var(--font-body-campaign), var(--font-sans);
+}
+
+/**
+ * Sprint UI-3A — Landing Experience. A small, reusable motion system —
+ * every animation is slow and low-amplitude by design ("no bouncing, no
+ * exaggerated movement"). `prefers-reduced-motion` disables all of it
+ * at once, rather than per-component, so no call site can forget it.
+ */
+@keyframes campaign-float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes campaign-float-medium {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-16px);
+  }
+}
+
+@keyframes campaign-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes campaign-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes campaign-soft-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes campaign-bubble-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(6px, -14px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes campaign-cloud-drift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(18px);
+  }
+}
+
+.animate-float-slow {
+  animation: campaign-float-slow 6s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: campaign-float-medium 4.5s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: campaign-fade-up 0.7s ease-out both;
+}
+
+.animate-fade-in {
+  animation: campaign-fade-in 0.8s ease-out both;
+}
+
+.animate-soft-glow {
+  animation: campaign-soft-glow 3.5s ease-in-out infinite;
+}
+
+.animate-bubble-drift {
+  animation: campaign-bubble-drift 9s ease-in-out infinite;
+}
+
+.animate-cloud-drift {
+  animation: campaign-cloud-drift 16s ease-in-out infinite;
+}
+
+.animate-scale-hover {
+  transition: transform 200ms ease;
+}
+
+.animate-scale-hover:hover {
+  transform: scale(1.03);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow,
+  .animate-float-medium,
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-soft-glow,
+  .animate-bubble-drift,
+  .animate-cloud-drift {
+    animation: none;
+  }
+
+  .animate-scale-hover {
+    transition: none;
+  }
+}

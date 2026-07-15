@@ -19,7 +19,9 @@ The campaign brand palette (Sprint UI-2 — the client's exact hex specification
 
 Typography is organized by role rather than by raw font size: `display`, `heading`, `title`, `body`, `caption`, `label`, `button`. Each role captures a complete, consistent combination of size, line height, and weight for that purpose (e.g. a page's single dominant statement vs. a form field's caption text).
 
-Public-facing headings (`h1`–`h3` within `.theme-campaign`) use a warm, rounded display face (Fredoka) layered on top of the same type scale — only the font-family binding changed, not the roles or their sizes. Public body text (Sprint UI-2) uses Inter, bound to `--font-sans` only inside `.theme-campaign`; the admin panel keeps the original Geist Sans binding untouched.
+Public-facing headings (`h1`–`h3` within `.theme-campaign`, outside the Landing Page) use a warm, rounded display face (Fredoka) layered on top of the same type scale — only the font-family binding changed, not the roles or their sizes. Public body text on those same pages (Sprint UI-2) uses Inter, bound to `--font-sans` only inside `.theme-campaign`; the admin panel keeps the original Geist Sans binding untouched.
+
+The Landing Page specifically (Sprint UI-3A) activates the client's own campaign typefaces, prepared but left dormant in Sprint UI-2.5: Rounded Robin for the Hero's display headline and Gotham Medium for every other heading (`CampaignHeading`'s `display`/`section`/`title` variants, set via inline style so they win over the `.theme-campaign h1,h2,h3` rule above), and Gotham Book for body text (`.campaign-landing`, layered on top of `.theme-campaign` on the Landing Page's root element only). `/generate` and `/song` are untouched by this — they keep Fredoka/Inter.
 
 ## Spacing System
 

@@ -56,7 +56,7 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/generate"));
     expect(window.sessionStorage.length).toBe(0);
@@ -71,7 +71,7 @@ describe("RegistrationForm", () => {
     global.fetch = vi.fn();
 
     renderForm();
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(await screen.findByText("Tu nombre es obligatorio.")).toBeInTheDocument();
     expect(screen.getByText("Nombre del bebé es obligatorio.")).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe("RegistrationForm", () => {
     await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
     await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
     await user.type(screen.getByLabelText("Correo electrónico"), "not-an-email");
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(await screen.findByText("Ingresa un correo electrónico válido.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
@@ -106,7 +106,7 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(
       await screen.findByText("Este correo ya fue utilizado para registrarse."),
@@ -124,7 +124,7 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Algo salió mal. Inténtalo de nuevo.",
@@ -144,9 +144,9 @@ describe("RegistrationForm", () => {
 
     renderForm();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: /registr/i }));
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
-    expect(await screen.findByRole("button", { name: /registrando/i })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /creando tu canción/i })).toBeDisabled();
 
     resolveFetch({
       ok: true,

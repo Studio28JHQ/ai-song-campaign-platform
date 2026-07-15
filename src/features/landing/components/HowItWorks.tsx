@@ -1,5 +1,7 @@
-import { ContentWrapper } from "@/components/layout/ContentWrapper";
-import { Section } from "@/components/layout/Section";
+import { CampaignCard } from "@/components/campaign/CampaignCard";
+import { CampaignContainer } from "@/components/campaign/CampaignContainer";
+import { CampaignHeading } from "@/components/campaign/CampaignHeading";
+import { CampaignSection } from "@/components/campaign/CampaignSection";
 
 const STEPS = [
   { title: "Regístrate", description: "Comparte tu correo y algunos datos sobre tu familia." },
@@ -9,7 +11,7 @@ const STEPS = [
   },
   {
     title: "La IA escribe la letra",
-    description: "Nuestra IA crea una letra personalizada con lo que nos compartiste.",
+    description: "Escribimos, con cariño, una letra pensada solo para tu pequeño.",
   },
   {
     title: "Tú apruebas la letra",
@@ -21,24 +23,25 @@ const STEPS = [
   },
   {
     title: "La recibes por correo",
-    description: "Tu canción terminada llega a tu correo, lista para escuchar y guardar.",
+    description: "Tu canción terminada llega a tu correo, lista para escuchar y atesorar.",
   },
 ] as const;
 
 /** The campaign flow, in order — see docs/Product/User_Flow.md — Happy Path. */
 export function HowItWorks() {
   return (
-    <Section spacing="lg" className="bg-muted/40">
-      <ContentWrapper className="max-w-(--container-content)">
-        <h2 className="text-center font-heading text-heading font-semibold text-foreground">
+    <CampaignSection tone="muted">
+      <CampaignContainer>
+        <CampaignHeading as="h2" variant="section" className="text-center">
           Cómo funciona
-        </h2>
+        </CampaignHeading>
 
-        <ol className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <ol className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {STEPS.map((step, index) => (
-            <li
+            <CampaignCard
               key={step.title}
-              className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+              as="li"
+              className="flex flex-col gap-3 transition-shadow hover:shadow-[0_12px_36px_rgba(139,92,246,0.14)]"
             >
               <span
                 aria-hidden
@@ -46,14 +49,14 @@ export function HowItWorks() {
               >
                 {index + 1}
               </span>
-              <h3 className="font-heading text-title font-semibold text-foreground">
+              <CampaignHeading as="h3" variant="title">
                 {step.title}
-              </h3>
+              </CampaignHeading>
               <p className="text-body text-muted-foreground">{step.description}</p>
-            </li>
+            </CampaignCard>
           ))}
         </ol>
-      </ContentWrapper>
-    </Section>
+      </CampaignContainer>
+    </CampaignSection>
   );
 }

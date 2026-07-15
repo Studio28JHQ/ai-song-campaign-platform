@@ -6,7 +6,7 @@ import { HeroSection } from "@/features/landing/components/HeroSection";
 import { HowItWorks } from "@/features/landing/components/HowItWorks";
 import { LandingFooter } from "@/features/landing/components/LandingFooter";
 import { LegalDisclaimer } from "@/features/landing/components/LegalDisclaimer";
-import { RegistrationSection } from "@/features/landing/components/RegistrationSection";
+import { Navigation } from "@/features/landing/components/Navigation";
 
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — read directly here,
@@ -33,22 +33,29 @@ export const metadata: Metadata = {
 };
 
 /**
- * The public campaign Landing Page — Hero, campaign explanation, how it
- * works, registration (reusing the existing `RegistrationForm` — see
- * `src/features/lead/`, not duplicated here), FAQ, legal disclaimer, and
- * footer (see docs/Product/User_Flow.md). Entirely Server Components:
- * the only client-side island is `RegistrationForm` itself.
+ * The public campaign Landing Page — Sprint UI-3A rebuilt this into a
+ * marketing landing experience: a minimal `Navigation` (logo only), a
+ * full-viewport `HeroSection` with the registration form embedded
+ * directly inside it (reusing the existing `RegistrationForm` — see
+ * `src/features/lead/`, not duplicated), then campaign explanation, how
+ * it works, FAQ, legal disclaimer, and footer (see
+ * docs/Product/User_Flow.md). There is no separate scrolled-to
+ * registration section anymore — the Hero *is* the registration entry
+ * point. Entirely Server Components: the only client-side island is
+ * `RegistrationForm` itself.
  *
  * `.theme-campaign` (Sprint UI-1) scopes the soft-blue/white/purple
- * brand palette to this page only — see `app/globals.css`.
+ * brand palette to this page only; `.campaign-landing` (Sprint UI-3A)
+ * additionally activates Gotham Book as the body font — both scoped to
+ * this page alone, see `app/globals.css`.
  */
 export default function HomePage() {
   return (
-    <main className="theme-campaign">
-      <HeroSection />
+    <main className="theme-campaign campaign-landing">
+      <Navigation />
+      <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
       <CampaignExplanation />
       <HowItWorks />
-      <RegistrationSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
       <Faq />
       <LegalDisclaimer />
       <LandingFooter campaignName={appName} />

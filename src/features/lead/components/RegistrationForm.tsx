@@ -4,8 +4,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CampaignButton } from "@/components/campaign/CampaignButton";
+import { CampaignField } from "@/components/campaign/CampaignField";
+import {
+  BabyIcon,
+  CalendarIcon,
+  MailIcon,
+  MapPinIcon,
+  PhoneIcon,
+  UserIcon,
+} from "@/components/campaign/CampaignFieldIcons";
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
-import { Button } from "@/components/ui/button";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import {
   emailField,
@@ -14,7 +23,6 @@ import {
   plainTextField,
 } from "@/shared/validation/zodFields";
 import { useRegisterLead } from "../hooks/useRegisterLead";
-import { RegistrationField } from "./RegistrationField";
 
 /**
  * V1 has exactly one campaign and no campaign-selection UI (see
@@ -161,25 +169,27 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         </p>
       ) : null}
 
-      <RegistrationField
+      <CampaignField
         label="Tu nombre"
         placeholder="Ej. María Fernández"
         autoComplete="name"
         maxLength={FIELD_LIMITS.parentName}
         error={translateFieldError(errors.parentName?.message)}
         registration={register("parentName")}
+        icon={<UserIcon />}
       />
 
-      <RegistrationField
+      <CampaignField
         label="Nombre del bebé"
         placeholder="Ej. Sofía"
         autoComplete="off"
         maxLength={FIELD_LIMITS.babyName}
         error={translateFieldError(errors.babyName?.message)}
         registration={register("babyName")}
+        icon={<BabyIcon />}
       />
 
-      <RegistrationField
+      <CampaignField
         label="Edad del bebé (meses)"
         placeholder="6"
         type="number"
@@ -187,18 +197,20 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         autoComplete="off"
         error={translateFieldError(errors.babyAge?.message)}
         registration={register("babyAge")}
+        icon={<CalendarIcon />}
       />
 
-      <RegistrationField
+      <CampaignField
         label="Ciudad"
         placeholder="Ej. Guadalajara"
         autoComplete="address-level2"
         maxLength={FIELD_LIMITS.city}
         error={translateFieldError(errors.city?.message)}
         registration={register("city")}
+        icon={<MapPinIcon />}
       />
 
-      <RegistrationField
+      <CampaignField
         label="Correo electrónico"
         placeholder="maria@ejemplo.com"
         type="email"
@@ -206,9 +218,10 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         maxLength={FIELD_LIMITS.email}
         error={translateFieldError(errors.email?.message)}
         registration={register("email")}
+        icon={<MailIcon />}
       />
 
-      <RegistrationField
+      <CampaignField
         label="Teléfono"
         placeholder="+52 55 1234 5678"
         type="tel"
@@ -216,6 +229,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         maxLength={FIELD_LIMITS.phone}
         error={translateFieldError(errors.phone?.message)}
         registration={register("phone")}
+        icon={<PhoneIcon />}
       />
 
       <div className="flex flex-col gap-1.5">
@@ -232,13 +246,9 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         ) : null}
       </div>
 
-      <Button
-        type="submit"
-        disabled={isSubmitting}
-        className="mt-2 h-12 w-full rounded-full text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]"
-      >
-        {isSubmitting ? "Registrando..." : "Registrarme"}
-      </Button>
+      <CampaignButton type="submit" disabled={isSubmitting} className="mt-3 h-14 w-full text-lg">
+        {isSubmitting ? "Creando tu canción..." : "Crear la canción de mi bebé"}
+      </CampaignButton>
     </form>
   );
 }

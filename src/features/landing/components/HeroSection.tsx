@@ -1,65 +1,74 @@
-import { ContentWrapper } from "@/components/layout/ContentWrapper";
-import { Section } from "@/components/layout/Section";
-import { buttonVariants } from "@/components/ui/button";
+import { CampaignAnimal } from "@/components/campaign/CampaignAnimal";
+import { CampaignBackground } from "@/components/campaign/CampaignBackground";
+import { CampaignBubble } from "@/components/campaign/CampaignBubble";
+import { CampaignCard } from "@/components/campaign/CampaignCard";
+import { CampaignCloud } from "@/components/campaign/CampaignCloud";
+import { CampaignGlow } from "@/components/campaign/CampaignGlow";
+import { CampaignHeading } from "@/components/campaign/CampaignHeading";
+import { CampaignHero } from "@/components/campaign/CampaignHero";
+import { CampaignProduct } from "@/components/campaign/CampaignProduct";
+import { RegistrationForm } from "@/features/lead/components/RegistrationForm";
+
+interface HeroSectionProps {
+  turnstileSiteKey: string;
+}
 
 /**
- * The landing page's above-the-fold section. A plain anchor link (not a
- * client-side scroll handler) drives the primary CTA, so this stays a
- * Server Component with zero JavaScript of its own — the only client
- * code on the page is the existing `RegistrationForm` island further
- * down (see docs/Product/User_Flow.md).
+ * Sprint UI-3A — Landing Experience. The landing page's real Hero
+ * content, composed from the generic `CampaignHero` shell (layout) plus
+ * `CampaignBackground`/`CampaignBubble`/`CampaignCloud`/`CampaignGlow`
+ * (decoration) and `CampaignAnimal`/`CampaignProduct` (Sprint UI-2.5
+ * assets). The registration form is embedded directly here — as its
+ * own `CampaignCard` — rather than in a separate scrolled-to section,
+ * per the brief's Hero layout; this is the only registration entry
+ * point on the page, still the unmodified `RegistrationForm` (no
+ * application-flow change, only where and how it's presented).
  */
-export function HeroSection() {
+export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
   return (
-    <Section
-      spacing="xl"
-      className="relative overflow-hidden"
-      style={{
-        background: "linear-gradient(180deg, #F8FCFF 0%, #D9F2FF 55%, #BEE8FF 100%)",
-      }}
-    >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-16 -left-16 h-64 w-64 rounded-full bg-accent/30 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-10 -right-20 h-80 w-80 rounded-full bg-secondary/50 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-gradient-to-br from-primary/15 via-accent/20 to-transparent blur-3xl"
-      />
-      <ContentWrapper className="relative">
-        <div className="flex flex-col items-center gap-7 text-center">
-          <div
-            aria-hidden
-            className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-accent text-3xl font-semibold text-primary-foreground shadow-lg shadow-primary/25"
-          >
-            ♪
-          </div>
-
-          <h1 className="max-w-2xl font-heading text-display font-semibold text-foreground">
-            Una canción única, creada especialmente para tu bebé
-          </h1>
-
-          <p className="max-w-prose text-body text-muted-foreground">
-            Cuéntanos un poco sobre tu familia y nuestra IA escribirá y producirá una canción
-            irrepetible para tu pequeño — gratis, en minutos, directo a tu correo.
-          </p>
-
-          <a
-            href="#register"
-            className={buttonVariants({
-              size: "lg",
-              className:
-                "h-12 rounded-full px-8 text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]",
-            })}
-          >
-            Crear la canción de mi bebé
-          </a>
+    <CampaignHero
+      background={<CampaignBackground variant="ba-da-ba" />}
+      decorations={
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          <CampaignGlow className="absolute -top-10 left-1/3 h-96 w-96" />
+          <CampaignBubble tone="lavender" size="h-20 w-20" className="absolute top-16 left-[8%]" />
+          <CampaignBubble tone="blue" size="h-14 w-14" className="absolute bottom-24 left-[18%]" />
+          <CampaignBubble
+            tone="purple"
+            size="h-24 w-24"
+            className="absolute right-[10%] bottom-16"
+          />
+          <CampaignCloud className="absolute top-10 right-[12%] h-14 w-14 opacity-80" />
+          <CampaignCloud className="absolute bottom-1/3 left-[4%] h-10 w-10 opacity-70" />
         </div>
-      </ContentWrapper>
-    </Section>
+      }
+      animal={<CampaignAnimal variant="seal" priority className="h-40 w-auto sm:h-52 lg:h-64" />}
+      product={
+        <CampaignProduct
+          variant="product-infant"
+          priority
+          className="h-56 w-auto sm:h-72 lg:h-[26rem]"
+        />
+      }
+      headline={
+        <CampaignHeading as="h1" variant="display" className="mx-auto max-w-xl lg:mx-0">
+          Una canción hecha con amor, solo para tu bebé
+        </CampaignHeading>
+      }
+      description={
+        <p className="mx-auto mt-5 max-w-md text-body text-muted-foreground lg:mx-0">
+          Cuéntanos sobre tu familia y recibe, sin costo, una canción única — escrita e interpretada
+          especialmente para tu bebé — directo a tu correo.
+        </p>
+      }
+      form={
+        <CampaignCard spacious className="mx-auto mt-8 w-full max-w-md animate-fade-up lg:mx-0">
+          <CampaignHeading as="h2" variant="title" className="mb-6">
+            Crea la canción de tu bebé
+          </CampaignHeading>
+          <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
+        </CampaignCard>
+      }
+    />
   );
 }

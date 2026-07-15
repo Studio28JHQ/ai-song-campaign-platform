@@ -1,5 +1,6 @@
-import { ContentWrapper } from "@/components/layout/ContentWrapper";
-import { Section } from "@/components/layout/Section";
+import { CampaignContainer } from "@/components/campaign/CampaignContainer";
+import { CampaignHeading } from "@/components/campaign/CampaignHeading";
+import { CampaignSection } from "@/components/campaign/CampaignSection";
 
 const FAQ_ITEMS = [
   {
@@ -34,26 +35,26 @@ const FAQ_ITEMS = [
  */
 export function Faq() {
   return (
-    <Section spacing="lg">
-      <ContentWrapper>
-        <h2 className="text-center font-heading text-heading font-semibold text-foreground">
+    <CampaignSection>
+      <CampaignContainer narrow>
+        <CampaignHeading as="h2" variant="section" className="text-center">
           Preguntas frecuentes
-        </h2>
+        </CampaignHeading>
 
-        <div className="mt-8 flex flex-col gap-3">
+        <div className="mt-10 flex flex-col gap-4">
           {FAQ_ITEMS.map((item) => (
             <details
               key={item.question}
-              className="group rounded-2xl border border-border bg-card p-5 open:border-primary/30 open:bg-secondary/40"
+              className="group rounded-[24px] border border-border bg-card p-6 open:border-primary/30 open:bg-secondary/40"
             >
               <summary className="cursor-pointer text-body font-semibold text-foreground marker:content-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {item.question}
               </summary>
-              <p className="mt-2 text-body text-muted-foreground">{item.answer}</p>
+              <p className="mt-3 text-body text-muted-foreground">{item.answer}</p>
             </details>
           ))}
         </div>
-      </ContentWrapper>
-    </Section>
+      </CampaignContainer>
+    </CampaignSection>
   );
 }
