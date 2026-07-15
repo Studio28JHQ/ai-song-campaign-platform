@@ -4,7 +4,8 @@ import { ApproveLyricsUseCase } from "@/application/lyrics/use-cases/ApproveLyri
 import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
-import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
+import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
+import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import { appConfig } from "@/config/app";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
@@ -16,6 +17,9 @@ import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/Pri
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
+import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -30,10 +34,11 @@ import { logger } from "@/shared/logger/logger";
  *
  * Sprint 7.5 (see PROJECT_MANIFEST.md — Architecture exception): once
  * lyrics are approved, this route synchronously creates the queued Song
- * job (`GenerateSongUseCase` — fast, no external call) and schedules the
- * `SongGenerationWorker` in the background via `after()`. Approving
- * lyrics never generates the song inline — the response returns as soon
- * as the job is queued, without waiting for the worker or any provider
+ * job (`GenerateSongUseCase` — fast, no external call) and schedules
+ * `GenerationDispatcher` and `GenerationPoller` in the background via
+ * `after()` (Sprint 9.1 — see PROJECT_MANIFEST.md). Approving lyrics
+ * never generates the song inline — the response returns as soon as the
+ * job is queued, without waiting for the dispatcher, the poller, or any provider
  * call.
  */
 
@@ -57,11 +62,19 @@ const generateSongUseCase = new GenerateSongUseCase(
   campaignGate,
 );
 
-const songGenerationWorker = new SongGenerationWorker(
+const generationDispatcher = new GenerationDispatcher(
   songRepository,
   lyricsRepository,
   moodProvider,
   songGenerator,
+);
+
+const generationPoller = new GenerationPoller(
+  songRepository,
+  songGenerator,
+  new HttpAudioDownloader(),
+  new CloudflareR2Storage(),
+  new R2AudioUrlResolver(),
   leadRepository,
   emailSender,
   emailDeliveryTracker,
@@ -120,13 +133,18 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // The actual generation is entirely backgrounded — the response
     // below is never delayed by it. Any failure here is logged and never
-    // crashes the request; SongGenerationWorker already persists FAILED
-    // itself before rethrowing.
+    // crashes the request; both the dispatcher and the poller already
+    // persist FAILED themselves before rethrowing. Submission and
+    // completion are two separate concerns (Sprint 9.1 — see
+    // `GenerationDispatcher`/`GenerationPoller`); they still run back to
+    // back in this one background callback today, but neither depends
+    // on the other still being in the same process to make progress.
     after(async () => {
       try {
-        await songGenerationWorker.execute();
+        await generationDispatcher.execute();
+        await generationPoller.execute();
       } catch (error) {
-        logger.error("Background song generation worker failed", {
+        logger.error("Background song generation failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }

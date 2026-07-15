@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-17
+
+Sprint 9.1 — Generation Pipeline Refinement. Splits provider interaction into a submit phase and a completion-poll phase, and wires Cloudflare R2 storage into the generation pipeline for the first time — preparation for a future Mureka integration (not implemented in this sprint; no external API changed). No business rule or user-visible behavior changed.
+
+### Added
+
+- `GenerationDispatcher` (`src/application/song/use-cases/`) — takes the oldest `QUEUED` Song, submits it to the provider, and persists `providerTaskId`/`providerTraceId`/`submittedAt`, then finishes immediately. Never polls, downloads, stores, or emails. Still enforces `maxConcurrentGenerations = 1` via the existing `findGenerating()` check — no behavior change.
+- `GenerationPoller` (`src/application/song/use-cases/`) — finds the Song currently `GENERATING`, asks the provider whether it has finished, and only on completion downloads the audio, uploads it to Cloudflare R2, persists the resulting object key, and delivers the "song ready" email (idempotency unchanged — `EmailDeliveryTracker`'s atomic claim). Replaces `SongGenerationWorker`, which owned the entire submit→wait→download→store→email lifecycle in one call.
+- `SongGenerationProvider` contract split into `submitGeneration()`/`pollGenerationStatus()` (was one blocking `generateSong()`), matching how an async, task-based provider actually works. `SunoSongService` implements both without any new network call — Suno's one existing blocking call already returns the finished result, cached in-memory keyed by `providerTaskId` so the poll step can return it without inventing a second call Suno doesn't offer (documented limitation: only works within the same process lifetime as the submit call, which matches this app's current same-request dispatch+poll scheduling).
+- `Song` persistence extended with provider metadata: `providerTaskId`, `providerTraceId`, `providerStatus`, `providerError`, `submittedAt`, `completedAt`.
+- **Storage model change**: the database now persists only the Cloudflare R2 object key (`Song.audioStorageKey`) — never a signed URL, never a provider URL. Every consumer (the "song ready" email, the parent-facing session endpoint, the admin Lead Detail view, the admin manual resend action, and the legacy `/api/song/[songId]` status endpoint) resolves a fresh signed URL at read time via the new `AudioUrlResolver` port (`R2AudioUrlResolver` wraps the existing, unmodified `CloudflareR2Storage`). `R2_SIGNED_URL_EXPIRY_SECONDS` raised from 5 minutes to 7 days accordingly.
+- `AudioUrlResolver` is the documented seam a future `DownloadToken` abstraction (short-lived, app-issued tokens instead of raw R2-signed URLs) will plug into — not implemented in this sprint.
+
+### Removed
+
+- `SongGenerationWorker` and `SongGenerationWorkerResponse` — replaced by `GenerationDispatcher`/`GenerationPoller`.
+
 ## [1.3.0] - 2026-07-16
 
 Sprint 8.2 — Abuse Protection. Prevents automated abuse from consuming AI generation budget: Cloudflare Turnstile on every public form, DB-backed rate limiting on every public endpoint, and suspicious-behavior recording. No business rule changed.

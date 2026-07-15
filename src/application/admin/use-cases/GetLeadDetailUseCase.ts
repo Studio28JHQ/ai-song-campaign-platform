@@ -4,10 +4,11 @@ import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus, type SongSnapshot } from "@/domain/song/types";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
 import type { ExecutionHistoryItem } from "../dto/ExecutionHistoryItem";
 import type { GetLeadDetailRequest } from "../dto/GetLeadDetailRequest";
-import type { GetLeadDetailResponse } from "../dto/GetLeadDetailResponse";
+import type { GetLeadDetailResponse, LeadDetailSongView } from "../dto/GetLeadDetailResponse";
 
 /**
  * Composes the read-only Lead Detail screen (see docs/Product/User_Flow.md)
@@ -23,6 +24,7 @@ export class GetLeadDetailUseCase {
     private readonly lyricsRepository: LyricsRepository,
     private readonly songRepository: SongRepository,
     private readonly auditLogRepository: AuditLogRepository,
+    private readonly audioUrlResolver: AudioUrlResolver,
   ) {}
 
   async execute(request: GetLeadDetailRequest): Promise<GetLeadDetailResponse> {
@@ -50,20 +52,33 @@ export class GetLeadDetailUseCase {
       }),
     );
 
+    const songSnapshot = song?.toSnapshot() ?? null;
+
     const executionHistory = await this.buildExecutionHistory(
       lead.id,
       lead.createdAt,
       lyricsHistory.map((entry) => entry.toSnapshot()),
-      song?.toSnapshot() ?? null,
+      songSnapshot,
     );
 
     return {
       lead: lead.toSnapshot(),
       lyricsHistory: lyricsHistory.map((entry) => entry.toSnapshot()),
       approvedLyrics: approvedLyrics?.toSnapshot() ?? null,
-      song: song?.toSnapshot() ?? null,
+      song: songSnapshot ? await this.toSongView(songSnapshot) : null,
       executionHistory,
     };
+  }
+
+  /**
+   * Resolved fresh from the persisted R2 key — never a stored URL (see
+   * `AudioUrlResolver`). The raw `audioStorageKey` never leaves this
+   * use case.
+   */
+  private async toSongView(song: SongSnapshot): Promise<LeadDetailSongView> {
+    const { audioStorageKey, ...rest } = song;
+    const audioUrl = audioStorageKey ? await this.audioUrlResolver.resolve(audioStorageKey) : null;
+    return { ...rest, audioUrl };
   }
 
   /**

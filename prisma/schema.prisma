@@ -185,20 +185,36 @@ model GenerationAttempt {
   @@map("generation_attempts")
 }
 
+// Sprint 9.1 — Generation Pipeline Refinement. Provider interaction is
+// split into a submit phase (GenerationDispatcher) and a poll phase
+// (GenerationPoller); these columns are what lets the poller resume
+// tracking a song across separate invocations. `audioStorageKey` is the
+// *only* durable reference to the generated audio — a Cloudflare R2
+// object key, never a signed URL or a provider URL (both expire and
+// must never be persisted; see `AudioUrlResolver`, resolved fresh at
+// read time). `providerStatus`/`providerError` mirror the provider's own
+// last-reported state for diagnostics; `submittedAt`/`completedAt`
+// bound how long a generation was in flight.
 model Song {
-  id             String     @id @default(uuid()) @db.Uuid
-  leadId         String     @unique @db.Uuid
-  lyricsId       String     @db.Uuid
-  moodId         String     @db.Uuid
-  provider       String     @default("suno")
-  providerSongId String?
-  audioUrl       String?
-  duration       Int?
-  status         SongStatus @default(QUEUED)
-  generatedAt    DateTime?
-  emailedAt      DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id              String     @id @default(uuid()) @db.Uuid
+  leadId          String     @unique @db.Uuid
+  lyricsId        String     @db.Uuid
+  moodId          String     @db.Uuid
+  provider        String     @default("suno")
+  providerSongId  String?
+  providerTaskId  String?
+  providerTraceId String?
+  providerStatus  String?
+  providerError   String?
+  audioStorageKey String?
+  duration        Int?
+  status          SongStatus @default(QUEUED)
+  submittedAt     DateTime?
+  generatedAt     DateTime?
+  completedAt     DateTime?
+  emailedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   lyrics Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Restrict)
@@ -206,6 +222,7 @@ model Song {
 
   @@index([status])
   @@index([createdAt])
+  @@index([providerTaskId])
   @@map("songs")
 }
 

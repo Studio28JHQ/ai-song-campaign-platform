@@ -14,6 +14,14 @@ vi.mock("@/infrastructure/auth/getLeadSession", () => ({
   getLeadSession: mockGetLeadSession,
 }));
 
+const mockResolveAudioUrl = vi.fn();
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
+  }),
+}));
+
 const { GET } = await import("../../../app/api/song/[songId]/route");
 
 function getRequest(): Request {
@@ -28,6 +36,9 @@ describe("GET /api/song/[songId]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetLeadSession.mockResolvedValue("lead-1");
+    mockResolveAudioUrl.mockImplementation(
+      async (key: string) => `https://signed.example.com/${key}`,
+    );
   });
 
   it("returns 401 when there is no active session, without touching the repository", async () => {
@@ -46,7 +57,7 @@ describe("GET /api/song/[songId]", () => {
       id: "song-1",
       leadId: "lead-1",
       status: "QUEUED",
-      audioUrl: null,
+      audioStorageKey: null,
     });
 
     const response = await GET(getRequest(), context("song-1"));
@@ -61,7 +72,7 @@ describe("GET /api/song/[songId]", () => {
       id: "song-1",
       leadId: "lead-1",
       status: "GENERATING",
-      audioUrl: null,
+      audioStorageKey: null,
     });
 
     const response = await GET(getRequest(), context("song-1"));
@@ -76,7 +87,7 @@ describe("GET /api/song/[songId]", () => {
       id: "song-1",
       leadId: "lead-1",
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioStorageKey: "songs/song-1.mp3",
       duration: 120,
     });
 
@@ -87,7 +98,7 @@ describe("GET /api/song/[songId]", () => {
     expect(body).toEqual({
       songId: "song-1",
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://signed.example.com/songs/song-1.mp3",
       duration: 120,
     });
   });
@@ -97,7 +108,7 @@ describe("GET /api/song/[songId]", () => {
       id: "song-1",
       leadId: "lead-1",
       status: "FAILED",
-      audioUrl: null,
+      audioStorageKey: null,
     });
 
     const response = await GET(getRequest(), context("song-1"));
@@ -122,7 +133,7 @@ describe("GET /api/song/[songId]", () => {
       id: "song-1",
       leadId: "someone-elses-lead",
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioStorageKey: "songs/song-1.mp3",
     });
 
     const response = await GET(getRequest(), context("song-1"));

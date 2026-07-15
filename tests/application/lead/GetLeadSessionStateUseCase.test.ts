@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Lead } from "@/domain/lead/entities/Lead";
 import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { Email } from "@/domain/lead/value-objects/Email";
@@ -8,6 +8,13 @@ import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { GetLeadSessionStateUseCase } from "@/application/lead/use-cases/GetLeadSessionStateUseCase";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
+
+function fakeAudioUrlResolver(): AudioUrlResolver {
+  return {
+    resolve: vi.fn().mockImplementation(async (key: string) => `https://signed.example.com/${key}`),
+  };
+}
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -118,7 +125,12 @@ describe("GetLeadSessionStateUseCase", () => {
     leadRepository = new InMemoryLeadRepository();
     lyricsRepository = new InMemoryLyricsRepository();
     songRepository = new InMemorySongRepository();
-    useCase = new GetLeadSessionStateUseCase(leadRepository, lyricsRepository, songRepository);
+    useCase = new GetLeadSessionStateUseCase(
+      leadRepository,
+      lyricsRepository,
+      songRepository,
+      fakeAudioUrlResolver(),
+    );
   });
 
   it("throws when the lead is not found", async () => {
@@ -160,7 +172,7 @@ describe("GetLeadSessionStateUseCase", () => {
     });
   });
 
-  it("includes the current song's status, audio URL, and duration once one exists", async () => {
+  it("includes the current song's status, a freshly resolved audio URL, and duration once one exists", async () => {
     const lead = buildLead();
     leadRepository.seed(lead);
 
@@ -168,7 +180,7 @@ describe("GetLeadSessionStateUseCase", () => {
     song.markGenerating();
     song.markCompleted({
       providerSongId: "suno-1",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioStorageKey: "songs/song-1.mp3",
       duration: 90,
     });
     songRepository.seed(song);
@@ -178,7 +190,7 @@ describe("GetLeadSessionStateUseCase", () => {
     expect(result.song).toEqual({
       id: song.id,
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://signed.example.com/songs/song-1.mp3",
       duration: 90,
     });
   });

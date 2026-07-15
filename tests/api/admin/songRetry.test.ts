@@ -9,12 +9,16 @@ const mockSongUpdate = vi.fn();
 const mockSongFindGenerating = vi.fn();
 const mockSongFindOldestQueued = vi.fn();
 const mockAuditCreate = vi.fn();
-const mockGenerateSong = vi.fn();
+const mockSubmitGeneration = vi.fn();
+const mockPollGenerationStatus = vi.fn();
 const mockLyricsFindById = vi.fn();
 const mockGetMoodDetails = vi.fn();
 const mockLeadFindById = vi.fn();
 const mockSendSongReadyEmail = vi.fn();
 const mockClaimDelivery = vi.fn();
+const mockDownloadAudio = vi.fn();
+const mockUploadAudio = vi.fn();
+const mockResolveAudioUrl = vi.fn();
 
 const capturedAfterCallbacks: Array<() => Promise<void>> = [];
 
@@ -69,7 +73,10 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
 
 vi.mock("@/infrastructure/suno/SunoSongService", () => ({
   SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
-    return { generateSong: mockGenerateSong };
+    return {
+      submitGeneration: mockSubmitGeneration,
+      pollGenerationStatus: mockPollGenerationStatus,
+    };
   }),
 }));
 
@@ -82,6 +89,24 @@ vi.mock("@/infrastructure/email/ResendEmailService", () => ({
 vi.mock("@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker", () => ({
   PrismaEmailDeliveryTracker: vi.fn().mockImplementation(function PrismaEmailDeliveryTracker() {
     return { claimDelivery: mockClaimDelivery };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
+  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
+    return { download: mockDownloadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
+  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
+    return { upload: mockUploadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
   }),
 }));
 
@@ -104,10 +129,16 @@ function fakeFailedSong(): Song {
     moodId: "mood-1",
     provider: "suno",
     providerSongId: null,
-    audioUrl: null,
+    providerTaskId: null,
+    providerTraceId: null,
+    providerStatus: null,
+    providerError: null,
+    audioStorageKey: null,
     duration: null,
     status: SongStatus.FAILED,
+    submittedAt: null,
     generatedAt: null,
+    completedAt: null,
     emailedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -127,8 +158,12 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
       return song;
     });
     mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
-    mockSongFindGenerating.mockResolvedValue(null);
-    mockSongFindOldestQueued.mockImplementation(async () => updatedSong ?? null);
+    mockSongFindGenerating.mockImplementation(async () =>
+      updatedSong?.status === SongStatus.GENERATING ? updatedSong : null,
+    );
+    mockSongFindOldestQueued.mockImplementation(async () =>
+      updatedSong?.status === SongStatus.QUEUED ? updatedSong : null,
+    );
   });
 
   it("returns 202 with QUEUED status for a FAILED song, and schedules background regeneration", async () => {
@@ -155,11 +190,19 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
     mockSongFindById.mockResolvedValue(fakeFailedSong());
     mockLyricsFindById.mockResolvedValue({ content: "Title\nVerse 1", moodId: "mood-1" });
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
-    mockGenerateSong.mockResolvedValue({
+    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
+    mockPollGenerationStatus.mockResolvedValue({
+      status: "completed",
       providerSongId: "suno-123",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 120,
     });
+    mockDownloadAudio.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3]),
+      contentType: "audio/mpeg",
+    });
+    mockUploadAudio.mockResolvedValue(undefined);
+    mockResolveAudioUrl.mockResolvedValue("https://signed.example.com/songs/song-1.mp3");
     mockClaimDelivery.mockResolvedValue(true);
     mockLeadFindById.mockResolvedValue({
       email: { toString: () => "jane@example.com" },
@@ -171,7 +214,8 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
     const callback = capturedAfterCallbacks[0];
     await callback();
 
-    expect(mockGenerateSong).toHaveBeenCalledTimes(1);
+    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
+    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
     // No lyrics-creation call exists anywhere in this dependency graph —
     // only `findById` (a read) is ever invoked.
     expect(mockLyricsFindById).toHaveBeenCalledTimes(1);

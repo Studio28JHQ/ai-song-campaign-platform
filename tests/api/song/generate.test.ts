@@ -6,6 +6,7 @@ import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { SongStatus } from "@/domain/song/types";
 
 const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn> } = {
   findById: vi.fn(),
@@ -35,10 +36,14 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 
 const mockIsActiveAndGenerationEnabled = vi.fn();
 const mockGetMoodDetails = vi.fn();
-const mockGenerateSong = vi.fn();
+const mockSubmitGeneration = vi.fn();
+const mockPollGenerationStatus = vi.fn();
 const mockClaimDelivery = vi.fn();
 const mockSendSongReadyEmail = vi.fn();
 const mockGetLeadSession = vi.fn();
+const mockDownloadAudio = vi.fn();
+const mockUploadAudio = vi.fn();
+const mockResolveAudioUrl = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope (see
 // node_modules/next/dist/server/after/after.js), which is exactly the
@@ -89,7 +94,28 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
 
 vi.mock("@/infrastructure/suno/SunoSongService", () => ({
   SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
-    return { generateSong: mockGenerateSong };
+    return {
+      submitGeneration: mockSubmitGeneration,
+      pollGenerationStatus: mockPollGenerationStatus,
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
+  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
+    return { download: mockDownloadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
+  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
+    return { upload: mockUploadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
   }),
 }));
 
@@ -161,11 +187,16 @@ describe("POST /api/song/generate", () => {
       createdSong = song;
       return song;
     });
-    // SongGenerationWorker picks up the oldest QUEUED song itself once the
-    // background callback runs, so the fake repository must hand back the
-    // same instance that GenerateSongUseCase just persisted.
-    mockSongRepository.findGenerating.mockResolvedValue(null);
-    mockSongRepository.findOldestQueued.mockImplementation(async () => createdSong ?? null);
+    // GenerationDispatcher/GenerationPoller pick up the oldest QUEUED (then
+    // GENERATING) song themselves once the background callback runs, so
+    // the fake repository must hand back the same instance that
+    // GenerateSongUseCase just persisted, filtered by its current status.
+    mockSongRepository.findGenerating.mockImplementation(async () =>
+      createdSong?.status === SongStatus.GENERATING ? createdSong : null,
+    );
+    mockSongRepository.findOldestQueued.mockImplementation(async () =>
+      createdSong?.status === SongStatus.QUEUED ? createdSong : null,
+    );
     mockSongRepository.update.mockImplementation(async (song: Song) => {
       createdSong = song;
       return song;
@@ -174,6 +205,14 @@ describe("POST /api/song/generate", () => {
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
     mockClaimDelivery.mockResolvedValue(true);
     mockSendSongReadyEmail.mockResolvedValue(undefined);
+    mockDownloadAudio.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3]),
+      contentType: "audio/mpeg",
+    });
+    mockUploadAudio.mockResolvedValue(undefined);
+    mockResolveAudioUrl.mockImplementation(
+      async (key: string) => `https://signed.example.com/${key}`,
+    );
   });
 
   it("returns 401 when there is no active session, without touching the use case", async () => {
@@ -205,7 +244,7 @@ describe("POST /api/song/generate", () => {
     );
     expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
     // Suno must never be called synchronously as part of the request.
-    expect(mockGenerateSong).not.toHaveBeenCalled();
+    expect(mockSubmitGeneration).not.toHaveBeenCalled();
   });
 
   it("schedules background processing that eventually completes the song", async () => {
@@ -215,9 +254,11 @@ describe("POST /api/song/generate", () => {
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockGenerateSong.mockResolvedValue({
+    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
+    mockPollGenerationStatus.mockResolvedValue({
+      status: "completed",
       providerSongId: "suno-123",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://provider.example.com/short-lived.mp3",
       duration: 120,
     });
 
@@ -227,7 +268,8 @@ describe("POST /api/song/generate", () => {
 
     await runScheduledBackgroundWork();
 
-    expect(mockGenerateSong).toHaveBeenCalledTimes(1);
+    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
+    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
     expect(mockSongRepository.update).toHaveBeenCalled();
     const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
     expect(lastUpdateCall.status).toBe("COMPLETED");
@@ -238,7 +280,7 @@ describe("POST /api/song/generate", () => {
     expect(mockSendSongReadyEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "jane@example.com",
-        audioUrl: "https://cdn.example.com/song.mp3",
+        audioUrl: expect.stringContaining("https://signed.example.com/"),
       }),
     );
   });
@@ -250,9 +292,11 @@ describe("POST /api/song/generate", () => {
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockGenerateSong.mockResolvedValue({
+    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
+    mockPollGenerationStatus.mockResolvedValue({
+      status: "completed",
       providerSongId: "suno-123",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://provider.example.com/short-lived.mp3",
       duration: 120,
     });
     mockClaimDelivery.mockResolvedValue(false);
@@ -271,7 +315,7 @@ describe("POST /api/song/generate", () => {
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockGenerateSong.mockRejectedValue(new Error("Suno API responded with status 503."));
+    mockSubmitGeneration.mockRejectedValue(new Error("Suno API responded with status 503."));
 
     const response = await POST(postRequest());
     expect(response.status).toBe(202);

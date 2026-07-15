@@ -10,6 +10,7 @@ import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/P
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { toPublicSongStatus } from "../../song/publicSongStatus";
@@ -28,6 +29,7 @@ const getLeadSessionStateUseCase = new GetLeadSessionStateUseCase(
   new PrismaLeadRepository(),
   new PrismaLyricsRepository(),
   new PrismaSongRepository(),
+  new R2AudioUrlResolver(),
 );
 const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
 const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());

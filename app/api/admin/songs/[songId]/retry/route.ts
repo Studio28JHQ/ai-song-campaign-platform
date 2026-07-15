@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
-import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
+import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
+import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import { RetryFailedSongUseCase } from "@/application/admin/use-cases/RetryFailedSongUseCase";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
@@ -9,6 +10,9 @@ import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyri
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
+import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -17,13 +21,13 @@ import { logger } from "@/shared/logger/logger";
  * POST /api/admin/songs/[songId]/retry — the "Retry" operational
  * recovery action (see docs/Product/User_Flow.md), available only for a
  * `FAILED` song. Resets the existing row to `QUEUED` synchronously, then
- * schedules the same Song Queue worker a brand-new song uses
- * (`SongGenerationWorker`, via `after()`) — it never regenerates lyrics,
- * never consumes another attempt, and never creates a second Song row,
- * since it reuses the same `songId` throughout. The worker itself picks
- * the oldest `QUEUED` song rather than being told which one to process,
- * so retrying is simply re-queueing (see PROJECT_MANIFEST.md —
- * Architecture exception, Sprint 7.5). See
+ * schedules the same Song Queue dispatcher+poller a brand-new song uses
+ * (`GenerationDispatcher`/`GenerationPoller`, via `after()`) — it never
+ * regenerates lyrics, never consumes another attempt, and never creates
+ * a second Song row, since it reuses the same `songId` throughout. The
+ * dispatcher itself picks the oldest `QUEUED` song rather than being
+ * told which one to process, so retrying is simply re-queueing (see
+ * PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5). See
  * docs/Architecture/System_Architecture.md — Operational Recovery.
  */
 
@@ -38,11 +42,19 @@ const auditLogRepository = new PrismaAuditLogRepository();
 
 const retryFailedSongUseCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
 
-const songGenerationWorker = new SongGenerationWorker(
+const generationDispatcher = new GenerationDispatcher(
   songRepository,
   lyricsRepository,
   moodProvider,
   songGenerator,
+);
+
+const generationPoller = new GenerationPoller(
+  songRepository,
+  songGenerator,
+  new HttpAudioDownloader(),
+  new CloudflareR2Storage(),
+  new R2AudioUrlResolver(),
   leadRepository,
   emailSender,
   emailDeliveryTracker,
@@ -72,7 +84,8 @@ export async function POST(_request: Request, context: RouteContext): Promise<Ne
     // music provider.
     after(async () => {
       try {
-        await songGenerationWorker.execute();
+        await generationDispatcher.execute();
+        await generationPoller.execute();
       } catch (error) {
         logger.error("Background song retry failed", {
           songId,

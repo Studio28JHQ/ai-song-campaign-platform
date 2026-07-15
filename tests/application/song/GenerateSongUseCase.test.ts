@@ -187,7 +187,7 @@ describe("GenerateSongUseCase", () => {
     const response = await useCase.execute({ leadId: lead.id });
 
     expect(response.song.status).toBe(SongStatus.QUEUED);
-    expect(response.song.audioUrl).toBeNull();
+    expect(response.song.audioStorageKey).toBeNull();
     expect(response.song.providerSongId).toBeNull();
   });
 
@@ -204,7 +204,7 @@ describe("GenerateSongUseCase", () => {
     completedSong.markGenerating();
     completedSong.markCompleted({
       providerSongId: "suno-1",
-      audioUrl: "https://cdn.example.com/a.mp3",
+      audioStorageKey: "songs/a.mp3",
     });
     songRepository.seed(completedSong);
 

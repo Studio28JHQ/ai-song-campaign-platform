@@ -5,6 +5,7 @@ import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/ad
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 
@@ -21,6 +22,7 @@ const getLeadDetailUseCase = new GetLeadDetailUseCase(
   new PrismaLyricsRepository(),
   new PrismaSongRepository(),
   new PrismaAuditLogRepository(),
+  new R2AudioUrlResolver(),
 );
 
 interface RouteContext {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Lead } from "@/domain/lead/entities/Lead";
 import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { Email } from "@/domain/lead/value-objects/Email";
@@ -9,8 +9,15 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
 import type { ExecutionHistoryItem } from "@/application/admin/dto/ExecutionHistoryItem";
+
+function fakeAudioUrlResolver(): AudioUrlResolver {
+  return {
+    resolve: vi.fn().mockImplementation(async (key: string) => `https://signed.example.com/${key}`),
+  };
+}
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -145,6 +152,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     await expect(
@@ -182,6 +190,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -201,6 +210,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -219,6 +229,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-42" });
@@ -236,6 +247,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -271,6 +283,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -299,7 +312,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioStorageKey: "songs/song.mp3" });
     songRepository.seed(song);
 
     const useCase = new GetLeadDetailUseCase(
@@ -307,6 +320,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -344,6 +358,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -368,7 +383,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioStorageKey: "songs/song.mp3" });
     songRepository.seed(song);
 
     const useCaseBeforeEmail = new GetLeadDetailUseCase(
@@ -376,6 +391,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
     const beforeEmail = await useCaseBeforeEmail.execute({
       leadId: lead.id,
@@ -400,7 +416,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioStorageKey: "songs/song.mp3" });
     songRepository.seed(song);
 
     await auditLogRepository.create(
@@ -426,6 +442,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -453,7 +470,7 @@ describe("GetLeadDetailUseCase", () => {
 
     const song = Song.create({ leadId: lead.id, lyricsId: lyrics.id, moodId: "mood-1" });
     song.markGenerating();
-    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioStorageKey: "songs/song.mp3" });
     songRepository.seed(song);
 
     const useCase = new GetLeadDetailUseCase(
@@ -461,6 +478,7 @@ describe("GetLeadDetailUseCase", () => {
       lyricsRepository,
       songRepository,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });

@@ -37,6 +37,14 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
   }),
 }));
 
+const mockResolveAudioUrl = vi.fn();
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
+  }),
+}));
+
 const { POST } = await import("../../../app/api/admin/songs/[songId]/resend-email/route");
 
 function postRequest(body: unknown): Request {
@@ -60,10 +68,16 @@ function completedEmailedSong(): Song {
     moodId: "mood-1",
     provider: "suno",
     providerSongId: "suno-123",
-    audioUrl: "https://cdn.example.com/song.mp3",
+    providerTaskId: "task-123",
+    providerTraceId: null,
+    providerStatus: "completed",
+    providerError: null,
+    audioStorageKey: "songs/song-1.mp3",
     duration: 120,
     status: SongStatus.COMPLETED,
+    submittedAt: now,
     generatedAt: now,
+    completedAt: now,
     emailedAt: now,
     createdAt: now,
     updatedAt: now,
@@ -84,6 +98,7 @@ describe("POST /api/admin/songs/[songId]/resend-email", () => {
     mockGetAdminSession.mockResolvedValue({ adminId: "admin-1", email: "admin@example.com" });
     mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
     mockSendSongReadyEmail.mockResolvedValue(undefined);
+    mockResolveAudioUrl.mockResolvedValue("https://signed.example.com/songs/song-1.mp3");
   });
 
   it("sends the email and records Resent By/At/Reason for a completed, already-emailed song", async () => {
@@ -120,10 +135,16 @@ describe("POST /api/admin/songs/[songId]/resend-email", () => {
         moodId: "mood-1",
         provider: "suno",
         providerSongId: null,
-        audioUrl: null,
+        providerTaskId: null,
+        providerTraceId: null,
+        providerStatus: null,
+        providerError: null,
+        audioStorageKey: null,
         duration: null,
         status: SongStatus.FAILED,
+        submittedAt: null,
         generatedAt: null,
+        completedAt: null,
         emailedAt: null,
         createdAt: now,
         updatedAt: now,
@@ -148,10 +169,16 @@ describe("POST /api/admin/songs/[songId]/resend-email", () => {
         moodId: "mood-1",
         provider: "suno",
         providerSongId: "suno-123",
-        audioUrl: "https://cdn.example.com/song.mp3",
+        providerTaskId: "task-123",
+        providerTraceId: null,
+        providerStatus: "completed",
+        providerError: null,
+        audioStorageKey: "songs/song-1.mp3",
         duration: 120,
         status: SongStatus.COMPLETED,
+        submittedAt: now,
         generatedAt: now,
+        completedAt: now,
         emailedAt: null,
         createdAt: now,
         updatedAt: now,

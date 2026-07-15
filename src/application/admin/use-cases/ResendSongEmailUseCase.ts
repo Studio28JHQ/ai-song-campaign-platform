@@ -4,6 +4,7 @@ import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { BusinessRuleError } from "@/shared/errors";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
 import type { ResendSongEmailRequest } from "../dto/ResendSongEmailRequest";
 import type { ResendSongEmailResponse } from "../dto/ResendSongEmailResponse";
@@ -29,6 +30,7 @@ export class ResendSongEmailUseCase {
     private readonly leadRepository: LeadRepository,
     private readonly emailSender: SongEmailSender,
     private readonly auditLogRepository: AuditLogRepository,
+    private readonly audioUrlResolver: AudioUrlResolver,
   ) {}
 
   async execute(request: ResendSongEmailRequest): Promise<ResendSongEmailResponse> {
@@ -48,7 +50,7 @@ export class ResendSongEmailUseCase {
       });
     }
 
-    if (!song.emailedAt || !song.audioUrl) {
+    if (!song.emailedAt || !song.audioStorageKey) {
       throw new BusinessRuleError("This song's email has not been sent yet.", {
         code: "admin.email_not_sent_yet",
         context: { songId: song.id },
@@ -64,12 +66,16 @@ export class ResendSongEmailUseCase {
       });
     }
 
+    // Resolved fresh from the persisted R2 key — never a stored URL (see
+    // `AudioUrlResolver`).
+    const audioUrl = await this.audioUrlResolver.resolve(song.audioStorageKey);
+
     await this.emailSender.sendSongReadyEmail({
       to: lead.email.toString(),
       parentName: lead.parentName,
       babyName: lead.babyName,
       songId: song.id,
-      audioUrl: song.audioUrl,
+      audioUrl,
       duration: song.duration,
     });
 

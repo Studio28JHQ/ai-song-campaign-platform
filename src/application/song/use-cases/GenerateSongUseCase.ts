@@ -26,7 +26,7 @@ import type { GenerateSongResponse } from "../dto/GenerateSongResponse";
  * - The campaign is active and generation is enabled.
  * - The Lead has exactly one approved Lyrics version.
  *
- * The actual provider call happens in `SongGenerationWorker`, scheduled
+ * The actual provider call happens in `GenerationDispatcher`/`GenerationPoller`, scheduled
  * in the background once lyrics are approved (see
  * `app/api/lyrics/approve/route.ts`) — this split is what makes lyrics
  * approval return immediately without ever generating the song inline

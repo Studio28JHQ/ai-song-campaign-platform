@@ -5,6 +5,7 @@ import {
   type SongGenerationDetails,
   type SongProps,
   type SongSnapshot,
+  type SongSubmissionDetails,
 } from "../types";
 
 const DEFAULT_PROVIDER = "suno";
@@ -19,7 +20,7 @@ const DEFAULT_PROVIDER = "suno";
  * `FAILED -> QUEUED` is the one additional transition, used exclusively
  * by a manual admin retry (see `retryFromFailure`): it resets the row to
  * the same starting state a brand-new Song is created in, so the
- * existing worker (`SongGenerationWorker`) picks it up identically either
+ * existing dispatcher (`GenerationDispatcher`) picks it up identically either
  * way — see docs/Architecture/System_Architecture.md — Operational
  * Recovery.
  */
@@ -52,10 +53,16 @@ export class Song {
       moodId,
       provider: DEFAULT_PROVIDER,
       providerSongId: null,
-      audioUrl: null,
+      providerTaskId: null,
+      providerTraceId: null,
+      providerStatus: null,
+      providerError: null,
+      audioStorageKey: null,
       duration: null,
       status: SongStatus.QUEUED,
+      submittedAt: null,
       generatedAt: null,
+      completedAt: null,
       emailedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -98,21 +105,53 @@ export class Song {
     this.transitionTo(SongStatus.GENERATING);
   }
 
+  /**
+   * Records that `GenerationDispatcher` successfully submitted this job
+   * to the provider (Sprint 9.1). Does not itself transition status —
+   * the caller must already have called `markGenerating()` before
+   * submitting, so a concurrent dispatch is blocked for the full
+   * duration of the outbound call, not just after it returns. Valid
+   * only while `GENERATING`.
+   */
+  recordSubmission(details: SongSubmissionDetails): void {
+    if (this.props.status !== SongStatus.GENERATING) {
+      throw new BusinessRuleError("A submission can only be recorded while generating.", {
+        code: "song.submission_invalid_state",
+        context: { songId: this.props.id, status: this.props.status },
+      });
+    }
+
+    const providerTaskId = Song.requireNonEmpty(details.providerTaskId, "providerTaskId");
+
+    this.props.providerTaskId = providerTaskId;
+    this.props.providerTraceId = details.providerTraceId ?? null;
+    this.props.providerStatus = "submitted";
+    this.props.submittedAt = new Date();
+    this.props.updatedAt = new Date();
+  }
+
   /** Records a successful generation — the only state a Song may ever reach exactly once (see docs/Product/Business_Rules.md). */
   markCompleted(details: SongGenerationDetails): void {
     const providerSongId = Song.requireNonEmpty(details.providerSongId, "providerSongId");
-    const audioUrl = Song.requireNonEmpty(details.audioUrl, "audioUrl");
+    const audioStorageKey = Song.requireNonEmpty(details.audioStorageKey, "audioStorageKey");
+    const now = new Date();
 
     this.transitionTo(SongStatus.COMPLETED);
     this.props.providerSongId = providerSongId;
-    this.props.audioUrl = audioUrl;
+    this.props.audioStorageKey = audioStorageKey;
     this.props.duration = details.duration ?? null;
-    this.props.generatedAt = new Date();
+    this.props.providerStatus = "completed";
+    this.props.providerError = null;
+    this.props.generatedAt = now;
+    this.props.completedAt = now;
   }
 
   /** Records a failed generation attempt. Not terminal — see `ALLOWED_TRANSITIONS`. */
-  markFailed(): void {
+  markFailed(reason?: string | null): void {
     this.transitionTo(SongStatus.FAILED);
+    this.props.providerStatus = "failed";
+    this.props.providerError = reason?.trim() || null;
+    this.props.completedAt = new Date();
   }
 
   /**
@@ -120,10 +159,19 @@ export class Song {
    * (see docs/Product/User_Flow.md — Operational Recovery). Only ever
    * valid from `FAILED` — a lead's approved lyrics, mood, and the music
    * provider are always reused unchanged; this method never touches
-   * them, only the status.
+   * them, only the status. Clears every provider-submission field
+   * (Sprint 9.1) so `GenerationDispatcher` treats the retry as a
+   * genuinely fresh submission — a stale `providerTaskId` from the
+   * failed attempt must never be polled again.
    */
   retryFromFailure(): void {
     this.transitionTo(SongStatus.QUEUED);
+    this.props.providerTaskId = null;
+    this.props.providerTraceId = null;
+    this.props.providerStatus = null;
+    this.props.providerError = null;
+    this.props.submittedAt = null;
+    this.props.completedAt = null;
   }
 
   get id(): string {
@@ -150,8 +198,24 @@ export class Song {
     return this.props.providerSongId;
   }
 
-  get audioUrl(): string | null {
-    return this.props.audioUrl;
+  get providerTaskId(): string | null {
+    return this.props.providerTaskId;
+  }
+
+  get providerTraceId(): string | null {
+    return this.props.providerTraceId;
+  }
+
+  get providerStatus(): string | null {
+    return this.props.providerStatus;
+  }
+
+  get providerError(): string | null {
+    return this.props.providerError;
+  }
+
+  get audioStorageKey(): string | null {
+    return this.props.audioStorageKey;
   }
 
   get duration(): number | null {
@@ -162,8 +226,16 @@ export class Song {
     return this.props.status;
   }
 
+  get submittedAt(): Date | null {
+    return this.props.submittedAt;
+  }
+
   get generatedAt(): Date | null {
     return this.props.generatedAt;
+  }
+
+  get completedAt(): Date | null {
+    return this.props.completedAt;
   }
 
   get emailedAt(): Date | null {
@@ -186,10 +258,16 @@ export class Song {
       moodId: this.props.moodId,
       provider: this.props.provider,
       providerSongId: this.props.providerSongId,
-      audioUrl: this.props.audioUrl,
+      providerTaskId: this.props.providerTaskId,
+      providerTraceId: this.props.providerTraceId,
+      providerStatus: this.props.providerStatus,
+      providerError: this.props.providerError,
+      audioStorageKey: this.props.audioStorageKey,
       duration: this.props.duration,
       status: this.props.status,
+      submittedAt: this.props.submittedAt,
       generatedAt: this.props.generatedAt,
+      completedAt: this.props.completedAt,
       emailedAt: this.props.emailedAt,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,

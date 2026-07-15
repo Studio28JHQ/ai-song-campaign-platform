@@ -14,9 +14,9 @@ import type { RetryFailedSongResponse } from "../dto/RetryFailedSongResponse";
  * creates a new Song, never touches the Lead's lyric attempts, and never
  * regenerates lyrics, because it never calls the Lyrics module at all.
  *
- * Resuming generation from `QUEUED` is the Song Queue worker's job: the
- * caller (an API route) is expected to schedule `SongGenerationWorker`
- * immediately after this returns — this use case only performs the
+ * Resuming generation from `QUEUED` is the Song Queue's job: the
+ * caller (an API route) is expected to schedule `GenerationDispatcher`
+ * (then `GenerationPoller`) immediately after this returns — this use case only performs the
  * synchronous status reset and the audit write, exactly mirroring how
  * `GenerateSongUseCase` only does the synchronous intake for a brand-new
  * Song (see PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5).

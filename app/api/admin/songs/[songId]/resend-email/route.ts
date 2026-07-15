@@ -6,6 +6,7 @@ import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { BusinessRuleError, ExternalApiError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 
@@ -28,6 +29,7 @@ const resendSongEmailUseCase = new ResendSongEmailUseCase(
   leadRepository,
   emailSender,
   auditLogRepository,
+  new R2AudioUrlResolver(),
 );
 
 const resendEmailRequestSchema = z.object({ reason: z.string().trim().min(1) }).strict();

@@ -133,7 +133,7 @@ describe("RetryFailedSongUseCase", () => {
   it("rejects retrying an already-COMPLETED song", async () => {
     const song = Song.create({ leadId: "lead-1", lyricsId: "lyrics-1", moodId: "mood-1" });
     song.markGenerating();
-    song.markCompleted({ providerSongId: "suno-1", audioUrl: "https://cdn.example.com/song.mp3" });
+    song.markCompleted({ providerSongId: "suno-1", audioStorageKey: "songs/song.mp3" });
     songRepository.seed(song);
     const useCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
 

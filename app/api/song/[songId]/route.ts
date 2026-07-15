@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { logger } from "@/shared/logger/logger";
 import { toPublicSongStatus } from "../publicSongStatus";
 
@@ -17,6 +18,7 @@ import { toPublicSongStatus } from "../publicSongStatus";
  */
 
 const songRepository = new PrismaSongRepository();
+const audioUrlResolver = new R2AudioUrlResolver();
 
 interface RouteContext {
   params: Promise<{ songId: string }>;
@@ -43,9 +45,13 @@ export async function GET(_request: Request, context: RouteContext): Promise<Nex
 
     const status = toPublicSongStatus(song.status);
 
-    if (status === "COMPLETED") {
+    if (status === "COMPLETED" && song.audioStorageKey) {
+      // Resolved fresh from the persisted R2 key — never a stored URL
+      // (see `AudioUrlResolver`).
+      const audioUrl = await audioUrlResolver.resolve(song.audioStorageKey);
+
       return NextResponse.json(
-        { songId: song.id, status, audioUrl: song.audioUrl, duration: song.duration },
+        { songId: song.id, status, audioUrl, duration: song.duration },
         { status: 200 },
       );
     }

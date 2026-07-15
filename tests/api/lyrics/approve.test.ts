@@ -6,6 +6,7 @@ import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { SongStatus } from "@/domain/song/types";
 
 const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn> } = {
   findById: vi.fn(),
@@ -35,10 +36,14 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 
 const mockIsActiveAndGenerationEnabled = vi.fn();
 const mockGetMoodDetails = vi.fn();
-const mockGenerateSong = vi.fn();
+const mockSubmitGeneration = vi.fn();
+const mockPollGenerationStatus = vi.fn();
 const mockClaimDelivery = vi.fn();
 const mockSendSongReadyEmail = vi.fn();
 const mockGetLeadSession = vi.fn();
+const mockDownloadAudio = vi.fn();
+const mockUploadAudio = vi.fn();
+const mockResolveAudioUrl = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope, so
 // this test captures the scheduled callback rather than letting it run
@@ -87,7 +92,28 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
 
 vi.mock("@/infrastructure/suno/SunoSongService", () => ({
   SunoSongService: vi.fn().mockImplementation(function SunoSongService() {
-    return { generateSong: mockGenerateSong };
+    return {
+      submitGeneration: mockSubmitGeneration,
+      pollGenerationStatus: mockPollGenerationStatus,
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
+  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
+    return { download: mockDownloadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
+  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
+    return { upload: mockUploadAudio };
+  }),
+}));
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
   }),
 }));
 
@@ -181,8 +207,12 @@ describe("POST /api/lyrics/approve", () => {
       createdSong = song;
       return song;
     });
-    mockSongRepository.findGenerating.mockResolvedValue(null);
-    mockSongRepository.findOldestQueued.mockImplementation(async () => createdSong ?? null);
+    mockSongRepository.findGenerating.mockImplementation(async () =>
+      createdSong?.status === SongStatus.GENERATING ? createdSong : null,
+    );
+    mockSongRepository.findOldestQueued.mockImplementation(async () =>
+      createdSong?.status === SongStatus.QUEUED ? createdSong : null,
+    );
     mockSongRepository.update.mockImplementation(async (song: Song) => {
       createdSong = song;
       return song;
@@ -191,6 +221,14 @@ describe("POST /api/lyrics/approve", () => {
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
     mockClaimDelivery.mockResolvedValue(true);
     mockSendSongReadyEmail.mockResolvedValue(undefined);
+    mockDownloadAudio.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3]),
+      contentType: "audio/mpeg",
+    });
+    mockUploadAudio.mockResolvedValue(undefined);
+    mockResolveAudioUrl.mockImplementation(
+      async (key: string) => `https://signed.example.com/${key}`,
+    );
   });
 
   it("returns 401 when there is no active session, without touching the repository", async () => {
@@ -215,8 +253,8 @@ describe("POST /api/lyrics/approve", () => {
     expect(response.status).toBe(200);
     expect(body.lyrics.approved).toBe(true);
     // The music provider must never be called synchronously as part of
-    // the request — only the background worker calls it.
-    expect(mockGenerateSong).not.toHaveBeenCalled();
+    // the request — only the background dispatcher/poller call it.
+    expect(mockSubmitGeneration).not.toHaveBeenCalled();
   });
 
   it("synchronously creates a QUEUED song job right after approval", async () => {
@@ -235,9 +273,11 @@ describe("POST /api/lyrics/approve", () => {
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockGenerateSong.mockResolvedValue({
+    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
+    mockPollGenerationStatus.mockResolvedValue({
+      status: "completed",
       providerSongId: "suno-123",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://provider.example.com/short-lived.mp3",
       duration: 120,
     });
 
@@ -247,13 +287,16 @@ describe("POST /api/lyrics/approve", () => {
 
     await runScheduledBackgroundWork();
 
-    expect(mockGenerateSong).toHaveBeenCalledTimes(1);
+    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
+    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
+    expect(mockUploadAudio).toHaveBeenCalledTimes(1);
     expect(createdSong?.status).toBe("COMPLETED");
+    expect(createdSong?.audioStorageKey).toBeTruthy();
     expect(mockSendSongReadyEmail).toHaveBeenCalledTimes(1);
     expect(mockSendSongReadyEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "jane@example.com",
-        audioUrl: "https://cdn.example.com/song.mp3",
+        audioUrl: expect.stringContaining("https://signed.example.com/"),
       }),
     );
   });

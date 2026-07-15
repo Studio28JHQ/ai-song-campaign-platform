@@ -75,6 +75,14 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
   }),
 }));
 
+const mockResolveAudioUrl = vi.fn();
+
+vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
+  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
+    return { resolve: mockResolveAudioUrl };
+  }),
+}));
+
 const { GET } = await import("../../../app/api/leads/session/route");
 
 function sessionRequest(): Request {
@@ -96,6 +104,9 @@ function buildLead(overrides: Partial<{ babyName: string; remainingAttempts: num
 describe("GET /api/leads/session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveAudioUrl.mockImplementation(
+      async (key: string) => `https://signed.example.com/${key}`,
+    );
   });
 
   it("returns 401 when there is no active session", async () => {
@@ -138,7 +149,7 @@ describe("GET /api/leads/session", () => {
     mockSongRepository.findByLead.mockResolvedValue({
       id: "song-1",
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioStorageKey: "songs/song-1.mp3",
       duration: 90,
     });
 
@@ -150,7 +161,7 @@ describe("GET /api/leads/session", () => {
     expect(body.song).toEqual({
       songId: "song-1",
       status: "COMPLETED",
-      audioUrl: "https://cdn.example.com/song.mp3",
+      audioUrl: "https://signed.example.com/songs/song-1.mp3",
       duration: 90,
     });
   });

@@ -55,16 +55,18 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Single-Song Design** — Exactly one song is ever generated per call, and — per `Song.leadId` being unique — at most once successfully per lead (see `docs/Product/Business_Rules.md`). No variations, no batch generation.
 
+**Submit/poll contract (Sprint 9.1)** — The application layer's `SongGenerationProvider` port is two calls, `submitGeneration()`/`pollGenerationStatus()` (see "Asynchronous Song Generation" in `docs/Architecture/System_Architecture.md`), matching how an async, task-based provider actually works. Suno's own generation call is synchronous — one HTTP request already returns the finished result — so `SunoSongService` satisfies the two-call contract by caching the already-known result in memory, keyed by `providerTaskId`, rather than inventing a second network call Suno doesn't offer. This only works within the same process lifetime as the submit call (true for this app's current same-request dispatch-then-poll scheduling); a genuinely async provider's future adapter would poll a real remote endpoint instead.
+
 **Classes:**
 
 - **`SunoClient`** — minimal HTTP client for Suno's generation endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than a vendor SDK, consistent with the Claude integration and the project's "no unnecessary abstractions" principle. Adds a bearer token (from `appConfig.suno.apiKey`).
 - **`PromptBuilder`** — builds the request payload from the approved lyrics text, the mood's name, and the mood's fixed Suno prompt; derives a title from the lyrics' first line (the same convention the Lyrics Review UI uses).
 - **`ResponseParser`** — validates Suno's response with Zod into `{ providerSongId, audioUrl, duration }`.
-- **`SunoSongService`** — orchestrates the three above: build payload → call Suno → parse response.
+- **`SunoSongService`** — implements `SongGenerationProvider`: `submitGeneration` builds the payload, calls Suno, parses the response, and caches it; `pollGenerationStatus` returns the cached result.
 
 **Request Format** — `{ prompt, lyrics, tags, title }`, where `prompt` is the mood's fixed Suno prompt (not a general "describe the song" field), `lyrics` is the approved text verbatim, and `tags` carries the mood name. Suno does not publish a single canonical, versioned public API the way Anthropic does; this shape follows the commonly documented "custom mode" generation contract and should be verified against Suno's own current API documentation before this integration is pointed at production traffic.
 
-**Response Format** — `{ id: string, audio_url: string, duration?: number }`, mapped to the domain's `{ providerSongId, audioUrl, duration }`.
+**Response Format** — `{ id: string, audio_url: string, duration?: number }`. `id` becomes `providerTaskId` on submission; the same response's `audio_url`/`duration` are handed to `GenerationPoller` once it polls — `SunoSongService` never persists `audio_url` itself (see Cloudflare R2, below).
 
 **Failure Handling** — Network errors and timeouts are retried transparently by the shared `httpRequest` helper; once retries are exhausted, or on a non-ok HTTP status, an invalid response body, or a response that doesn't match the expected schema, `SunoClient`/`ResponseParser` throw the shared `ExternalApiError` — no raw Suno exception, payload, or stack trace ever escapes the infrastructure layer. At the Application layer, a Suno failure marks the `Song` `FAILED` (not stuck `GENERATING`) so the _same_ row can be retried later without ever creating a second row for that lead.
 
@@ -101,7 +103,7 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 - **`StorageClient`** — minimal wrapper around the official `@aws-sdk/client-s3` `S3Client` (plus `@aws-sdk/s3-request-presigner` for signing), configured with `R2_ENDPOINT` (never built from the account ID in code), credentials, and bucket, all from `appConfig.storage`. Exposes the raw `putObject`/`headObject`/`deleteObject`/presigned-URL SDK calls, nothing else.
 - **`CloudflareR2Storage`** — orchestrates the client into the four supported operations: `upload`, `generateSignedDownloadUrl` (a presigned `GetObjectCommand` URL, expiring after `R2_SIGNED_URL_EXPIRY_SECONDS` — see `src/config/constants.ts`), `delete`, `exists`. Translates any SDK failure into the shared `ExternalApiError` — no raw AWS SDK exception ever escapes the infrastructure layer.
 
-**Current wiring** — This is infrastructure only. No Application use case calls it yet: `ProcessSongGenerationUseCase` still persists Suno's own hosted `audioUrl` directly on the `Song` record, unchanged (see `docs/Architecture/System_Architecture.md`). Wiring R2 into the song-generation flow itself (and switching playback/download to signed URLs) is a separate, not-yet-scheduled change.
+**Current wiring (Sprint 9.1)** — `GenerationPoller` downloads the provider's audio from its own (short-lived) URL and uploads it here, persisting only the resulting object key on `Song.audioStorageKey` — never a signed URL, never the provider's URL. Every consumer that needs to show or email the audio (the "song ready" email, the parent-facing session endpoint, the admin Lead Detail view, the admin manual resend action, the legacy `/api/song/[songId]` status endpoint) resolves a fresh signed URL at read time through `AudioUrlResolver`/`R2AudioUrlResolver` — none of them ever reads or persists a URL directly. `R2_SIGNED_URL_EXPIRY_SECONDS` (`src/config/constants.ts`) is set long enough (7 days) for an emailed link to still work well after generation, not just for a URL resolved and used within the same request.
 
 **Failure Scenarios** — Invalid credentials, bucket permission errors, network failure.
 

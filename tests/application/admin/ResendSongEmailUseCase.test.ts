@@ -7,6 +7,7 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
 import { ResendSongEmailUseCase } from "@/application/admin/use-cases/ResendSongEmailUseCase";
 
@@ -81,6 +82,12 @@ function fakeEmailSender(): SongEmailSender {
   return { sendSongReadyEmail: vi.fn().mockResolvedValue(undefined) };
 }
 
+function fakeAudioUrlResolver(): AudioUrlResolver {
+  return {
+    resolve: vi.fn().mockImplementation(async (key: string) => `https://signed.example.com/${key}`),
+  };
+}
+
 function createLead(): Lead {
   return Lead.create(
     {
@@ -98,7 +105,7 @@ function buildCompletedEmailedSong(leadId: string): Song {
   song.markGenerating();
   song.markCompleted({
     providerSongId: "suno-1",
-    audioUrl: "https://cdn.example.com/song.mp3",
+    audioStorageKey: "songs/song.mp3",
     duration: 120,
   });
   return song;
@@ -124,6 +131,7 @@ describe("ResendSongEmailUseCase", () => {
       leadRepository,
       fakeEmailSender(),
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     await expect(
@@ -146,6 +154,7 @@ describe("ResendSongEmailUseCase", () => {
       leadRepository,
       emailSender,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     const result = await useCase.execute({
@@ -159,7 +168,7 @@ describe("ResendSongEmailUseCase", () => {
     expect(emailSender.sendSongReadyEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "jane@example.com",
-        audioUrl: "https://cdn.example.com/song.mp3",
+        audioUrl: "https://signed.example.com/songs/song.mp3",
       }),
     );
 
@@ -185,6 +194,7 @@ describe("ResendSongEmailUseCase", () => {
       leadRepository,
       emailSender,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     await expect(
@@ -203,6 +213,7 @@ describe("ResendSongEmailUseCase", () => {
       leadRepository,
       emailSender,
       auditLogRepository,
+      fakeAudioUrlResolver(),
     );
 
     await expect(
@@ -216,6 +227,6 @@ describe("ResendSongEmailUseCase", () => {
     // Structural guarantee: ResendSongEmailUseCase's constructor has no
     // EmailDeliveryTracker parameter, so it is architecturally impossible
     // for a manual resend to interact with the automatic-delivery claim.
-    expect(ResendSongEmailUseCase.length).toBe(4);
+    expect(ResendSongEmailUseCase.length).toBe(5);
   });
 });

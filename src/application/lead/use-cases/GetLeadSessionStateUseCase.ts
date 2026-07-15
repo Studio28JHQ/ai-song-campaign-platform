@@ -1,6 +1,7 @@
 import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
 import type { GetLeadSessionStateRequest } from "../dto/GetLeadSessionStateRequest";
 import type { GetLeadSessionStateResponse } from "../dto/GetLeadSessionStateResponse";
@@ -18,6 +19,7 @@ export class GetLeadSessionStateUseCase {
     private readonly leadRepository: LeadRepository,
     private readonly lyricsRepository: LyricsRepository,
     private readonly songRepository: SongRepository,
+    private readonly audioUrlResolver: AudioUrlResolver,
   ) {}
 
   async execute(request: GetLeadSessionStateRequest): Promise<GetLeadSessionStateResponse> {
@@ -35,6 +37,12 @@ export class GetLeadSessionStateUseCase {
       this.songRepository.findByLead(lead.id),
     ]);
 
+    // Resolved fresh from the persisted R2 key — never a stored URL (see
+    // `AudioUrlResolver`).
+    const audioUrl = song?.audioStorageKey
+      ? await this.audioUrlResolver.resolve(song.audioStorageKey)
+      : null;
+
     return {
       babyName: lead.babyName,
       remainingAttempts: lead.remainingAttempts,
@@ -46,9 +54,7 @@ export class GetLeadSessionStateUseCase {
             version: approvedLyrics.version,
           }
         : null,
-      song: song
-        ? { id: song.id, status: song.status, audioUrl: song.audioUrl, duration: song.duration }
-        : null,
+      song: song ? { id: song.id, status: song.status, audioUrl, duration: song.duration } : null,
     };
   }
 }

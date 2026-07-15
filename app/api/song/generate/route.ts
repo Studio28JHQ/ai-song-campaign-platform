@@ -1,7 +1,8 @@
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
-import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
+import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
+import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
@@ -10,6 +11,9 @@ import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/Pri
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
+import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -48,11 +52,19 @@ const generateSongUseCase = new GenerateSongUseCase(
   campaignGate,
 );
 
-const songGenerationWorker = new SongGenerationWorker(
+const generationDispatcher = new GenerationDispatcher(
   songRepository,
   lyricsRepository,
   moodProvider,
   songGenerator,
+);
+
+const generationPoller = new GenerationPoller(
+  songRepository,
+  songGenerator,
+  new HttpAudioDownloader(),
+  new CloudflareR2Storage(),
+  new R2AudioUrlResolver(),
   leadRepository,
   emailSender,
   emailDeliveryTracker,
@@ -84,13 +96,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // Scheduled with `after()` so it keeps running once the response has
     // been sent, without the caller ever waiting for it. Any failure is
-    // persisted as FAILED by the worker itself — nothing to do with the
-    // rejection here except log it; it must never crash the request.
+    // persisted as FAILED by the dispatcher/poller themselves — nothing
+    // to do with the rejection here except log it; it must never crash
+    // the request.
     after(async () => {
       try {
-        await songGenerationWorker.execute();
+        await generationDispatcher.execute();
+        await generationPoller.execute();
       } catch (error) {
-        logger.error("Background song generation worker failed", {
+        logger.error("Background song generation failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
