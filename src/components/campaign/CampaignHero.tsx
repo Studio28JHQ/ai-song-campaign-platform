@@ -32,6 +32,14 @@ interface CampaignHeroProps {
  * `min-h-[92vh]` — "the Hero should occupy almost the entire first
  * viewport" — stops just short of 100dvh so a hint of the next section
  * is always visible as a scroll affordance.
+ *
+ * Sprint UI-3B — Hero Polish. The content block's padding is
+ * deliberately top-heavy (`pt-32`/`lg:pt-44` vs. a much smaller bottom
+ * padding) rather than symmetric — the section itself still centers
+ * that block vertically (`items-center`, unchanged), but a taller top
+ * offset reads as the whole composition sitting lower in the viewport,
+ * closer to the campaign artwork's own balance, without touching the
+ * grid's `order`/`col-start`/`row-start` structure at all.
  */
 export function CampaignHero({
   headline,
@@ -46,7 +54,7 @@ export function CampaignHero({
     <section className="relative isolate flex min-h-[92vh] items-center overflow-hidden">
       {background}
       {decorations}
-      <CampaignContainer className="relative z-10 py-16 lg:py-16">
+      <CampaignContainer className="relative z-10 pt-32 pb-16 lg:pt-44 lg:pb-20">
         <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <div className="order-2 flex justify-center lg:order-none lg:col-start-2 lg:row-start-1 lg:justify-self-center">
             {animal}

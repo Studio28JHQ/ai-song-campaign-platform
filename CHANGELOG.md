@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-07-29
+
+Sprint UI-3B — Hero Polish & UX Refinement. A refinement pass on the Sprint UI-3A landing redesign, based on reviewing the live implementation against the client's reference artwork — not a redesign, no new architectural concepts, admin/queue/API/domain/database/infrastructure untouched.
+
+### Changed
+
+- `CampaignHero`'s content padding is now top-heavy (`pt-32 pb-16` / `lg:pt-44 lg:pb-20`, was symmetric `py-16`) so the whole animal/product/headline composition sits noticeably lower in the viewport, closer to the reference artwork's balance — the grid's `order`/`col-start`/`row-start` structure (and therefore the responsive behavior) is completely unchanged.
+- `HeroSection`'s headline (`CampaignHeading`) widened (`max-w-xl` → `max-w-2xl`) and set `font-bold` (was inheriting `font-semibold`) for more visual prominence.
+- `CampaignProduct` in the Hero now sits with a negative top margin (`-mt-10` / `lg:-mt-24`) so it overlaps the bottom of `CampaignAnimal` above it instead of floating as a separate image — the two now read as one composed scene.
+- `CampaignBackground`'s gradient wash lightened (`opacity-80` → `opacity-45`) and its photo layers brightened (`opacity-50` → `opacity-70`) — the baby photo is now clearly visible instead of mostly hidden under the off-white gradient.
+- `Navigation`'s logo enlarged ~37% (140×43 → 192×59, same aspect ratio).
+- The registration card (`HeroSection`) no longer uses `CampaignCard`'s `spacious` padding variant, and forces `py-6` at every breakpoint (was `p-8 sm:p-10`); its own heading now sits `mb-3` above the first field (was `mb-6`). `RegistrationForm`'s outer `gap` tightened (`gap-4` → `gap-3`) and `CampaignField`'s internal label-to-input gap tightened (`gap-2` → `gap-1.5`) — the card is noticeably shorter without removing any field or changing any validation.
+- `RegistrationForm`'s six fields now sit in a `grid-cols-1 sm:grid-cols-2` layout (was a single `flex flex-col` column) — two per row on tablet/desktop, one per row on mobile. The six `CampaignField`s stay in their exact original DOM order; only their grid _position_ changes, never an `order-*` override — visual order, DOM order, and keyboard tab order remain identical at every breakpoint, so this doesn't touch the accessibility guarantees RC-era testing already established.
+- `app/layout.tsx` and `app/page.tsx`: `metadata.title`/`openGraph.title`/`twitter.title` all now read exactly `"Una canción personalizada para tu bebé | Bassa"` (were `${appName} — Una canción personalizada para tu bebé`, `appName` defaulting to `"AI Song Campaign"`) — `description` is untouched in both files, and `title.template` (used by other pages' own titles, not `/`) is untouched.
+- `Faq`'s heading-to-content spacing (`mt-10` → `mt-12`) now matches `HowItWorks`' rhythm — the only Objective 6 ("campaign polish") change; every other public section was reviewed and left as UI-3A shipped it, since no specific issue was raised against them.
+
+### Removed
+
+- `CampaignCloud` (component and its two Hero usages) — the client's reference artwork has no cloud illustrations; no replacement asset was introduced, per the brief.
+
 ## [1.15.0] - 2026-07-28
 
 Sprint UI-3A — Landing Experience. Rebuilds the public landing page into a marketing landing experience — using the Sprint UI-2.5 asset library for the first time — instead of recoloring the previous SaaS-shaped layout. No backend, database, API, business-rule, or security changes; Lyrics Workflow, Song Result, and Admin are untouched. `RegistrationForm`'s own validation/submit logic is unchanged — only how and where it's presented.

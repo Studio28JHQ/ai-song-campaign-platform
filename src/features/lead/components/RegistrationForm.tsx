@@ -159,7 +159,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
       {formError ? (
         <p
           role="alert"
@@ -169,68 +169,81 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         </p>
       ) : null}
 
-      <CampaignField
-        label="Tu nombre"
-        placeholder="Ej. María Fernández"
-        autoComplete="name"
-        maxLength={FIELD_LIMITS.parentName}
-        error={translateFieldError(errors.parentName?.message)}
-        registration={register("parentName")}
-        icon={<UserIcon />}
-      />
+      {/*
+        Sprint UI-3B — two columns on desktop for "compatible" fields,
+        one column on mobile ("without affecting mobile"). Fields stay
+        in the exact same DOM order as always (parentName, babyName,
+        babyAge, city, email, phone) — a CSS grid only changes where
+        each one *sits*, never re-ordered via `order-*`, so visual
+        reading order, DOM order, and keyboard tab order all stay
+        identical. Reordering them to a different pairing would have
+        decoupled tab order from visual order, which the brief's own
+        "do NOT reduce accessibility" rules out.
+      */}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+        <CampaignField
+          label="Tu nombre"
+          placeholder="Ej. María Fernández"
+          autoComplete="name"
+          maxLength={FIELD_LIMITS.parentName}
+          error={translateFieldError(errors.parentName?.message)}
+          registration={register("parentName")}
+          icon={<UserIcon />}
+        />
 
-      <CampaignField
-        label="Nombre del bebé"
-        placeholder="Ej. Sofía"
-        autoComplete="off"
-        maxLength={FIELD_LIMITS.babyName}
-        error={translateFieldError(errors.babyName?.message)}
-        registration={register("babyName")}
-        icon={<BabyIcon />}
-      />
+        <CampaignField
+          label="Nombre del bebé"
+          placeholder="Ej. Sofía"
+          autoComplete="off"
+          maxLength={FIELD_LIMITS.babyName}
+          error={translateFieldError(errors.babyName?.message)}
+          registration={register("babyName")}
+          icon={<BabyIcon />}
+        />
 
-      <CampaignField
-        label="Edad del bebé (meses)"
-        placeholder="6"
-        type="number"
-        inputMode="numeric"
-        autoComplete="off"
-        error={translateFieldError(errors.babyAge?.message)}
-        registration={register("babyAge")}
-        icon={<CalendarIcon />}
-      />
+        <CampaignField
+          label="Edad del bebé (meses)"
+          placeholder="6"
+          type="number"
+          inputMode="numeric"
+          autoComplete="off"
+          error={translateFieldError(errors.babyAge?.message)}
+          registration={register("babyAge")}
+          icon={<CalendarIcon />}
+        />
 
-      <CampaignField
-        label="Ciudad"
-        placeholder="Ej. Guadalajara"
-        autoComplete="address-level2"
-        maxLength={FIELD_LIMITS.city}
-        error={translateFieldError(errors.city?.message)}
-        registration={register("city")}
-        icon={<MapPinIcon />}
-      />
+        <CampaignField
+          label="Ciudad"
+          placeholder="Ej. Guadalajara"
+          autoComplete="address-level2"
+          maxLength={FIELD_LIMITS.city}
+          error={translateFieldError(errors.city?.message)}
+          registration={register("city")}
+          icon={<MapPinIcon />}
+        />
 
-      <CampaignField
-        label="Correo electrónico"
-        placeholder="maria@ejemplo.com"
-        type="email"
-        autoComplete="email"
-        maxLength={FIELD_LIMITS.email}
-        error={translateFieldError(errors.email?.message)}
-        registration={register("email")}
-        icon={<MailIcon />}
-      />
+        <CampaignField
+          label="Correo electrónico"
+          placeholder="maria@ejemplo.com"
+          type="email"
+          autoComplete="email"
+          maxLength={FIELD_LIMITS.email}
+          error={translateFieldError(errors.email?.message)}
+          registration={register("email")}
+          icon={<MailIcon />}
+        />
 
-      <CampaignField
-        label="Teléfono"
-        placeholder="+52 55 1234 5678"
-        type="tel"
-        autoComplete="tel"
-        maxLength={FIELD_LIMITS.phone}
-        error={translateFieldError(errors.phone?.message)}
-        registration={register("phone")}
-        icon={<PhoneIcon />}
-      />
+        <CampaignField
+          label="Teléfono"
+          placeholder="+52 55 1234 5678"
+          type="tel"
+          autoComplete="tel"
+          maxLength={FIELD_LIMITS.phone}
+          error={translateFieldError(errors.phone?.message)}
+          registration={register("phone")}
+          icon={<PhoneIcon />}
+        />
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <TurnstileWidget

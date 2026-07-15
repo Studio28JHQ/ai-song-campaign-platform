@@ -2,7 +2,6 @@ import { CampaignAnimal } from "@/components/campaign/CampaignAnimal";
 import { CampaignBackground } from "@/components/campaign/CampaignBackground";
 import { CampaignBubble } from "@/components/campaign/CampaignBubble";
 import { CampaignCard } from "@/components/campaign/CampaignCard";
-import { CampaignCloud } from "@/components/campaign/CampaignCloud";
 import { CampaignGlow } from "@/components/campaign/CampaignGlow";
 import { CampaignHeading } from "@/components/campaign/CampaignHeading";
 import { CampaignHero } from "@/components/campaign/CampaignHero";
@@ -14,15 +13,21 @@ interface HeroSectionProps {
 }
 
 /**
- * Sprint UI-3A — Landing Experience. The landing page's real Hero
- * content, composed from the generic `CampaignHero` shell (layout) plus
- * `CampaignBackground`/`CampaignBubble`/`CampaignCloud`/`CampaignGlow`
- * (decoration) and `CampaignAnimal`/`CampaignProduct` (Sprint UI-2.5
- * assets). The registration form is embedded directly here — as its
- * own `CampaignCard` — rather than in a separate scrolled-to section,
- * per the brief's Hero layout; this is the only registration entry
- * point on the page, still the unmodified `RegistrationForm` (no
+ * Sprint UI-3A — Landing Experience; refined in Sprint UI-3B (Hero
+ * Polish & UX Refinement). The landing page's real Hero content,
+ * composed from the generic `CampaignHero` shell (layout) plus
+ * `CampaignBackground`/`CampaignBubble`/`CampaignGlow` (decoration) and
+ * `CampaignAnimal`/`CampaignProduct` (Sprint UI-2.5 assets). The
+ * registration form is embedded directly here — as its own
+ * `CampaignCard` — rather than in a separate scrolled-to section, per
+ * the brief's Hero layout; this is the only registration entry point
+ * on the page, still the unmodified `RegistrationForm` (no
  * application-flow change, only where and how it's presented).
+ *
+ * UI-3B removed the cloud illustrations introduced in UI-3A (didn't
+ * match the client's reference artwork) and pulls the product up over
+ * the animal (`-mt-*` on `CampaignProduct`) so the two read as one
+ * composed scene instead of two separately floating images.
  */
 export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
   return (
@@ -38,8 +43,6 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
             size="h-24 w-24"
             className="absolute right-[10%] bottom-16"
           />
-          <CampaignCloud className="absolute top-10 right-[12%] h-14 w-14 opacity-80" />
-          <CampaignCloud className="absolute bottom-1/3 left-[4%] h-10 w-10 opacity-70" />
         </div>
       }
       animal={<CampaignAnimal variant="seal" priority className="h-40 w-auto sm:h-52 lg:h-64" />}
@@ -47,11 +50,11 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
         <CampaignProduct
           variant="product-infant"
           priority
-          className="h-56 w-auto sm:h-72 lg:h-[26rem]"
+          className="-mt-10 h-56 w-auto sm:h-72 lg:-mt-24 lg:h-[26rem]"
         />
       }
       headline={
-        <CampaignHeading as="h1" variant="display" className="mx-auto max-w-xl lg:mx-0">
+        <CampaignHeading as="h1" variant="display" className="mx-auto max-w-2xl font-bold lg:mx-0">
           Una canción hecha con amor, solo para tu bebé
         </CampaignHeading>
       }
@@ -62,8 +65,8 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
         </p>
       }
       form={
-        <CampaignCard spacious className="mx-auto mt-8 w-full max-w-md animate-fade-up lg:mx-0">
-          <CampaignHeading as="h2" variant="title" className="mb-6">
+        <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6 lg:mx-0">
+          <CampaignHeading as="h2" variant="title" className="mb-3">
             Crea la canción de tu bebé
           </CampaignHeading>
           <RegistrationForm turnstileSiteKey={turnstileSiteKey} />

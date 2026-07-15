@@ -16,18 +16,18 @@ const description =
   "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
 
 export const metadata: Metadata = {
-  title: `${appName} — Una canción personalizada para tu bebé`,
+  title: "Una canción personalizada para tu bebé | Bassa",
   description,
   alternates: {
     canonical: "/",
   },
   openGraph: {
     url: "/",
-    title: `${appName} — Una canción personalizada para tu bebé`,
+    title: "Una canción personalizada para tu bebé | Bassa",
     description,
   },
   twitter: {
-    title: `${appName} — Una canción personalizada para tu bebé`,
+    title: "Una canción personalizada para tu bebé | Bassa",
     description,
   },
 };

@@ -73,20 +73,20 @@ const description =
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: `${appName} — Una canción personalizada para tu bebé`,
+    default: "Una canción personalizada para tu bebé | Bassa",
     template: `%s — ${appName}`,
   },
   description,
   openGraph: {
     type: "website",
     siteName: appName,
-    title: `${appName} — Una canción personalizada para tu bebé`,
+    title: "Una canción personalizada para tu bebé | Bassa",
     description,
     locale: "es_ES",
   },
   twitter: {
     card: "summary",
-    title: `${appName} — Una canción personalizada para tu bebé`,
+    title: "Una canción personalizada para tu bebé | Bassa",
     description,
   },
   robots: {

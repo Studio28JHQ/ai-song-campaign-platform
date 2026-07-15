@@ -21,6 +21,11 @@ interface CampaignBackgroundProps {
  * the DOM: a plain WEBP layer underneath, and an `image-set()` layer on
  * top that only paints over it in browsers that understand the
  * function, leaving the WEBP layer as the fallback everywhere else.
+ *
+ * Sprint UI-3B — Hero Polish: the gradient wash on top was lightened
+ * (`opacity-80` → `opacity-45`) and the photo layers brightened
+ * (`opacity-50` → `opacity-70`) — the client's reference art shows the
+ * baby photo clearly, not mostly hidden under an off-white gradient.
  */
 export function CampaignBackground({ variant = "ba-da-ba", className }: CampaignBackgroundProps) {
   const base = `/campaign/backgrounds/background-${variant}`;
@@ -28,11 +33,11 @@ export function CampaignBackground({ variant = "ba-da-ba", className }: Campaign
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 -z-10", className)}>
       <div
-        className="absolute inset-0 bg-cover bg-center opacity-50"
+        className="absolute inset-0 bg-cover bg-center opacity-70"
         style={{ backgroundImage: `url(${base}.webp)` }}
       />
       <div
-        className="absolute inset-0 bg-cover bg-center opacity-50"
+        className="absolute inset-0 bg-cover bg-center opacity-70"
         style={{
           backgroundImage: `image-set(url(${base}.avif) type("image/avif"), url(${base}.webp) type("image/webp"))`,
         }}
@@ -40,7 +45,7 @@ export function CampaignBackground({ variant = "ba-da-ba", className }: Campaign
       {/* Wash, not cover: partial opacity so the photo layers above stay
           visible underneath, blending into a single soft, pastel scene. */}
       <div
-        className="absolute inset-0 opacity-80"
+        className="absolute inset-0 opacity-45"
         style={{ background: "linear-gradient(180deg, #F8FCFF 0%, #D9F2FF 55%, #BEE8FF 100%)" }}
       />
     </div>
