@@ -203,6 +203,54 @@ describe("GenerationPoller", () => {
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.GENERATING);
   });
 
+  it("persists the provider's raw status while pending, without touching the song's own status", async () => {
+    const song = seedGeneratingSong(lead.id, songRepository);
+    const poller = buildPoller({
+      songGenerator: fakeSongGenerator({ status: "pending", providerStatus: "running" }),
+    });
+
+    const response = await poller.execute();
+
+    expect(response?.outcome).toBe("pending");
+    const persisted = await songRepository.findById(song.id);
+    expect(persisted?.status).toBe(SongStatus.GENERATING);
+    expect(persisted?.providerStatus).toBe("running");
+  });
+
+  it("records provider-complete status and returns ready_to_download without downloading, uploading, or emailing", async () => {
+    const song = seedGeneratingSong(lead.id, songRepository);
+    const audioDownloader = fakeAudioDownloader();
+    const audioStorage = fakeAudioStorage();
+    const emailSender = fakeEmailSender();
+    const poller = buildPoller({
+      songGenerator: fakeSongGenerator({
+        status: "ready_to_download",
+        providerSongId: "mureka-123",
+        audioUrl: "https://provider.example.com/short-lived.mp3",
+        duration: 90,
+        providerStatus: "succeeded",
+      }),
+      audioDownloader,
+      audioStorage,
+      emailSender,
+    });
+
+    const response = await poller.execute();
+
+    expect(response?.outcome).toBe("ready_to_download");
+    expect(response?.song.status).toBe(SongStatus.GENERATING);
+
+    const persisted = await songRepository.findById(song.id);
+    expect(persisted?.status).toBe(SongStatus.GENERATING);
+    expect(persisted?.providerStatus).toBe("succeeded");
+    expect(persisted?.completedAt).not.toBeNull();
+    expect(persisted?.audioStorageKey).toBeNull();
+
+    expect(audioDownloader.download).not.toHaveBeenCalled();
+    expect(audioStorage.upload).not.toHaveBeenCalled();
+    expect(emailSender.sendSongReadyEmail).not.toHaveBeenCalled();
+  });
+
   it("marks the song FAILED with the provider's error when polling reports failure", async () => {
     const song = seedGeneratingSong(lead.id, songRepository);
     const poller = buildPoller({

@@ -5,19 +5,20 @@ import type { MurekaGenerateRequest } from "./types";
 
 const MUREKA_BASE_URL = "https://api.mureka.ai";
 const MUREKA_GENERATE_PATH = "/v1/song/generate";
+const MUREKA_QUERY_PATH = "/v1/song/query";
 
 /**
  * Minimal HTTP client for Mureka's official asynchronous song
- * generation endpoint — talks to Mureka and nothing else, built on the
+ * generation endpoints — talks to Mureka and nothing else, built on the
  * shared `httpRequest` helper (`src/shared/http/`) rather than a vendor
  * SDK or an unofficial wrapper, the same pattern as
  * `ClaudeClient`/`SunoClient`. Adds a bearer token (from
  * `appConfig.mureka.apiKey`). Network errors and timeouts are retried
- * transparently by `httpRequest`; only the submission endpoint is
- * called here — see PROJECT_MANIFEST.md / Gate 9.2 (no polling
- * endpoint is implemented in this class).
+ * transparently by `httpRequest`.
  *
- * Reference: https://platform.mureka.ai/docs/api/operations/post-v1-song-generate.html
+ * Gate 9.2 added submission; Gate 9.3 adds polling via the official
+ * task-query endpoint (`queryTask`) — see
+ * https://platform.mureka.ai/docs/api/operations/get-v1-song-query-%7Btask_id%7D.html.
  */
 export class MurekaClient {
   async submitGeneration(payload: MurekaGenerateRequest): Promise<unknown> {
@@ -35,6 +36,30 @@ export class MurekaClient {
       throw MurekaClient.mapErrorResponse(response.status, details);
     }
 
+    return MurekaClient.parseJsonBody(response);
+  }
+
+  /** Polls Mureka's official task-query endpoint for a previously submitted generation job. */
+  async queryTask(taskId: string): Promise<unknown> {
+    const response = await httpRequest(
+      `${MUREKA_BASE_URL}${MUREKA_QUERY_PATH}/${encodeURIComponent(taskId)}`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${appConfig.mureka.apiKey}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const details = await response.json().catch(() => null);
+      throw MurekaClient.mapErrorResponse(response.status, details);
+    }
+
+    return MurekaClient.parseJsonBody(response);
+  }
+
+  private static async parseJsonBody(response: Response): Promise<unknown> {
     try {
       return await response.json();
     } catch (cause) {

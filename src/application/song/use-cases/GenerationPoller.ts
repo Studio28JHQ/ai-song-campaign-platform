@@ -71,6 +71,11 @@ export class GenerationPoller {
     const result = await this.songGenerator.pollGenerationStatus(song.providerTaskId);
 
     if (result.status === "pending") {
+      if (result.providerStatus) {
+        song.recordProviderStatus(result.providerStatus);
+        const updated = await this.songRepository.update(song);
+        return { song: updated.toSnapshot(), outcome: "pending" };
+      }
       return { song: song.toSnapshot(), outcome: "pending" };
     }
 
@@ -78,6 +83,16 @@ export class GenerationPoller {
       song.markFailed(result.error);
       const updated = await this.songRepository.update(song);
       return { song: updated.toSnapshot(), outcome: "failed" };
+    }
+
+    if (result.status === "ready_to_download") {
+      song.recordProviderStatus(result.providerStatus ?? "completed", { completed: true });
+      const updated = await this.songRepository.update(song);
+      logger.info("Generation poller: provider finished, awaiting download", {
+        songId: song.id,
+        providerSongId: result.providerSongId,
+      });
+      return { song: updated.toSnapshot(), outcome: "ready_to_download" };
     }
 
     try {

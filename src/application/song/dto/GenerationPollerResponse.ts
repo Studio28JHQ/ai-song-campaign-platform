@@ -8,5 +8,5 @@ import type { SongSnapshot } from "@/domain/song/types";
  */
 export interface GenerationPollerResponse {
   song: SongSnapshot;
-  outcome: "pending" | "completed" | "failed";
+  outcome: "pending" | "completed" | "ready_to_download" | "failed";
 }

@@ -1,4 +1,8 @@
-import type { SongGenerationInput } from "@/application/song/contracts/SongGenerationProvider";
+import type {
+  SongGenerationInput,
+  SongGenerationPollResult,
+} from "@/application/song/contracts/SongGenerationProvider";
+import { ExternalApiError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { MurekaClient } from "./MurekaClient";
 import { PromptBuilder } from "./PromptBuilder";
@@ -6,23 +10,35 @@ import { ResponseParser } from "./ResponseParser";
 import type { MurekaSubmissionResult } from "./types";
 
 /**
- * Official Mureka async music generation provider (Gate 9.2 — Mureka
- * Foundation). Orchestrates the three classes above: build payload →
- * call Mureka → parse response — the same "build payload → call
- * provider → parse response" shape as `SunoSongService`/
- * `ClaudeLyricsService`.
+ * `ExternalApiError` codes that represent a temporary, provider-side
+ * hiccup — a busy/overloaded Mureka, a rate limit, or a network/timeout
+ * failure `httpRequest` couldn't recover from after its own retries.
+ * `pollGenerationStatus` treats these as `{ status: "pending" }` so
+ * `GenerationPoller` simply asks again on its next run, exactly like an
+ * in-progress task. Every other `ExternalApiError` code (bad
+ * credentials, exhausted quota, a malformed payload/response) reflects
+ * something retrying won't fix, so it is reported as `{ status: "failed" }`
+ * instead (Gate 9.3 — Mureka Polling).
+ */
+const RETRYABLE_ERROR_CODES = new Set([
+  "mureka.server_error",
+  "mureka.rate_limited",
+  "http_request_failed",
+]);
+
+/**
+ * Official Mureka async music generation provider. Orchestrates the
+ * three classes above: build payload → call Mureka → parse response —
+ * the same "build payload → call provider → parse response" shape as
+ * `SunoSongService`/`ClaudeLyricsService`.
  *
- * This gate covers submission only: `submitGeneration` accepts a
- * generation job and returns the structured result once Mureka
- * confirms it — `providerTaskId`, `providerTraceId`, `submittedAt`, and
- * the initial `providerStatus`, all already translated out of Mureka's
- * raw response shape (see `ResponseParser`). It is not wired into any
- * Application use case yet, and does not implement the
- * `SongGenerationProvider` port (`GenerationDispatcher`/
- * `GenerationPoller`, untouched by this gate, still use
- * `SunoSongService`) — polling, download, and email remain out of
- * scope here, mirroring how `ClaudeLyricsService` isn't wired into an
- * application-layer port until its own use case exists.
+ * Gate 9.2 (Mureka Foundation) covers submission only. Gate 9.3
+ * (Mureka Polling) adds `pollGenerationStatus`, matching the shared
+ * `SongGenerationProvider` port's poll method signature — but this
+ * class still does not `implements SongGenerationProvider` and is not
+ * wired into `GenerationDispatcher`/`GenerationPoller` (untouched by
+ * this gate, still exclusively using `SunoSongService`); swapping the
+ * active provider is a future gate's decision, not this one's.
  */
 export class MurekaSongService {
   constructor(private readonly client: MurekaClient = new MurekaClient()) {}
@@ -40,5 +56,49 @@ export class MurekaSongService {
     });
 
     return result;
+  }
+
+  /**
+   * Polls Mureka's task-query endpoint. Deliberately never throws for
+   * an expected failure category (see `RETRYABLE_ERROR_CODES` above) —
+   * `GenerationPoller` calls this once per run and must always get back
+   * a `SongGenerationPollResult` to act on, not an exception to handle
+   * itself. Does not download audio, upload to storage, or send email —
+   * that remains `GenerationPoller`'s job, out of scope for this gate.
+   */
+  async pollGenerationStatus(providerTaskId: string): Promise<SongGenerationPollResult> {
+    let raw: unknown;
+    try {
+      raw = await this.client.queryTask(providerTaskId);
+    } catch (error) {
+      return this.classifyPollFailure(providerTaskId, error);
+    }
+
+    try {
+      return ResponseParser.parsePoll(raw);
+    } catch (error) {
+      return this.classifyPollFailure(providerTaskId, error);
+    }
+  }
+
+  private classifyPollFailure(providerTaskId: string, error: unknown): SongGenerationPollResult {
+    const code = error instanceof ExternalApiError ? error.code : undefined;
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (code && RETRYABLE_ERROR_CODES.has(code)) {
+      logger.warn("Mureka poll failed with a retryable error; will retry on next poll", {
+        providerTaskId,
+        code,
+        message,
+      });
+      return { status: "pending" };
+    }
+
+    logger.error("Mureka poll failed with a non-retryable error", {
+      providerTaskId,
+      code,
+      message,
+    });
+    return { status: "failed", error: message };
   }
 }

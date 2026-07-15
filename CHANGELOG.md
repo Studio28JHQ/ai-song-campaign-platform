@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-19
+
+Gate 9.3 — Mureka Polling. Adds provider polling against Mureka's official task-query endpoint. Still not wired into the generation pipeline — `GenerationDispatcher`/`GenerationPoller` continue to run exclusively against `SunoSongService`; this gate only adds the _capability_ to poll Mureka and a new internal `Song`/`GenerationPoller` state (`ready_to_download`) for a provider-side completion that hasn't been downloaded yet. No audio is downloaded, no R2 upload happens, and no email is sent for Mureka in this gate.
+
+### Added
+
+- `MurekaClient.queryTask(taskId)` — `GET https://api.mureka.ai/v1/song/query/{task_id}`, reusing the existing error-mapping (`mapErrorResponse`) shared with `submitGeneration`.
+- `ResponseParser.parsePoll(raw)` — Zod-validates Mureka's documented `SongTask` response (confirmed directly against Mureka's own published OpenAPI spec) and maps its `status` enum (`preparing`/`queued`/`running`/`streaming` → pending, `succeeded` → ready-to-download, `failed`/`timeouted`/`cancelled` → failed) into the shared `SongGenerationPollResult`. An unrecognized status defaults to pending rather than throwing. A succeeded task's `choices[0].duration` (documented in milliseconds) is converted to whole seconds, matching this codebase's existing `Song.duration` convention.
+- `MurekaSongService.pollGenerationStatus(providerTaskId)` — never throws for an expected failure category: retryable provider hiccups (5xx, rate limiting, a network/timeout failure the shared `httpRequest` helper couldn't recover from) become `{ status: "pending" }`; everything else (bad credentials, exhausted quota, invalid request, a malformed response) becomes `{ status: "failed" }`.
+- `SongGenerationPollResult` gains a new `ready_to_download` variant, additive alongside the existing `completed` variant — lets a genuinely asynchronous provider (Mureka) report "the provider itself is done" without retroactively changing `SunoSongService`'s existing synchronous `completed` behavior (still the only variant that triggers `GenerationPoller`'s download/R2-upload/email flow).
+- `Song.recordProviderStatus(providerStatus, { completed? })` — a new non-transitioning method that records the provider's latest raw status (and, when the provider itself has finished, stamps `completedAt`) without moving `Song` out of `GENERATING`. Used by `GenerationPoller` for both a still-in-progress poll (diagnostics only) and a `ready_to_download` result.
+- `GenerationPoller` now persists `providerStatus` on every still-pending poll (previously a no-op), and handles `ready_to_download` by recording the provider-complete status and returning early — explicitly not touching `AudioDownloader`, `AudioStorage`, `SongEmailSender`, or `EmailDeliveryTracker` for this outcome.
+- **Real API validation**: queried the live endpoint for a (necessarily) non-existent task id — a query costs no generation credits regardless of outcome. Mureka returned a real `400` ("invalid payload"), confirming the endpoint URL, bearer-token authentication (not a `401`), and error classification all work end-to-end; `MurekaSongService.pollGenerationStatus` correctly classified it as non-retryable and returned `{ status: "failed" }` without throwing. The success path (`succeeded` → `ready_to_download`) is implemented and unit-tested against Mureka's documented schema but not yet exercised live, since no account-accepted task id exists yet (Gate 9.2's one live submission attempt hit the account's exhausted quota before a task was ever created).
+
 ## [1.5.0] - 2026-07-18
 
 Gate 9.2 — Mureka Foundation. Creates the official Mureka async generation client, submission-only. Not wired into the generation pipeline — `GenerationDispatcher`/`GenerationPoller` (Sprint 9.1) still use `SunoSongService`, unchanged. No polling, download, or email implemented for Mureka yet.

@@ -177,3 +177,105 @@ describe("MurekaClient.submitGeneration", () => {
     });
   });
 });
+
+describe("MurekaClient.queryTask", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a GET request to the official query endpoint and returns the parsed body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "task-123", status: "running" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new MurekaClient();
+    const result = await client.queryTask("task-123");
+
+    expect(result).toEqual({ id: "task-123", status: "running" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.mureka.ai/v1/song/query/task-123");
+    expect(init.method).toBe("GET");
+
+    const headers = init.headers as Record<string, string>;
+    expect(headers.authorization).toMatch(/^Bearer .+/);
+  });
+
+  it("URL-encodes the task id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "task/weird id", status: "running" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new MurekaClient().queryTask("task/weird id");
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe("https://api.mureka.ai/v1/song/query/task%2Fweird%20id");
+  });
+
+  it("throws a distinct error for a 401 (invalid authentication)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }),
+    );
+
+    await expect(new MurekaClient().queryTask("task-123")).rejects.toMatchObject({
+      code: "mureka.invalid_authentication",
+    });
+  });
+
+  it("maps a 429 with a credits/quota message to quota_exceeded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        json: async () => ({ error: { message: "You have run out of credits." } }),
+      }),
+    );
+
+    await expect(new MurekaClient().queryTask("task-123")).rejects.toMatchObject({
+      code: "mureka.quota_exceeded",
+    });
+  });
+
+  it("maps a 500 to a server_error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }),
+    );
+
+    await expect(new MurekaClient().queryTask("task-123")).rejects.toMatchObject({
+      code: "mureka.server_error",
+    });
+  });
+
+  it("throws when the response body is not valid JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error("invalid json");
+        },
+      }),
+    );
+
+    await expect(new MurekaClient().queryTask("task-123")).rejects.toMatchObject({
+      code: "mureka.invalid_response_body",
+    });
+  });
+
+  it("propagates a network/timeout failure as the shared external-API error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
+
+    await expect(new MurekaClient().queryTask("task-123")).rejects.toThrow();
+  });
+});
