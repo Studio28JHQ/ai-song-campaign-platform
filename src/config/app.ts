@@ -44,6 +44,9 @@ export const appConfig = {
   suno: {
     apiKey: env.SUNO_API_KEY,
   },
+  mureka: {
+    apiKey: env.MUREKA_API_KEY,
+  },
   // Sprint 8.2 — Abuse Protection. Every limit lives here, never
   // hardcoded inside a route handler — see PROJECT_MANIFEST.md.
   security: {

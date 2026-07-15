@@ -72,6 +72,29 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Retry Policy** — Transient failures (timeout, connection errors, repeated 5xx) are retried a limited number of times with backoff by `httpRequest`; a non-retryable failure (4xx, malformed response) fails immediately. Song generation failures never consume a lyric attempt (that budget only governs lyrics generation — see `docs/Product/Business_Rules.md`).
 
+## Mureka API
+
+**Responsibilities**
+
+- Audio generation (future replacement for Suno)
+
+**Purpose** — The official, provider-published async music generation API (Gate 9.2 — Mureka Foundation). Implemented at `src/infrastructure/mureka/`. **Not yet wired into the generation pipeline** — `GenerationDispatcher`/`GenerationPoller` (see "Asynchronous Song Generation" in `docs/Architecture/System_Architecture.md`) still use `SunoSongService`; only the submission half of this integration exists so far, and it is not called from anywhere at runtime yet.
+
+**Classes:**
+
+- **`MurekaClient`** — minimal HTTP client for Mureka's official `POST /v1/song/generate` endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than a vendor SDK or an unofficial wrapper, consistent with every other provider integration. Adds a bearer token (from `appConfig.mureka.apiKey`).
+- **`PromptBuilder`** — builds the request payload from the same `SongGenerationInput` `SunoSongService`'s own `PromptBuilder` consumes (already-approved lyrics, the Mood's fixed prompt); pins `n: 1` to enforce "exactly one song per call" (see `docs/Product/Business_Rules.md` — Song Rules) and `model: "auto"` per Mureka's own quickstart example.
+- **`ResponseParser`** — validates Mureka's submission response with Zod into `{ providerTaskId, providerTraceId, submittedAt, providerStatus }` — Mureka's raw field names (`id`, `trace_id`, `created_at`, `status`) never escape this class.
+- **`MurekaSongService`** — orchestrates the three above: build payload → call Mureka → parse response. Does not implement the application-layer `SongGenerationProvider` port yet (mirrors `ClaudeLyricsService`, not wired into a port until its own use case exists).
+
+**Request Format** — `POST https://api.mureka.ai/v1/song/generate`, `{ lyrics, model, prompt, n }`.
+
+**Response Format** — `{ id, created_at, model, status, trace_id }`; `created_at` is a Unix timestamp in seconds.
+
+**Failure Handling** — `MurekaClient` maps Mureka's documented error codes to the shared `ExternalApiError` taxonomy: 401 (invalid authentication), 403 (forbidden), 429 — split into `rate_limited` vs. `quota_exceeded` by inspecting the response body's message, since Mureka uses the same status code for both — 400 (invalid request), and 5xx (server error). Network errors and timeouts are retried transparently by `httpRequest`, same as every other provider.
+
+**Live validation (Gate 9.2)** — Authentication and the request/response cycle were confirmed against the real endpoint: the account's available quota was exhausted, so Mureka returned a real `429` ("You exceeded your current quota..."), which was correctly classified as `mureka.quota_exceeded` — confirming the client and error-mapping work end-to-end. The success path (task acceptance) is implemented and unit-tested but not yet exercised live.
+
 ## Supabase
 
 **Responsibilities**

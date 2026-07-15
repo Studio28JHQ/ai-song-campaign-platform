@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-18
+
+Gate 9.2 — Mureka Foundation. Creates the official Mureka async generation client, submission-only. Not wired into the generation pipeline — `GenerationDispatcher`/`GenerationPoller` (Sprint 9.1) still use `SunoSongService`, unchanged. No polling, download, or email implemented for Mureka yet.
+
+### Added
+
+- `src/infrastructure/mureka/` — `MurekaClient` (raw HTTP client for `POST https://api.mureka.ai/v1/song/generate`, built on the shared `httpRequest` helper, the same pattern as `ClaudeClient`/`SunoClient`), `PromptBuilder` (maps the existing `SongGenerationInput` — already-approved lyrics + the Mood's fixed prompt — into Mureka's payload shape, pinning `n: 1` per the "exactly one song per call" business rule), `ResponseParser` (Zod-validates Mureka's response into a structured, already-translated result — no raw Mureka field name ever leaves this module), `MurekaSongService` (orchestrates the three: build payload → call Mureka → parse response).
+- `MUREKA_API_KEY` environment variable, read via `appConfig.mureka.apiKey` — never hardcoded, same pattern as `CLAUDE_API_KEY`/`SUNO_API_KEY`.
+- Error mapping for Mureka's documented codes: 401 (invalid authentication), 403 (forbidden), 429 — split into `rate_limited` vs `quota_exceeded` by inspecting the response body's message, since both share the same status code — 400 (invalid request), 5xx (server error), plus network/timeout failures via the shared `httpRequest` helper's existing retry-then-throw behavior.
+- **Real API validation**: authenticated successfully against the live endpoint and submitted one real generation request. The account's available quota was exhausted, so Mureka returned a real `429` ("You exceeded your current quota..."), which `MurekaClient` correctly classified as `mureka.quota_exceeded` (not misclassified as generic rate-limiting) — confirming the client, authentication, and error-mapping all work correctly end-to-end against the live API. The success path (task acceptance) is implemented and unit-tested but not yet exercised live, pending the account's billing being topped up.
+
+`MurekaSongService` does not implement the `SongGenerationProvider` port yet (mirrors `ClaudeLyricsService`, which also isn't wired into an application-layer port until its own use case exists) — wiring it in, and implementing `pollGenerationStatus`, is a future gate's job.
+
 ## [1.4.0] - 2026-07-17
 
 Sprint 9.1 — Generation Pipeline Refinement. Splits provider interaction into a submit phase and a completion-poll phase, and wires Cloudflare R2 storage into the generation pipeline for the first time — preparation for a future Mureka integration (not implemented in this sprint; no external API changed). No business rule or user-visible behavior changed.
