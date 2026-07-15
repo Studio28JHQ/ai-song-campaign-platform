@@ -45,10 +45,11 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
  * this class's concern: it is scheduled via Next.js's `after()` right
  * after `GenerationDispatcher` on every user-facing request that touches
  * the queue (see `app/api/lyrics/approve/route.ts`), and independently,
- * on a fixed schedule, by the Vercel Cron pipeline scheduler
- * (`GET /api/internal/pipeline/run`, RC-2 — Production Hardening) — no
- * persistent worker process or message broker either way, see
- * PROJECT_MANIFEST.md.
+ * on a fixed schedule, by the external scheduler
+ * (`GET /api/internal/pipeline/run`, RC-2 — Production Hardening;
+ * currently a GitHub Actions workflow — see
+ * `.github/workflows/song-pipeline.yml`) — no persistent worker process
+ * or message broker either way, see PROJECT_MANIFEST.md.
  */
 export class GenerationPoller {
   constructor(

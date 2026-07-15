@@ -5,12 +5,15 @@ const BEARER_PREFIX = "Bearer ";
 
 /**
  * Authenticates a request to one of the internal-only endpoints
- * (`/api/internal/*` — RC-2 Production Hardening: the Vercel Cron
- * pipeline tick, the operational health check) against the shared
- * `CRON_SECRET`. Vercel Cron automatically sends
- * `Authorization: Bearer $CRON_SECRET` on every scheduled invocation, so
- * no extra wiring is needed to protect a route this way — see
- * `appConfig.internal.cronSecret`.
+ * (`/api/internal/*` — RC-2 Production Hardening: the pipeline tick,
+ * the operational health check) against the shared `CRON_SECRET`. The
+ * external scheduler (currently a GitHub Actions workflow — see
+ * `.github/workflows/song-pipeline.yml`) sends
+ * `Authorization: Bearer $CRON_SECRET` on every scheduled invocation,
+ * explicitly configured to do so from a GitHub Secret of the same name
+ * — see `appConfig.internal.cronSecret`. The scheduling mechanism
+ * itself is interchangeable; this endpoint doesn't know or care what
+ * invokes it, only that the secret matches.
  *
  * Compares with `timingSafeEqual`, the same pattern
  * `ScryptPasswordHasher` already uses, rather than `===`, so response

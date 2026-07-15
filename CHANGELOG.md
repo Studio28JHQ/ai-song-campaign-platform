@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-07-26
+
+HOTFIX — GitHub Actions replaces Vercel Cron as the pipeline scheduler. The Vercel Hobby plan only permits cron jobs to run once per day, which was breaking every deployment now that `vercel.json` asked for a 5-minute schedule (RC-2). The scheduler was always meant to be an interchangeable infrastructure detail sitting in front of `GET /api/internal/pipeline/run` — nothing about the queue, `GenerationDispatcher`, `GenerationPoller`, or the endpoint's own contract changes here, only what calls it.
+
+### Added
+
+- `.github/workflows/song-pipeline.yml` — a GitHub Actions workflow on a `schedule` trigger (`*/10 * * * *`, every 10 minutes) plus manual `workflow_dispatch`, whose only job is one authenticated `curl GET` against `/api/internal/pipeline/run`. A `concurrency` group (`song-pipeline`, `cancel-in-progress: false`) prevents overlapping runs. Reads `CRON_SECRET` from GitHub Secrets and the target URL from a new `APP_URL` GitHub repository variable — neither is ever hardcoded in the workflow file. The job fails (and GitHub surfaces it as a failed run) on any non-2xx response, the same failure-visibility property the Vercel Cron job had.
+
+### Removed
+
+- `vercel.json` — the Vercel Cron job definition. Deleted outright rather than reduced in frequency, since a single daily tick would leave the queue effectively unattended for a whole marketing campaign day.
+
+### Changed
+
+- `docs/Architecture/System_Architecture.md`, `docs/Architecture/External_Services.md`, `docs/Development/Environment.md`, `README.md`, `docs/Product/User_Flow.md` — every description of "Vercel Cron" as the pipeline scheduler replaced with "External Scheduler" (architecture) / GitHub Actions (current implementation), including a new diagram (External Scheduler → `/api/internal/pipeline/run` → `GenerationDispatcher` → `GenerationPoller`) making explicit that the scheduler is a swappable component, not a fixed dependency on Vercel. `docs/Development/Environment.md` documents the required `CRON_SECRET` GitHub Secret, the `APP_URL` repository variable, the 10-minute interval, and how to trigger the workflow manually.
+- Code comments in `app/api/internal/pipeline/run/route.ts`, `src/infrastructure/http/verifyInternalSecret.ts`, `src/application/song/use-cases/GenerationPoller.ts`, `src/config/env.ts`, and `.env.example` updated to stop describing Vercel-automatic header injection (which no longer happens) and instead describe the GitHub Actions workflow explicitly setting the `Authorization` header from its own secret. `CRON_SECRET`'s name is kept unchanged — it's a deployment-time secret, not a code contract, and renaming it would only add churn.
+- Interval changed from 5 minutes (Vercel Cron, RC-2) to 10 minutes (GitHub Actions schedule) — reflected everywhere the old 5-minute figure was documented.
+
+### Known limitations (accepted, out of scope this hotfix)
+
+- The RC-2 CHANGELOG entry below (`[1.9.0]`) still describes Vercel Cron and a 5-minute interval — left as-is, since it's an accurate historical record of what shipped at the time, not a description of current behavior.
+- GitHub Actions' free-tier scheduled-workflow minimums mean the effective interval can occasionally slip a few minutes under load, same tolerance the queue already had to accommodate under Vercel Cron.
+
 ## [1.12.0] - 2026-07-25
 
 Sprint UI-2 — Campaign Visual Identity. Purely visual sprint replacing Sprint UI-1's approximated palette with the client's exact supplied brand system: exact hex colors, Fredoka/Inter typography, exact button/input/card specs, and an exact 3-stop hero gradient. No backend, domain, application-logic, API, or database changes; the admin panel is untouched, both visually and in copy.

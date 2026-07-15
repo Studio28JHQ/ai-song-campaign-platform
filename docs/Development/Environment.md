@@ -37,9 +37,9 @@ This document describes how environment variables and configuration are managed.
 
 ### Internal operations (RC-2 — Production Hardening)
 
-| Variable      | Purpose                                                                                                                                                                                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CRON_SECRET` | Long, random secret (32+ chars) protecting every `/api/internal/*` endpoint (the Vercel Cron pipeline tick, the operational health check). Vercel automatically sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled cron invocation. |
+| Variable      | Purpose                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRON_SECRET` | Long, random secret (32+ chars) protecting every `/api/internal/*` endpoint (the pipeline tick, the operational health check). The external scheduler (currently a GitHub Actions workflow — see "GitHub Actions Scheduler Secret" below) sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation. |
 
 ### Cloudflare Turnstile & rate limiting (Sprint 8.2 — Abuse Protection)
 
@@ -85,4 +85,23 @@ This document describes how environment variables and configuration are managed.
 - Environment variables are configured directly in Vercel's project settings (per environment: Production/Preview), not committed to the repository.
 - Only variables prefixed `NEXT_PUBLIC_` are ever exposed to the browser; every other variable stays server-only, matching how `src/config/env.ts` and `src/config/app.ts` are structured.
 - Rotating a key (Claude, Mureka, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
-- **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret. Vercel Cron then automatically sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation of the job defined in `vercel.json` — no additional configuration needed on the Vercel side. The same secret also protects `GET /api/internal/health`. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped.
+- **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret, so the deployed application can validate it. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped. The same secret also protects `GET /api/internal/health`.
+
+### External Scheduler (GitHub Actions)
+
+The pipeline scheduler (RC-2 — Production Hardening) is `.github/workflows/song-pipeline.yml`, a GitHub Actions workflow — **not** Vercel Cron. Vercel's Hobby plan only allows cron jobs to run once per day, which broke every deployment once RC-2 introduced a 5-minute `vercel.json` cron; `vercel.json` has been removed. See "External Scheduler" in `docs/Architecture/System_Architecture.md` for the full architecture picture — the scheduler is an interchangeable infrastructure component, and GitHub Actions is simply the current implementation.
+
+**Required GitHub repository configuration** (Settings → Secrets and variables → Actions):
+
+| Name          | Kind     | Purpose                                                                                                                                                  |
+| ------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRON_SECRET` | Secret   | Same value as the `CRON_SECRET` environment variable configured in Vercel. Never hardcoded in the workflow file — read via `${{ secrets.CRON_SECRET }}`. |
+| `APP_URL`     | Variable | The deployed application's base URL (e.g. `https://campaign.example.com`). Not sensitive, so it's a repository **variable**, not a secret.               |
+
+The workflow fails fast with a clear error if `APP_URL` isn't set, instead of silently calling an empty URL.
+
+**Schedule** — `*/10 * * * *` (every 10 minutes, UTC). GitHub Actions schedules are best-effort, same tolerance the queue already had under Vercel Cron.
+
+**Manual trigger** — From the repository's GitHub UI: Actions tab → "Song Pipeline Scheduler" → "Run workflow" (`workflow_dispatch`). Useful for verifying the pipeline end-to-end without waiting for the next scheduled tick, or for manually nudging the queue after an incident.
+
+**Concurrency** — A `concurrency` group (`song-pipeline`, `cancel-in-progress: false`) means overlapping runs queue rather than racing each other; this mirrors `GenerationDispatcher`'s own one-concurrent-generation invariant at the scheduler level.

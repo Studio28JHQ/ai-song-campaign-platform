@@ -17,12 +17,17 @@ import { logger } from "@/shared/logger/logger";
 
 /**
  * GET /api/internal/pipeline/run — RC-2 Production Hardening: the
- * scheduler that closes the gap left by the pipeline previously only
- * ever advancing inside an `after()` callback of a user-facing request
- * (`POST /api/lyrics/approve`, `POST /api/song/generate`,
- * `POST /api/admin/songs/[songId]/retry`). Meant to be invoked by Vercel
- * Cron (see `vercel.json`) on a fixed schedule, independent of whether
- * any user traffic is happening at all.
+ * scheduler-facing endpoint that closes the gap left by the pipeline
+ * previously only ever advancing inside an `after()` callback of a
+ * user-facing request (`POST /api/lyrics/approve`,
+ * `POST /api/song/generate`, `POST /api/admin/songs/[songId]/retry`).
+ * Meant to be invoked on a fixed schedule by an external scheduler,
+ * independent of whether any user traffic is happening at all — this
+ * route has no opinion on what that scheduler is (see "External
+ * Scheduler" in `docs/Architecture/System_Architecture.md`); it is
+ * currently a GitHub Actions workflow
+ * (`.github/workflows/song-pipeline.yml`, replacing an earlier Vercel
+ * Cron job that Vercel's Hobby plan doesn't support at this frequency).
  *
  * Internal-only: never reachable without the shared `CRON_SECRET` (see
  * `verifyInternalSecret`) — there is no public execution path. Unlike
@@ -31,8 +36,8 @@ import { logger } from "@/shared/logger/logger";
  * via `after()`): there is no user response to return quickly, so the
  * whole point of this endpoint is to actually do the work and report
  * what happened — including surfacing a genuine failure as a non-2xx
- * status so Vercel's cron-execution monitoring can flag it, rather than
- * always answering 200 the way the backgrounded call sites do.
+ * status so the scheduler's own run can be flagged as failed, rather
+ * than always answering 200 the way the backgrounded call sites do.
  *
  * Runs each use case exactly once per invocation, same as every other
  * call site — no new looping/draining behavior. `GenerationDispatcher`

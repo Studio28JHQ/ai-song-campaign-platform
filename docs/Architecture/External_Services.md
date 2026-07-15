@@ -148,17 +148,32 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 **Responsibilities**
 
 - Hosting
-- Scheduled pipeline execution (RC-2 — Production Hardening)
 
-**Purpose** — Hosts and deploys the single Next.js application. `vercel.json` also defines a Cron Job (`*/5 * * * *`, i.e. every 5 minutes) calling `GET /api/internal/pipeline/run` — see "Asynchronous Song Generation" → "Pipeline scheduler" in `docs/Architecture/System_Architecture.md`. Vercel automatically sends the project's `CRON_SECRET` environment variable as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation; the route verifies it (`verifyInternalSecret`) before doing anything.
+**Purpose** — Hosts and deploys the single Next.js application. Vercel no longer schedules anything for this project — see "GitHub Actions" below (HOTFIX: the Vercel Hobby plan restricts Cron Jobs to once per day, which broke every deployment once RC-2's 5-minute `vercel.json` cron was introduced; `vercel.json` was removed outright rather than reduced in frequency).
 
-**Expected Inputs** — Application build/deployment; the cron schedule and target path (`vercel.json`).
+**Expected Inputs** — Application build/deployment.
 
-**Expected Outputs** — Publicly reachable, deployed application; a `GenerationDispatcher`/`GenerationPoller` run every 5 minutes, independent of user traffic.
+**Expected Outputs** — Publicly reachable, deployed application.
 
-**Failure Scenarios** — Build failure, deployment failure, platform outage, a missed/skipped cron invocation (Vercel's own scheduling, not something this codebase controls).
+**Failure Scenarios** — Build failure, deployment failure, platform outage.
 
-**Retry Policy** — Deployment failures are addressed by fixing the underlying build/config issue and redeploying; no automatic retry of a broken build. A failed pipeline tick is not retried by Vercel — it simply waits for the next scheduled invocation (5 minutes later), which is also when a Song stuck past `GENERATION_TIMEOUT_MINUTES` would be reclaimed.
+**Retry Policy** — Deployment failures are addressed by fixing the underlying build/config issue and redeploying; no automatic retry of a broken build.
+
+## GitHub Actions
+
+**Responsibilities**
+
+- Scheduled pipeline execution — the External Scheduler (RC-2 — Production Hardening; provider changed in a later HOTFIX)
+
+**Purpose** — `.github/workflows/song-pipeline.yml` runs on a `schedule` trigger (`*/10 * * * *`, every 10 minutes) and supports manual `workflow_dispatch`, calling `GET /api/internal/pipeline/run` — see "Asynchronous Song Generation" → "External Scheduler" in `docs/Architecture/System_Architecture.md`. The workflow explicitly sends `Authorization: Bearer ${{ secrets.CRON_SECRET }}`, reading `CRON_SECRET` from GitHub Secrets (never hardcoded) and the target application URL from the `APP_URL` repository variable; the route verifies the secret (`verifyInternalSecret`) before doing anything. A `concurrency` group (`song-pipeline`, `cancel-in-progress: false`) prevents overlapping executions.
+
+**Expected Inputs** — The `CRON_SECRET` GitHub Secret and `APP_URL` repository variable (see `docs/Development/Environment.md`); optionally a manual `workflow_dispatch` trigger from the Actions tab.
+
+**Expected Outputs** — A `GenerationDispatcher`/`GenerationPoller` run roughly every 10 minutes, independent of user traffic. The workflow run is marked failed if the endpoint responds with a non-2xx status (`curl --fail-with-body`), surfacing pipeline failures in GitHub's own Actions UI/notifications.
+
+**Failure Scenarios** — A missed/delayed scheduled run (GitHub Actions schedules are best-effort, same tolerance the queue already had under Vercel Cron), a misconfigured or rotated `CRON_SECRET`/`APP_URL`, a GitHub Actions platform outage.
+
+**Retry Policy** — A failed pipeline tick is not retried within the same run — it simply waits for the next scheduled invocation (10 minutes later), which is also when a Song stuck past `GENERATION_TIMEOUT_MINUTES` would be reclaimed. A run can also be re-triggered manually via `workflow_dispatch`.
 
 ## Cloudflare
 

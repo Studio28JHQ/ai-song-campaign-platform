@@ -43,12 +43,15 @@ const envSchema = z.object({
   GENERATION_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(30),
 
   // RC-2 — Production Hardening. Shared secret for every internal-only
-  // endpoint (`/api/internal/*`) — the Vercel Cron pipeline tick and the
-  // operational health check. Named to match Vercel's own convention:
-  // when a project has a `CRON_SECRET` environment variable, Vercel Cron
-  // automatically sends it as `Authorization: Bearer $CRON_SECRET` on
-  // every scheduled invocation, so no extra wiring is needed on the
-  // Vercel side. Never used for anything user-facing.
+  // endpoint (`/api/internal/*`) — the pipeline tick and the operational
+  // health check. Originally named to match Vercel Cron's own
+  // convention; the scheduler is now a GitHub Actions workflow
+  // (`.github/workflows/song-pipeline.yml`, HOTFIX — Vercel Hobby only
+  // allows daily cron jobs) that explicitly sends
+  // `Authorization: Bearer $CRON_SECRET` from a GitHub Secret of the
+  // same name — this variable's name is kept unchanged since it's a
+  // deployment-time secret, not a code contract, and renaming it would
+  // only add churn. Never used for anything user-facing.
   CRON_SECRET: z.string().min(32, "CRON_SECRET must be at least 32 characters long."),
 
   // Sprint 8.2 — Abuse Protection. The Turnstile defaults are Cloudflare's

@@ -20,7 +20,8 @@ Dependencies point inward: presentation and infrastructure depend on application
 - **Supabase** — primary database (via Prisma).
 - **Cloudflare R2** — private object storage for generated audio (S3-compatible, via `@aws-sdk/client-s3`). The bucket has no public access; every download goes through a short-lived, presigned URL generated on demand, resolved fresh at read time and never persisted. Implemented at the infrastructure layer (`src/infrastructure/storage/`) — see `docs/Architecture/External_Services.md`.
 - **Resend** — transactional email delivery of the final song.
-- **Vercel** — hosting and deployment; also runs the pipeline scheduler (RC-2 — Production Hardening, see "Pipeline scheduler" below).
+- **Vercel** — hosting and deployment.
+- **GitHub Actions** — the External Scheduler (RC-2 — Production Hardening, see "External Scheduler" below); invokes the pipeline on a fixed interval, independent of Vercel.
 - **Cloudflare** — DNS/CDN/edge in front of the deployed application.
 
 ## Main Request Flow
@@ -109,7 +110,24 @@ Splitting submission from polling (rather than one call that blocks through the 
 2. Schedule `GenerationDispatcher.execute()` then `GenerationPoller.execute()`, in that order, inside one `after()` callback, wrapped in its own `try/catch` — a rejection here is logged and never crashes the request, because every failure path inside either use case already persists `FAILED` itself before rethrowing.
 3. Respond immediately. The schedule and the response are not ordered by a wait — `after()` guarantees the callback keeps running after the response is sent, not that it runs before it.
 
-**Pipeline scheduler (RC-2 — Production Hardening).** Every trigger above only fires from inside a user-facing request — before this gate, if no such request happened to arrive while the queue had work to do (or the triggering request's `after()` callback never got to finish, e.g. a serverless function timeout), nothing else advanced the queue. `GET /api/internal/pipeline/run` closes that gap: a Vercel Cron job (`vercel.json`, currently every 5 minutes) calls it directly, running `GenerationDispatcher.execute()` then `GenerationPoller.execute()` exactly once — the same sequence, but independent of whether any user traffic is happening at all, and awaited synchronously rather than backgrounded via `after()` (there is no user response to protect here, so a genuine failure is surfaced as a non-2xx status for cron-execution monitoring, instead of always answering 200). It is never reachable without the shared `CRON_SECRET` (`verifyInternalSecret`, timing-safe comparison) — there is no public execution path. The same secret also protects `GET /api/internal/health` (RC-2), which reports database/R2/Resend/Mureka status for external uptime monitoring (see `HealthCheckService`).
+**External Scheduler (RC-2 — Production Hardening; scheduler swapped in the HOTFIX below).** Every trigger above only fires from inside a user-facing request — before this gate, if no such request happened to arrive while the queue had work to do (or the triggering request's `after()` callback never got to finish, e.g. a serverless function timeout), nothing else advanced the queue. `GET /api/internal/pipeline/run` closes that gap: an external scheduler calls it directly on a fixed interval, running `GenerationDispatcher.execute()` then `GenerationPoller.execute()` exactly once — the same sequence, but independent of whether any user traffic is happening at all, and awaited synchronously rather than backgrounded via `after()` (there is no user response to protect here, so a genuine failure is surfaced as a non-2xx status for the scheduler's own run-monitoring, instead of always answering 200).
+
+```
+External Scheduler
+        │
+        ▼
+/api/internal/pipeline/run
+        │
+        ▼
+GenerationDispatcher
+        │
+        ▼
+GenerationPoller
+```
+
+The scheduler is treated as an interchangeable infrastructure component: the endpoint has no idea what invokes it, only that the request carries the correct `CRON_SECRET`. It is never reachable without that shared secret (`verifyInternalSecret`, timing-safe comparison) — there is no public execution path. The same secret also protects `GET /api/internal/health` (RC-2), which reports database/R2/Resend/Mureka status for external uptime monitoring (see `HealthCheckService`).
+
+**HOTFIX — GitHub Actions replaces Vercel Cron.** The scheduler was originally a Vercel Cron job (`vercel.json`, every 5 minutes); Vercel's Hobby plan restricts cron jobs to once per day, which broke every deployment. The current implementation is `.github/workflows/song-pipeline.yml`, a GitHub Actions workflow that runs on a `schedule` trigger (`*/10 * * * *` — every 10 minutes, UTC, best-effort like any GitHub Actions schedule) and also supports manual `workflow_dispatch`. It has a `concurrency` group (`song-pipeline`, `cancel-in-progress: false`) so overlapping runs queue instead of racing. Its only job is one `curl GET` against `/api/internal/pipeline/run` with `Authorization: Bearer ${{ secrets.CRON_SECRET }}` — the GitHub Secret of the same name — and a repository variable, `APP_URL`, pointing at the deployed application. Nothing about `GenerationDispatcher`, `GenerationPoller`, the queue, or the endpoint itself changed; only what calls the endpoint did. Swapping the scheduler again in the future (a different CI provider, a managed cron service, etc.) requires no application code change — only a new caller sending the same header to the same URL.
 
 There is no more client-side polling anywhere in this flow (Sprint 7.5 removed it): the parent-facing Song Result page does a single `GET /api/leads/session` fetch on mount and is otherwise notified only by email once the song is `COMPLETED`. `GET /api/song/[songId]` (`app/api/song/[songId]/route.ts`) still exists as a public, session-scoped status read, but nothing in the current frontend calls it.
 

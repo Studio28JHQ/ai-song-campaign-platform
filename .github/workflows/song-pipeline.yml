@@ -1,0 +1,43 @@
+name: Song Pipeline Scheduler
+
+# HOTFIX — replaces the previous Vercel Cron scheduler (vercel.json),
+# which the Vercel Hobby plan restricts to once-per-day, blocking every
+# deployment. This workflow has exactly one responsibility: invoke the
+# already-existing, already-authenticated internal endpoint on a
+# schedule so GenerationDispatcher/GenerationPoller keep advancing the
+# song queue independent of user traffic. It contains no business
+# logic of its own — see docs/Architecture/System_Architecture.md
+# ("External Scheduler").
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub Actions schedules are UTC and best-effort
+    # (a busy queue can delay a run by a few minutes) — the same
+    # tolerance the queue already had to accommodate under Vercel Cron.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: song-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline-tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Invoke GET /api/internal/pipeline/run
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::error::The APP_URL repository variable is not set. See docs/Development/Environment.md."
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error \
+            --max-time 60 \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL%/}/api/internal/pipeline/run"
