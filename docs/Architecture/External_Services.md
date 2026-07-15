@@ -82,7 +82,7 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Classes:**
 
-- **`MurekaClient`** — minimal HTTP client for Mureka's official endpoints, built on the shared `httpRequest` helper (`src/shared/http/`) rather than a vendor SDK or an unofficial wrapper, consistent with every other provider integration. Adds a bearer token (from `appConfig.mureka.apiKey`). `submitGeneration` calls `POST /v1/song/generate`; `queryTask` (Gate 9.3) calls `GET /v1/song/query/{task_id}`, sharing the same error-mapping.
+- **`MurekaClient`** — minimal HTTP client for Mureka's official endpoints, built on the shared `httpRequest` helper (`src/shared/http/`) rather than a vendor SDK or an unofficial wrapper, consistent with every other provider integration. Adds a bearer token (from `appConfig.mureka.apiKey`). `submitGeneration` calls `POST /v1/song/generate`; `queryTask` (Gate 9.3) calls `GET /v1/song/query/{task_id}`, sharing the same error-mapping. `getAccountBilling` (RC-2 — Production Hardening) calls the free, read-only `GET /v1/account/billing` — used only by `HealthCheckService` for `GET /api/internal/health`, never in the generation pipeline.
 - **`PromptBuilder`** — builds the request payload from the same `SongGenerationInput` `SunoSongService`'s own `PromptBuilder` consumes (already-approved lyrics, the Mood's fixed prompt); pins `n: 1` to enforce "exactly one song per call" (see `docs/Product/Business_Rules.md` — Song Rules) and `model: "auto"` per Mureka's own quickstart example.
 - **`ResponseParser`** — `parse` validates Mureka's submission response with Zod into `{ providerTaskId, providerTraceId, submittedAt, providerStatus }`. `parsePoll` (Gate 9.3) validates Mureka's task-query response against its documented `SongTask` schema and maps it directly into the shared `SongGenerationPollResult` (`preparing`/`queued`/`running`/`streaming` → pending, `succeeded` → `ready_to_download`, `failed`/`timeouted`/`cancelled` → failed, unrecognized → pending). Mureka's raw field names never escape this class; a succeeded choice's `duration` (documented in milliseconds) is converted to whole seconds to match `Song.duration`'s convention.
 - **`MurekaSongService`** — orchestrates the classes above: build payload → call Mureka → parse response, for both submission and polling. `pollGenerationStatus` (Gate 9.3) never throws for an expected failure category — retryable errors (5xx, rate limiting, an unrecovered network/timeout failure) become `{ status: "pending" }`; everything else (bad credentials, exhausted quota, invalid request, a malformed response) becomes `{ status: "failed" }`. Does not implement the application-layer `SongGenerationProvider` port yet (mirrors `ClaudeLyricsService`, not wired into a port until its own use case exists).
@@ -113,6 +113,8 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Retry Policy** — Retry transient connection failures a limited number of times; constraint violations (e.g. duplicate email) are not retried — they are translated into the corresponding business error.
 
+**Operational health (RC-2 — Production Hardening)** — `HealthCheckService` runs a trivial `SELECT 1` via the shared Prisma client as the database check for `GET /api/internal/health`.
+
 ## Cloudflare R2
 
 **Responsibilities**
@@ -134,6 +136,8 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Live validation (Gate 9.4)** — With Mureka generation credits unavailable, a real end-to-end generation wasn't possible; the storage half was instead validated directly against the live bucket: a scratch object was uploaded via `CloudflareR2Storage.upload`, confirmed present via `exists`, then removed via `delete` and reconfirmed absent — the exact abstraction `GenerationPoller` calls, exercised for real at no Mureka cost.
 
+**Operational health (RC-2 — Production Hardening)** — `HealthCheckService` (`src/infrastructure/health/`) calls `exists()` on a fixed, never-written key (`_internal/health-check-probe`) as a connectivity check for `GET /api/internal/health` — safe even though the key never exists, since `exists()` returns `false` rather than throwing for a missing key; only a genuine connectivity/credentials failure is reported as unhealthy.
+
 ## Resend
 
 **Responsibilities**
@@ -144,7 +148,7 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Classes:**
 
-- **`ResendClient`** — minimal HTTP client for Resend's email-sending endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the Claude/Suno integrations. Adds the bearer token (from `appConfig.resend.apiKey`) and posts the `from`/`to`/`subject`/`html` payload.
+- **`ResendClient`** — minimal HTTP client for Resend's email-sending endpoint, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the Claude/Suno integrations. Adds the bearer token (from `appConfig.resend.apiKey`) and posts the `from`/`to`/`subject`/`html` payload. `checkHealth` (RC-2 — Production Hardening) calls Resend's own read-only `GET /domains` — used only by `HealthCheckService` for `GET /api/internal/health`, never sends anything.
 - **`SongReadyEmailTemplate`** — builds the fixed subject ("Your personalized song is ready!") and a responsive, table-based, inline-styled HTML body (greeting, thank-you message, campaign branding, a direct "Play the song" button, a direct "Download the song" button, support contact, footer). Both buttons link straight to the stored `audioUrl` — this integration never proxies or re-serves the file itself.
 - **`ResendEmailService`** — implements the application layer's `SongEmailSender` port; orchestrates building the template and calling the client, the same "build payload → call provider" shape as `SunoSongService`.
 
@@ -165,16 +169,17 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 **Responsibilities**
 
 - Hosting
+- Scheduled pipeline execution (RC-2 — Production Hardening)
 
-**Purpose** — Hosts and deploys the single Next.js application.
+**Purpose** — Hosts and deploys the single Next.js application. `vercel.json` also defines a Cron Job (`*/5 * * * *`, i.e. every 5 minutes) calling `GET /api/internal/pipeline/run` — see "Asynchronous Song Generation" → "Pipeline scheduler" in `docs/Architecture/System_Architecture.md`. Vercel automatically sends the project's `CRON_SECRET` environment variable as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation; the route verifies it (`verifyInternalSecret`) before doing anything.
 
-**Expected Inputs** — Application build/deployment.
+**Expected Inputs** — Application build/deployment; the cron schedule and target path (`vercel.json`).
 
-**Expected Outputs** — Publicly reachable, deployed application.
+**Expected Outputs** — Publicly reachable, deployed application; a `GenerationDispatcher`/`GenerationPoller` run every 5 minutes, independent of user traffic.
 
-**Failure Scenarios** — Build failure, deployment failure, platform outage.
+**Failure Scenarios** — Build failure, deployment failure, platform outage, a missed/skipped cron invocation (Vercel's own scheduling, not something this codebase controls).
 
-**Retry Policy** — Deployment failures are addressed by fixing the underlying build/config issue and redeploying; no automatic retry of a broken build.
+**Retry Policy** — Deployment failures are addressed by fixing the underlying build/config issue and redeploying; no automatic retry of a broken build. A failed pipeline tick is not retried by Vercel — it simply waits for the next scheduled invocation (5 minutes later), which is also when a Song stuck past `GENERATION_TIMEOUT_MINUTES` would be reclaimed.
 
 ## Cloudflare
 

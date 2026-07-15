@@ -39,18 +39,48 @@ describe("ResendClient.send", () => {
   });
 
   it("throws a shared error on a non-ok response, without retrying (4xx is not retried)", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: async () => ({ message: "unauthorized" }),
-      });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: "unauthorized" }),
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new ResendClient();
 
     await expect(client.send(payload)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ResendClient.checkHealth", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a GET to the domains endpoint and resolves on a 2xx response", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new ResendClient().checkHealth()).resolves.toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.resend.com/domains");
+    expect(init.method).toBe("GET");
+    const headers = init.headers as Record<string, string>;
+    expect(headers.authorization).toMatch(/^Bearer /);
+  });
+
+  it("throws a shared error on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }),
+    );
+
+    await expect(new ResendClient().checkHealth()).rejects.toMatchObject({
+      code: "resend.api_error",
+    });
   });
 });

@@ -36,6 +36,22 @@ const envSchema = z.object({
   MAX_LYRIC_ATTEMPTS: z.coerce.number().int().positive(),
   CAMPAIGN_MAX_SONGS: z.coerce.number().int().positive(),
 
+  // RC-2 — Production Hardening. A Song stuck `GENERATING` past this many
+  // minutes (e.g. the process that submitted it crashed or was killed
+  // mid-flight) is reclaimed by `GenerationDispatcher` — marked `FAILED`
+  // so it no longer occupies the campaign's one-concurrent-generation
+  // slot forever. See `GenerationDispatcher`.
+  GENERATION_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(30),
+
+  // RC-2 — Production Hardening. Shared secret for every internal-only
+  // endpoint (`/api/internal/*`) — the Vercel Cron pipeline tick and the
+  // operational health check. Named to match Vercel's own convention:
+  // when a project has a `CRON_SECRET` environment variable, Vercel Cron
+  // automatically sends it as `Authorization: Bearer $CRON_SECRET` on
+  // every scheduled invocation, so no extra wiring is needed on the
+  // Vercel side. Never used for anything user-facing.
+  CRON_SECRET: z.string().min(32, "CRON_SECRET must be at least 32 characters long."),
+
   // Sprint 8.2 — Abuse Protection. The Turnstile defaults are Cloudflare's
   // publicly documented "always passes" test keypair (see
   // https://developers.cloudflare.com/turnstile/troubleshooting/testing/) —
@@ -51,6 +67,11 @@ const envSchema = z.object({
   MAX_APPROVALS_PER_HOUR: z.coerce.number().int().positive().default(10),
   MAX_SESSION_REQUESTS_PER_WINDOW: z.coerce.number().int().positive().default(30),
   SESSION_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(1),
+
+  // RC-2 — Production Hardening. Admin login gets the same rate-limiting
+  // treatment every public endpoint already has (Sprint 8.2) — keyed by
+  // IP, windowed by the shared `RATE_LIMIT_WINDOW_MINUTES` above.
+  MAX_ADMIN_LOGIN_ATTEMPTS_PER_WINDOW: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;

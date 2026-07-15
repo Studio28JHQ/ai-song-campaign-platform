@@ -6,6 +6,7 @@ import type { MurekaGenerateRequest } from "./types";
 const MUREKA_BASE_URL = "https://api.mureka.ai";
 const MUREKA_GENERATE_PATH = "/v1/song/generate";
 const MUREKA_QUERY_PATH = "/v1/song/query";
+const MUREKA_BILLING_PATH = "/v1/account/billing";
 
 /**
  * Minimal HTTP client for Mureka's official asynchronous song
@@ -50,6 +51,29 @@ export class MurekaClient {
         },
       },
     );
+
+    if (!response.ok) {
+      const details = await response.json().catch(() => null);
+      throw MurekaClient.mapErrorResponse(response.status, details);
+    }
+
+    return MurekaClient.parseJsonBody(response);
+  }
+
+  /**
+   * Queries Mureka's official account-billing endpoint (RC-2 —
+   * Production Hardening). A free, read-only GET, unrelated to
+   * generation credits — used only as a connectivity/authentication
+   * check for `GET /api/internal/health`, never in the generation
+   * pipeline itself.
+   */
+  async getAccountBilling(): Promise<unknown> {
+    const response = await httpRequest(`${MUREKA_BASE_URL}${MUREKA_BILLING_PATH}`, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${appConfig.mureka.apiKey}`,
+      },
+    });
 
     if (!response.ok) {
       const details = await response.json().catch(() => null);

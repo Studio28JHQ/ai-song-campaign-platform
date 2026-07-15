@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { LoginUseCase } from "@/application/admin/use-cases/LoginUseCase";
+import { RateLimiter } from "@/application/security/services/RateLimiter";
+import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
+import { appConfig } from "@/config/app";
 import { ScryptPasswordHasher } from "@/infrastructure/auth/ScryptPasswordHasher";
 import {
   adminSessionCookieOptions,
   ADMIN_SESSION_COOKIE,
 } from "@/infrastructure/auth/sessionCookie";
 import { SignedSessionTokenService } from "@/infrastructure/auth/SignedSessionTokenService";
+import { getClientIp } from "@/infrastructure/http/getClientIp";
 import { PrismaAdminUserRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAdminUserRepository";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
+import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 
@@ -18,6 +23,14 @@ import { logger } from "@/shared/logger/logger";
  * `LoginUseCase`, and — on success — sets the signed session as an
  * HTTP-only cookie. The token itself is never returned in the JSON body;
  * only the admin's public snapshot is.
+ *
+ * RC-2 — Production Hardening: this is the one endpoint protecting the
+ * entire admin surface, so it now gets the exact same abuse-protection
+ * treatment every public endpoint already has (Sprint 8.2) — IP-based
+ * rate limiting, and suspicious-behavior recording via
+ * `SecurityEventRecorder` (which itself writes an `AuditLog` entry, same
+ * as every other call site). Authentication itself (`LoginUseCase`) is
+ * unchanged — this only wraps it.
  */
 
 const loginUseCase = new LoginUseCase(
@@ -26,6 +39,8 @@ const loginUseCase = new LoginUseCase(
   new ScryptPasswordHasher(),
   new SignedSessionTokenService(),
 );
+const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
+const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 
 const loginRequestSchema = z
   .object({
@@ -49,6 +64,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, "invalid_request", "The request payload is invalid.");
   }
 
+  const ip = getClientIp(request);
+
+  const loginLimit = await rateLimiter.consume({
+    key: `admin_login:ip:${ip}`,
+    limit: appConfig.security.rateLimit.maxAdminLoginAttemptsPerWindow,
+    windowMinutes: appConfig.security.rateLimit.windowMinutes,
+  });
+  if (!loginLimit.allowed) {
+    await securityEventRecorder.record({
+      action: "rate_limit_exceeded",
+      entity: "IpAddress",
+      metadata: { ip, scope: "admin_login" },
+    });
+    return errorResponse(
+      429,
+      "too_many_requests",
+      "Too many requests. Please wait a few minutes before trying again.",
+    );
+  }
+
   try {
     const result = await loginUseCase.execute(parsed.data);
 
@@ -60,13 +95,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
     return response;
   } catch (error) {
-    return handleUseCaseError(error);
+    return handleUseCaseError(error, ip, parsed.data.email);
   }
 }
 
-function handleUseCaseError(error: unknown): NextResponse {
+async function handleUseCaseError(
+  error: unknown,
+  ip: string,
+  attemptedEmail: string,
+): Promise<NextResponse> {
   if (error instanceof BusinessRuleError) {
     if (error.code === "admin.invalid_credentials") {
+      await securityEventRecorder.record({
+        action: "invalid_login_credentials",
+        entity: "AdminUser",
+        metadata: { ip, email: attemptedEmail },
+      });
       return errorResponse(401, "invalid_credentials", "Invalid email or password.");
     }
 

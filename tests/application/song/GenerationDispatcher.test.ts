@@ -181,6 +181,34 @@ describe("GenerationDispatcher", () => {
     return song;
   }
 
+  /** A Song stuck `GENERATING` since `minutesAgo` minutes ago (RC-2 — stuck-song reclaim). */
+  function seedStuckGeneratingSong(minutesAgo: number): Song {
+    const submittedAt = new Date(Date.now() - minutesAgo * 60_000);
+    const song = Song.fromPersistence({
+      id: crypto.randomUUID(),
+      leadId: lead.id,
+      lyricsId: "lyrics-stuck",
+      moodId: "mood-1",
+      provider: "suno",
+      providerSongId: null,
+      providerTaskId: "task-stuck",
+      providerTraceId: null,
+      providerStatus: "submitted",
+      providerError: null,
+      audioStorageKey: null,
+      duration: null,
+      status: SongStatus.GENERATING,
+      submittedAt,
+      generatedAt: null,
+      completedAt: null,
+      emailedAt: null,
+      createdAt: submittedAt,
+      updatedAt: submittedAt,
+    });
+    songRepository.seed(song);
+    return song;
+  }
+
   it("returns null when there is no queued song", async () => {
     const dispatcher = buildDispatcher();
 
@@ -254,6 +282,65 @@ describe("GenerationDispatcher", () => {
 
     await expect(dispatcher.execute()).rejects.toThrow();
     expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+  });
+
+  describe("stuck-song reclaim (RC-2 — Production Hardening)", () => {
+    it("still skips a generation that is in flight but within the timeout", async () => {
+      seedStuckGeneratingSong(5);
+      const songGenerator = fakeSongGenerator();
+      const dispatcher = buildDispatcher({ songGenerator });
+
+      const result = await dispatcher.execute();
+
+      expect(result).toBeNull();
+      expect(songGenerator.submitGeneration).not.toHaveBeenCalled();
+    });
+
+    it("reclaims a song stuck GENERATING past the timeout: marks it FAILED with a providerError", async () => {
+      const stuck = seedStuckGeneratingSong(31);
+      const dispatcher = buildDispatcher();
+
+      await dispatcher.execute();
+
+      const persisted = await songRepository.findById(stuck.id);
+      expect(persisted?.status).toBe(SongStatus.FAILED);
+      expect(persisted?.providerError).toContain("30");
+    });
+
+    it("continues with the next queued song in the same run after reclaiming a stuck one", async () => {
+      seedStuckGeneratingSong(31);
+      const queuedSong = seedQueuedSong();
+      const songGenerator = fakeSongGenerator({
+        providerTaskId: "task-456",
+        providerTraceId: null,
+      });
+      const dispatcher = buildDispatcher({ songGenerator });
+
+      const response = await dispatcher.execute();
+
+      expect(songGenerator.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(response?.song.id).toBe(queuedSong.id);
+      expect(response?.song.status).toBe(SongStatus.GENERATING);
+    });
+
+    it("never reclaims and never dispatches when the queue is otherwise empty", async () => {
+      const stuck = seedStuckGeneratingSong(31);
+      const dispatcher = buildDispatcher();
+
+      const response = await dispatcher.execute();
+
+      expect(response).toBeNull();
+      expect((await songRepository.findById(stuck.id))?.status).toBe(SongStatus.FAILED);
+    });
+
+    it("the reclaimed song can be retried afterward via the existing admin retry flow", async () => {
+      const stuck = seedStuckGeneratingSong(31);
+      const dispatcher = buildDispatcher();
+      await dispatcher.execute();
+
+      const failed = await songRepository.findById(stuck.id);
+      expect(() => failed?.retryFromFailure()).not.toThrow();
+    });
   });
 
   it("allows retrying the same song after a failure, submitting again on the next run", async () => {

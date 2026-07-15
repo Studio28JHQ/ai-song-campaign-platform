@@ -4,6 +4,8 @@ This document describes how environment variables and configuration are managed.
 
 ## Environment Variables
 
+### Application, database, and provider credentials
+
 | Variable                    | Purpose                                                                           |
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_APP_NAME`      | Public-facing application name.                                                   |
@@ -13,13 +15,48 @@ This document describes how environment variables and configuration are managed.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only, full privileges).                         |
 | `DATABASE_URL`              | PostgreSQL connection string used by Prisma.                                      |
 | `RESEND_API_KEY`            | Resend API key for transactional email delivery.                                  |
+| `EMAIL_FROM`                | The "from" address every transactional email is sent as.                          |
+| `R2_ACCOUNT_ID`             | Cloudflare account id (used to construct the R2 endpoint, never hardcoded).       |
+| `R2_ENDPOINT`               | S3-compatible endpoint URL for the Cloudflare R2 bucket.                          |
+| `R2_ACCESS_KEY_ID`          | R2 access key id.                                                                 |
+| `R2_SECRET_ACCESS_KEY`      | R2 secret access key.                                                             |
+| `R2_BUCKET`                 | Name of the private R2 bucket generated audio is stored in.                       |
 | `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics generation).                        |
-| `SUNO_API_KEY`              | Suno API key (song generation).                                                   |
+| `SUNO_API_KEY`              | Suno API key — the active music provider for V1 (see `PROJECT_MANIFEST.md`).      |
+| `MUREKA_API_KEY`            | Mureka API key — integration built and tested, not wired into the live pipeline.  |
 | `ADMIN_EMAIL`               | Email address used to access/notify the admin panel.                              |
 | `ADMIN_SESSION_SECRET`      | Long, random secret (32+ chars) used to sign admin session cookies.               |
 | `CAMPAIGN_NAME`             | Display name of the current campaign.                                             |
 | `MAX_LYRIC_ATTEMPTS`        | Number of lyric attempts allowed per lead (see `docs/Product/Business_Rules.md`). |
 | `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.                                                |
+
+### Song generation pipeline (RC-2 — Production Hardening)
+
+| Variable                     | Purpose                                                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GENERATION_TIMEOUT_MINUTES` | Minutes a `Song` may stay `GENERATING` before `GenerationDispatcher` reclaims it (marks it `FAILED`, freeing the one-concurrent-generation slot). Optional, defaults to `30`. |
+
+### Internal operations (RC-2 — Production Hardening)
+
+| Variable      | Purpose                                                                                                                                                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRON_SECRET` | Long, random secret (32+ chars) protecting every `/api/internal/*` endpoint (the Vercel Cron pipeline tick, the operational health check). Vercel automatically sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled cron invocation. |
+
+### Cloudflare Turnstile & rate limiting (Sprint 8.2 — Abuse Protection)
+
+| Variable                              | Purpose                                                                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `TURNSTILE_SECRET_KEY`                | Cloudflare Turnstile secret key. Optional locally (defaults to Cloudflare's public test key); required in production. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`      | Cloudflare Turnstile site key, exposed to the browser. Same default/production rule as above.                         |
+| `RATE_LIMIT_WINDOW_MINUTES`           | Default sliding-window size (minutes) for rate limiting. Optional, defaults to `60`.                                  |
+| `MAX_REGISTRATIONS_PER_IP`            | Max registrations per IP per window. Optional, defaults to `5`.                                                       |
+| `MAX_REGISTRATIONS_PER_EMAIL`         | Max registrations per email per window. Optional, defaults to `3`.                                                    |
+| `MAX_GENERATIONS_PER_HOUR`            | Max lyrics-generation requests per lead per hour. Optional, defaults to `10`.                                         |
+| `MAX_GENERATIONS_PER_IP_PER_HOUR`     | Max lyrics-generation requests per IP per hour. Optional, defaults to `20`.                                           |
+| `MAX_APPROVALS_PER_HOUR`              | Max lyrics-approval requests per lead per hour. Optional, defaults to `10`.                                           |
+| `MAX_SESSION_REQUESTS_PER_WINDOW`     | Max session-status requests per window. Optional, defaults to `30`.                                                   |
+| `SESSION_RATE_LIMIT_WINDOW_MINUTES`   | Sliding-window size (minutes) for session-status rate limiting. Optional, defaults to `1`.                            |
+| `MAX_ADMIN_LOGIN_ATTEMPTS_PER_WINDOW` | Max `POST /api/admin/login` attempts per IP per window (RC-2 — Production Hardening). Optional, defaults to `10`.     |
 
 `.env.example` documents every variable above with a placeholder (non-secret) value and must be kept in sync whenever a variable is added, renamed, or removed.
 
@@ -49,3 +86,4 @@ This document describes how environment variables and configuration are managed.
 - Environment variables are configured directly in Vercel's project settings (per environment: Production/Preview), not committed to the repository.
 - Only variables prefixed `NEXT_PUBLIC_` are ever exposed to the browser; every other variable stays server-only, matching how `src/config/env.ts` and `src/config/app.ts` are structured.
 - Rotating a key (Claude, Suno, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
+- **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret. Vercel Cron then automatically sends it as `Authorization: Bearer $CRON_SECRET` on every scheduled invocation of the job defined in `vercel.json` — no additional configuration needed on the Vercel side. The same secret also protects `GET /api/internal/health`. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped.

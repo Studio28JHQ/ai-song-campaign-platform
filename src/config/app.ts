@@ -47,6 +47,17 @@ export const appConfig = {
   mureka: {
     apiKey: env.MUREKA_API_KEY,
   },
+  // RC-2 — Production Hardening. Song generation pipeline operational
+  // settings — see `GenerationDispatcher` (stuck-song reclaim).
+  song: {
+    generationTimeoutMinutes: env.GENERATION_TIMEOUT_MINUTES,
+  },
+  // RC-2 — Production Hardening. Shared secret for every internal-only
+  // endpoint (`/api/internal/*`) — never derived from or compared against
+  // anything user-facing.
+  internal: {
+    cronSecret: env.CRON_SECRET,
+  },
   // Sprint 8.2 — Abuse Protection. Every limit lives here, never
   // hardcoded inside a route handler — see PROJECT_MANIFEST.md.
   security: {
@@ -63,6 +74,8 @@ export const appConfig = {
       maxApprovalsPerHour: env.MAX_APPROVALS_PER_HOUR,
       maxSessionRequestsPerWindow: env.MAX_SESSION_REQUESTS_PER_WINDOW,
       sessionWindowMinutes: env.SESSION_RATE_LIMIT_WINDOW_MINUTES,
+      // RC-2 — Production Hardening.
+      maxAdminLoginAttemptsPerWindow: env.MAX_ADMIN_LOGIN_ATTEMPTS_PER_WINDOW,
     },
   },
 } as const;

@@ -279,3 +279,38 @@ describe("MurekaClient.queryTask", () => {
     await expect(new MurekaClient().queryTask("task-123")).rejects.toThrow();
   });
 });
+
+describe("MurekaClient.getAccountBilling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a GET to the official billing endpoint and returns the parsed body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ account_id: 149828590108673 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await new MurekaClient().getAccountBilling();
+
+    expect(result).toEqual({ account_id: 149828590108673 });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.mureka.ai/v1/account/billing");
+    expect(init.method).toBe("GET");
+    const headers = init.headers as Record<string, string>;
+    expect(headers.authorization).toMatch(/^Bearer /);
+  });
+
+  it("throws a distinct error for a 401 (invalid authentication)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }),
+    );
+
+    await expect(new MurekaClient().getAccountBilling()).rejects.toMatchObject({
+      code: "mureka.invalid_authentication",
+    });
+  });
+});

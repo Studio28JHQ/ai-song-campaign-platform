@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-22
+
+RC-2 — Production Hardening. Closes every production blocker identified in the RC-1 audit: a Song stuck `GENERATING` could permanently block the campaign's one-concurrent-generation slot with no recovery path, the pipeline only ever advanced inside a user request's `after()` callback with no independent scheduler, `POST /api/admin/login` had none of the abuse protection every public endpoint already had, and `.env.example`/environment docs had drifted out of sync with `src/config/env.ts`. No Version 2 features, no architectural redesign — every change extends an existing mechanism.
+
+### Added
+
+- **Pipeline scheduler**: `GET /api/internal/pipeline/run`, invoked by Vercel Cron every 5 minutes (`vercel.json`), runs `GenerationDispatcher` then `GenerationPoller` exactly once — the same sequence every request-triggered call site already runs, just independent of user traffic. Internal-only: rejects any request without the correct `Authorization: Bearer $CRON_SECRET` header (`verifyInternalSecret`, timing-safe comparison), which Vercel sends automatically once `CRON_SECRET` is configured.
+- **Stuck-song recovery**: `GenerationDispatcher` now reclaims a Song stuck `GENERATING` past `GENERATION_TIMEOUT_MINUTES` (new config, default 30) at the start of every run — marks it `FAILED` with a descriptive `providerError`, freeing the slot, then immediately continues with the oldest `QUEUED` song in the same call. No manual database intervention is ever required; the existing admin retry flow picks the reclaimed Song back up exactly like any other `FAILED` song.
+- **Admin login protection**: `POST /api/admin/login` gets the exact same abuse-protection treatment every public endpoint already has (Sprint 8.2) — IP-based rate limiting (`MAX_ADMIN_LOGIN_ATTEMPTS_PER_WINDOW`, default 10) and a new `invalid_login_credentials` `SecurityEventRecorder` category for failed attempts, which itself writes an `AuditLog` entry (`adminId: null`, same as every other security event). `LoginUseCase`'s authentication logic itself is untouched — this only wraps it at the route layer, the same place every other route already does rate limiting.
+- **Operational health check**: `GET /api/internal/health` (same `CRON_SECRET`) reports database, R2, Resend, and Mureka status independently and in parallel — each check is read-only and side-effect-free (`SELECT 1`; `exists()` on a fixed never-written R2 key; Resend's own `GET /domains`; Mureka's own `GET /v1/account/billing`, the same free endpoint used for live validation in Gate 9.3–9.5). Returns `200` when everything is healthy, `503` if anything isn't, so an external uptime monitor can alert on the status code alone.
+- **Documentation sync**: `.env.example` and `docs/Development/Environment.md` now list every environment variable `src/config/env.ts` actually validates (previously missing `MUREKA_API_KEY` and every R2/Turnstile/rate-limit/RC-2 variable), plus README's own copy of the same table and a new Production Deployment note covering `CRON_SECRET` setup. `PROJECT_MANIFEST.md` was reviewed and left unchanged — RC-2 doesn't introduce a new architectural exception beyond the one Sprint 7.5 already documents.
+
+### Correction
+
+- The RC-1 audit's "`SecurityEventRecorder` is dead code" finding was a false negative: the sub-agent that produced it grepped only `src/`, missing the four `app/api/*/route.ts` call sites (`leads`, `leads/session`, `lyrics/approve`, `lyrics/generate`) that were already wiring it in. The only genuine gap was `POST /api/admin/login`, closed above — `SecurityEventRecorder` is now used by every route that does rate limiting, with no remaining gap.
+
 ## [1.8.0] - 2026-07-21
 
 Gate 9.5 — Complete End-to-End Song Delivery. The final integration gate: closes the one remaining gap between Gate 9.4's `ready_to_download` handling and Suno's existing `completed` path by sending the "song ready" email after a provider-async completion too. Both paths are now unified into a single, shared terminal-success handler. `GenerationDispatcher`, Mureka submission, Mureka polling, and `CloudflareR2Storage` are all untouched. Mureka still isn't wired into the live pipeline — Suno remains the only active provider.

@@ -2,12 +2,16 @@ import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 
 /**
- * The suspicious-behavior categories Sprint 8.2 asks to detect and
- * record. Kept as a closed set so every call site is self-documenting
- * and `AuditLog` queries can filter on a known `action` value.
+ * The suspicious-behavior categories Sprint 8.2 (and RC-2 — Production
+ * Hardening, `invalid_login_credentials`) ask to detect and record. Kept
+ * as a closed set so every call site is self-documenting and `AuditLog`
+ * queries can filter on a known `action` value.
  */
 export type SecurityEventAction =
-  "rate_limit_exceeded" | "invalid_turnstile_token" | "excessive_generation_attempts";
+  | "rate_limit_exceeded"
+  | "invalid_turnstile_token"
+  | "excessive_generation_attempts"
+  | "invalid_login_credentials";
 
 export interface RecordSecurityEventInput {
   action: SecurityEventAction;

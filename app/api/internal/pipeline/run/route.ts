@@ -1,0 +1,98 @@
+import { NextResponse } from "next/server";
+import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
+import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
+import { getClientIp } from "@/infrastructure/http/getClientIp";
+import { verifyInternalSecret } from "@/infrastructure/http/verifyInternalSecret";
+import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
+import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
+import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
+import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
+import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
+import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
+import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
+import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
+import { SunoSongService } from "@/infrastructure/suno/SunoSongService";
+import { logger } from "@/shared/logger/logger";
+
+/**
+ * GET /api/internal/pipeline/run — RC-2 Production Hardening: the
+ * scheduler that closes the gap left by the pipeline previously only
+ * ever advancing inside an `after()` callback of a user-facing request
+ * (`POST /api/lyrics/approve`, `POST /api/song/generate`,
+ * `POST /api/admin/songs/[songId]/retry`). Meant to be invoked by Vercel
+ * Cron (see `vercel.json`) on a fixed schedule, independent of whether
+ * any user traffic is happening at all.
+ *
+ * Internal-only: never reachable without the shared `CRON_SECRET` (see
+ * `verifyInternalSecret`) — there is no public execution path. Unlike
+ * the request-triggered call sites above, this one runs
+ * `GenerationDispatcher`/`GenerationPoller` directly (not backgrounded
+ * via `after()`): there is no user response to return quickly, so the
+ * whole point of this endpoint is to actually do the work and report
+ * what happened — including surfacing a genuine failure as a non-2xx
+ * status so Vercel's cron-execution monitoring can flag it, rather than
+ * always answering 200 the way the backgrounded call sites do.
+ *
+ * Runs each use case exactly once per invocation, same as every other
+ * call site — no new looping/draining behavior. `GenerationDispatcher`
+ * itself also reclaims a Song stuck `GENERATING` past
+ * `GENERATION_TIMEOUT_MINUTES` at the start of this same call (RC-2 —
+ * see `GenerationDispatcher`), so a stalled queue self-heals on the next
+ * scheduled tick without any manual intervention.
+ */
+
+const songRepository = new PrismaSongRepository();
+const lyricsRepository = new PrismaLyricsRepository();
+const leadRepository = new PrismaLeadRepository();
+const moodProvider = new PrismaMoodSunoPromptProvider();
+const songGenerator = new SunoSongService();
+const emailSender = new ResendEmailService();
+const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
+
+const generationDispatcher = new GenerationDispatcher(
+  songRepository,
+  lyricsRepository,
+  moodProvider,
+  songGenerator,
+);
+
+const generationPoller = new GenerationPoller(
+  songRepository,
+  songGenerator,
+  new HttpAudioDownloader(),
+  new CloudflareR2Storage(),
+  new R2AudioUrlResolver(),
+  leadRepository,
+  emailSender,
+  emailDeliveryTracker,
+);
+
+export async function GET(request: Request): Promise<NextResponse> {
+  if (!verifyInternalSecret(request)) {
+    logger.error("Pipeline tick: rejected an unauthenticated request", {
+      ip: getClientIp(request),
+    });
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const dispatcherResult = await generationDispatcher.execute();
+    const pollerResult = await generationPoller.execute();
+
+    return NextResponse.json(
+      {
+        dispatcher: dispatcherResult ? { songId: dispatcherResult.song.id } : null,
+        poller: pollerResult
+          ? { songId: pollerResult.song.id, outcome: pollerResult.outcome }
+          : null,
+      },
+      { status: 200 },
+    );
+  } catch (error) {
+    logger.error("Pipeline tick failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "pipeline_tick_failed" }, { status: 500 });
+  }
+}
