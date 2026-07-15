@@ -55,7 +55,31 @@ vi.mock("@/infrastructure/auth/getLeadSession", () => ({
   getLeadSession: mockGetLeadSession,
 }));
 
+// Sprint 8.2 — Abuse Protection. Mocked so no real DB call happens; see
+// dedicated rate-limiting tests for that behavior.
+vi.mock("@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository", () => ({
+  PrismaRateLimitRepository: vi.fn().mockImplementation(function PrismaRateLimitRepository() {
+    return {
+      countRecentEvents: vi.fn().mockResolvedValue(0),
+      recordEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", () => ({
+  PrismaAuditLogRepository: vi.fn().mockImplementation(function PrismaAuditLogRepository() {
+    return {
+      create: vi.fn().mockResolvedValue(undefined),
+      findByEntity: vi.fn().mockResolvedValue([]),
+    };
+  }),
+}));
+
 const { GET } = await import("../../../app/api/leads/session/route");
+
+function sessionRequest(): Request {
+  return new Request("http://localhost/api/leads/session");
+}
 
 function buildLead(overrides: Partial<{ babyName: string; remainingAttempts: number }> = {}): Lead {
   return Lead.create(
@@ -77,7 +101,7 @@ describe("GET /api/leads/session", () => {
   it("returns 401 when there is no active session", async () => {
     mockGetLeadSession.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(sessionRequest());
     const body = await response.json();
 
     expect(response.status).toBe(401);
@@ -92,7 +116,7 @@ describe("GET /api/leads/session", () => {
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockSongRepository.findByLead.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(sessionRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -118,7 +142,7 @@ describe("GET /api/leads/session", () => {
       duration: 90,
     });
 
-    const response = await GET();
+    const response = await GET(sessionRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -138,7 +162,7 @@ describe("GET /api/leads/session", () => {
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockSongRepository.findByLead.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(sessionRequest());
     const body = await response.json();
 
     expect(JSON.stringify(body)).not.toContain(lead.id);

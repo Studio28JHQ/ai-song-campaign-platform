@@ -2,13 +2,17 @@ import { ContentWrapper } from "@/components/layout/ContentWrapper";
 import { Section } from "@/components/layout/Section";
 import { RegistrationForm } from "@/features/lead/components/RegistrationForm";
 
+interface RegistrationSectionProps {
+  turnstileSiteKey: string;
+}
+
 /**
  * Wraps the existing `RegistrationForm` (`src/features/lead/`) — the
  * only registration flow in the application — with the landing page's
  * heading and the `#register` anchor the Hero CTA scrolls to. This
  * component adds no new registration logic of its own.
  */
-export function RegistrationSection() {
+export function RegistrationSection({ turnstileSiteKey }: RegistrationSectionProps) {
   return (
     <Section id="register" spacing="lg">
       <ContentWrapper>
@@ -21,7 +25,7 @@ export function RegistrationSection() {
           </div>
 
           <div className="w-full max-w-sm">
-            <RegistrationForm />
+            <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
           </div>
         </div>
       </ContentWrapper>

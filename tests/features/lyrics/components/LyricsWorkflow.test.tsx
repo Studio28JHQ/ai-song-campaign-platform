@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LyricsWorkflow } from "@/features/lyrics/components/LyricsWorkflow";
 
@@ -15,7 +16,24 @@ vi.mock("next/navigation", () => ({
   useRouter: () => routerMock,
 }));
 
-const DEFAULT_PROPS = { maxAttempts: 5, supportEmail: "support@example.com" };
+// The real widget loads Cloudflare's script and calls a real network
+// endpoint — irrelevant to what these tests verify (workflow wiring),
+// and unavailable in jsdom. It auto-verifies on mount so existing
+// happy-path tests don't need to interact with it.
+vi.mock("@/components/security/TurnstileWidget", () => ({
+  TurnstileWidget: ({ onVerify }: { onVerify: (token: string) => void }) => {
+    useEffect(() => {
+      onVerify("test-turnstile-token");
+    }, [onVerify]);
+    return null;
+  },
+}));
+
+const DEFAULT_PROPS = {
+  maxAttempts: 5,
+  supportEmail: "support@example.com",
+  turnstileSiteKey: "test-site-key",
+};
 
 function renderWorkflow(props: Partial<typeof DEFAULT_PROPS> = {}) {
   return render(<LyricsWorkflow {...DEFAULT_PROPS} {...props} />);

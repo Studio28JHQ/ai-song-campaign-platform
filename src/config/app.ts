@@ -44,6 +44,36 @@ export const appConfig = {
   suno: {
     apiKey: env.SUNO_API_KEY,
   },
+  // Sprint 8.2 — Abuse Protection. Every limit lives here, never
+  // hardcoded inside a route handler — see PROJECT_MANIFEST.md.
+  security: {
+    turnstile: {
+      secretKey: env.TURNSTILE_SECRET_KEY,
+      siteKey: env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+    },
+    rateLimit: {
+      windowMinutes: env.RATE_LIMIT_WINDOW_MINUTES,
+      maxRegistrationsPerIp: env.MAX_REGISTRATIONS_PER_IP,
+      maxRegistrationsPerEmail: env.MAX_REGISTRATIONS_PER_EMAIL,
+      maxGenerationsPerHour: env.MAX_GENERATIONS_PER_HOUR,
+      maxGenerationsPerIpPerHour: env.MAX_GENERATIONS_PER_IP_PER_HOUR,
+      maxApprovalsPerHour: env.MAX_APPROVALS_PER_HOUR,
+      maxSessionRequestsPerWindow: env.MAX_SESSION_REQUESTS_PER_WINDOW,
+      sessionWindowMinutes: env.SESSION_RATE_LIMIT_WINDOW_MINUTES,
+    },
+  },
 } as const;
+
+/** Named re-exports matching the constant names in PROJECT_MANIFEST.md / Sprint 8.2. */
+export const TURNSTILE_SECRET = env.TURNSTILE_SECRET_KEY;
+export const TURNSTILE_SITE_KEY = env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+export const RATE_LIMIT_WINDOW_MINUTES = env.RATE_LIMIT_WINDOW_MINUTES;
+export const MAX_REGISTRATIONS_PER_IP = env.MAX_REGISTRATIONS_PER_IP;
+export const MAX_REGISTRATIONS_PER_EMAIL = env.MAX_REGISTRATIONS_PER_EMAIL;
+export const MAX_GENERATIONS_PER_HOUR = env.MAX_GENERATIONS_PER_HOUR;
+export const MAX_GENERATIONS_PER_IP_PER_HOUR = env.MAX_GENERATIONS_PER_IP_PER_HOUR;
+export const MAX_APPROVALS_PER_HOUR = env.MAX_APPROVALS_PER_HOUR;
+export const MAX_SESSION_REQUESTS_PER_WINDOW = env.MAX_SESSION_REQUESTS_PER_WINDOW;
+export const SESSION_RATE_LIMIT_WINDOW_MINUTES = env.SESSION_RATE_LIMIT_WINDOW_MINUTES;
 
 export type AppConfig = typeof appConfig;

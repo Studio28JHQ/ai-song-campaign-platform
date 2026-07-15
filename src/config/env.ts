@@ -34,6 +34,22 @@ const envSchema = z.object({
   CAMPAIGN_NAME: z.string().min(1),
   MAX_LYRIC_ATTEMPTS: z.coerce.number().int().positive(),
   CAMPAIGN_MAX_SONGS: z.coerce.number().int().positive(),
+
+  // Sprint 8.2 — Abuse Protection. The Turnstile defaults are Cloudflare's
+  // publicly documented "always passes" test keypair (see
+  // https://developers.cloudflare.com/turnstile/troubleshooting/testing/) —
+  // safe to ship as a default so local dev/tests work without secrets;
+  // production must override both via real environment variables.
+  TURNSTILE_SECRET_KEY: z.string().min(1).default("1x0000000000000000000000000000000AA"),
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1).default("1x00000000000000000000AA"),
+  RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(60),
+  MAX_REGISTRATIONS_PER_IP: z.coerce.number().int().positive().default(5),
+  MAX_REGISTRATIONS_PER_EMAIL: z.coerce.number().int().positive().default(3),
+  MAX_GENERATIONS_PER_HOUR: z.coerce.number().int().positive().default(10),
+  MAX_GENERATIONS_PER_IP_PER_HOUR: z.coerce.number().int().positive().default(20),
+  MAX_APPROVALS_PER_HOUR: z.coerce.number().int().positive().default(10),
+  MAX_SESSION_REQUESTS_PER_WINDOW: z.coerce.number().int().positive().default(30),
+  SESSION_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

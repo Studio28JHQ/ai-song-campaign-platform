@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import {
@@ -39,6 +40,7 @@ const registrationFormSchema = z.object({
   city: optionalPlainTextField("City", FIELD_LIMITS.city),
   email: emailField(),
   phone: optionalPhoneField(),
+  turnstileToken: z.string().min(1, "Please complete the verification challenge."),
 });
 
 type RegistrationFormInput = z.input<typeof registrationFormSchema>;
@@ -51,13 +53,19 @@ const defaultValues: RegistrationFormInput = {
   city: "",
   email: "",
   phone: "",
+  turnstileToken: "",
 };
 
-export function RegistrationForm() {
+interface RegistrationFormProps {
+  turnstileSiteKey: string;
+}
+
+export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   const {
     register,
     handleSubmit,
     setError,
+    setValue,
     formState: { errors },
   } = useForm<RegistrationFormInput, unknown, RegistrationFormValues>({
     resolver: zodResolver(registrationFormSchema),
@@ -77,6 +85,7 @@ export function RegistrationForm() {
       city: values.city,
       email: values.email,
       phone: values.phone,
+      turnstileToken: values.turnstileToken,
     });
 
     if (!outcome.success) {
@@ -152,6 +161,20 @@ export function RegistrationForm() {
         error={errors.phone?.message}
         registration={register("phone")}
       />
+
+      <div className="flex flex-col gap-1.5">
+        <TurnstileWidget
+          siteKey={turnstileSiteKey}
+          onVerify={(token) => setValue("turnstileToken", token, { shouldValidate: true })}
+          onExpire={() => setValue("turnstileToken", "", { shouldValidate: true })}
+          onError={() => setValue("turnstileToken", "", { shouldValidate: true })}
+        />
+        {errors.turnstileToken ? (
+          <p role="alert" className="text-sm text-destructive">
+            {errors.turnstileToken.message}
+          </p>
+        ) : null}
+      </div>
 
       <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
         {isSubmitting ? "Registering..." : "Register"}

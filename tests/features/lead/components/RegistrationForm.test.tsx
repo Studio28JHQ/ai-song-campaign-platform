@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RegistrationForm } from "@/features/lead/components/RegistrationForm";
 
@@ -8,6 +9,23 @@ const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
 }));
+
+// The real widget loads Cloudflare's script and calls a real network
+// endpoint — irrelevant to what these tests verify (form wiring), and
+// unavailable in jsdom. It auto-verifies on mount so existing
+// happy-path tests don't need to interact with it.
+vi.mock("@/components/security/TurnstileWidget", () => ({
+  TurnstileWidget: ({ onVerify }: { onVerify: (token: string) => void }) => {
+    useEffect(() => {
+      onVerify("test-turnstile-token");
+    }, [onVerify]);
+    return null;
+  },
+}));
+
+function renderForm() {
+  return render(<RegistrationForm turnstileSiteKey="test-site-key" />);
+}
 
 async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Parent name"), "Jane Doe");
@@ -36,7 +54,7 @@ describe("RegistrationForm", () => {
       body: { remainingAttempts: 5, status: "REGISTERED" },
     });
 
-    render(<RegistrationForm />);
+    renderForm();
     await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: /register/i }));
 
@@ -52,7 +70,7 @@ describe("RegistrationForm", () => {
     const user = userEvent.setup();
     global.fetch = vi.fn();
 
-    render(<RegistrationForm />);
+    renderForm();
     await user.click(screen.getByRole("button", { name: /register/i }));
 
     expect(await screen.findByText("Parent's name is required.")).toBeInTheDocument();
@@ -65,7 +83,7 @@ describe("RegistrationForm", () => {
     const user = userEvent.setup();
     global.fetch = vi.fn();
 
-    render(<RegistrationForm />);
+    renderForm();
     await user.type(screen.getByLabelText("Parent name"), "Jane Doe");
     await user.type(screen.getByLabelText("Baby name"), "Baby Doe");
     await user.type(screen.getByLabelText("Email"), "not-an-email");
@@ -86,7 +104,7 @@ describe("RegistrationForm", () => {
       },
     });
 
-    render(<RegistrationForm />);
+    renderForm();
     await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: /register/i }));
 
@@ -104,7 +122,7 @@ describe("RegistrationForm", () => {
       body: { error: "internal_error", message: "Something went wrong. Please try again." },
     });
 
-    render(<RegistrationForm />);
+    renderForm();
     await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: /register/i }));
 
@@ -124,7 +142,7 @@ describe("RegistrationForm", () => {
         }),
     ) as unknown as typeof fetch;
 
-    render(<RegistrationForm />);
+    renderForm();
     await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: /register/i }));
 

@@ -6,6 +6,7 @@ export interface RegisterLeadInput {
   city?: string;
   email: string;
   phone?: string;
+  turnstileToken: string;
 }
 
 export interface RegisterLeadResult {
@@ -14,12 +15,21 @@ export interface RegisterLeadResult {
 }
 
 export type RegisterLeadErrorCode =
-  "invalid_request" | "email_already_registered" | "business_rule_violation" | "internal_error";
+  | "invalid_request"
+  | "email_already_registered"
+  | "business_rule_violation"
+  | "too_many_requests"
+  | "human_verification_failed"
+  | "verification_unavailable"
+  | "internal_error";
 
 const KNOWN_ERROR_CODES: readonly RegisterLeadErrorCode[] = [
   "invalid_request",
   "email_already_registered",
   "business_rule_violation",
+  "too_many_requests",
+  "human_verification_failed",
+  "verification_unavailable",
   "internal_error",
 ];
 
@@ -27,6 +37,9 @@ const DEFAULT_MESSAGES: Record<RegisterLeadErrorCode, string> = {
   invalid_request: "Please check the form and try again.",
   email_already_registered: "This email has already been used to register.",
   business_rule_violation: "This request could not be completed.",
+  too_many_requests: "Too many requests. Please wait a few minutes before trying again.",
+  human_verification_failed: "We couldn't verify you're not a robot. Please try again.",
+  verification_unavailable: "Verification is temporarily unavailable. Please try again shortly.",
   internal_error: "Something went wrong. Please try again.",
 };
 

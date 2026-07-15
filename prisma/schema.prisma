@@ -225,19 +225,38 @@ model AdminUser {
   @@map("admin_users")
 }
 
+// `adminId` is nullable as of Sprint 8.2 (Abuse Protection): a `null`
+// actor represents a system-recorded security/abuse event (rate limit
+// exceeded, invalid Turnstile token, ...) rather than an admin action —
+// see `docs/Architecture/System_Architecture.md`. Every pre-existing
+// admin-initiated entry still always sets `adminId`.
 model AuditLog {
   id        String   @id @default(uuid()) @db.Uuid
-  adminId   String   @db.Uuid
+  adminId   String?  @db.Uuid
   action    String
   entity    String
   entityId  String?  @db.Uuid
   metadata  Json?
   createdAt DateTime @default(now())
 
-  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Restrict)
+  admin AdminUser? @relation(fields: [adminId], references: [id], onDelete: Restrict)
 
   @@index([adminId])
   @@index([entity, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// Sprint 8.2 — Abuse Protection. A generic, DB-backed sliding-window
+// rate-limit event log: one row per consumed request, keyed by scope
+// (e.g. "registration:ip:1.2.3.4"). No Redis/queue — see
+// PROJECT_MANIFEST.md. Counting recent rows for a key within a window
+// is the entire mechanism; see `RateLimitRepository`.
+model RateLimitEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@map("rate_limit_events")
 }

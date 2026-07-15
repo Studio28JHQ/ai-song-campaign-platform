@@ -35,6 +35,19 @@ describe("AuditLogEntry.create", () => {
     ).toThrow();
   });
 
+  it("accepts a null adminId for a system-recorded security event (Sprint 8.2)", () => {
+    const entry = AuditLogEntry.create({
+      adminId: null,
+      action: "rate_limit_exceeded",
+      entity: "IpAddress",
+      metadata: { ip: "203.0.113.4" },
+    });
+
+    expect(entry.adminId).toBeNull();
+    expect(entry.action).toBe("rate_limit_exceeded");
+    expect(entry.metadata).toEqual({ ip: "203.0.113.4" });
+  });
+
   it("round-trips through a snapshot", () => {
     const entry = AuditLogEntry.create({
       adminId: "admin-1",

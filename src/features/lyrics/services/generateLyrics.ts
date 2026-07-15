@@ -3,6 +3,7 @@ export interface GenerateLyricsInput {
   moodName: string;
   moodDescription?: string;
   parentMessage: string;
+  turnstileToken: string;
 }
 
 export interface GeneratedLyricsSnapshot {
@@ -28,6 +29,9 @@ export type GenerateLyricsErrorCode =
   | "lyrics_already_approved"
   | "business_rule_violation"
   | "claude_unavailable"
+  | "too_many_requests"
+  | "human_verification_failed"
+  | "verification_unavailable"
   | "internal_error";
 
 const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
@@ -38,6 +42,9 @@ const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
   "lyrics_already_approved",
   "business_rule_violation",
   "claude_unavailable",
+  "too_many_requests",
+  "human_verification_failed",
+  "verification_unavailable",
   "internal_error",
 ];
 
@@ -50,6 +57,9 @@ const DEFAULT_MESSAGES: Record<GenerateLyricsErrorCode, string> = {
   business_rule_violation: "This request could not be completed.",
   claude_unavailable:
     "The lyrics generation service is temporarily unavailable. Please try again shortly.",
+  too_many_requests: "Too many requests. Please wait a few minutes before trying again.",
+  human_verification_failed: "We couldn't verify you're not a robot. Please try again.",
+  verification_unavailable: "Verification is temporarily unavailable. Please try again shortly.",
   internal_error: "Something went wrong. Please try again.",
 };
 

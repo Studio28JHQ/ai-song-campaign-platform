@@ -30,6 +30,7 @@ interface ApprovedLyricsRecord {
 interface LyricsWorkflowProps {
   maxAttempts: number;
   supportEmail: string;
+  turnstileSiteKey: string;
 }
 
 /**
@@ -50,7 +51,11 @@ interface LyricsWorkflowProps {
  * browser storage), because every mount re-asks the backend rather than
  * trusting anything cached client-side.
  */
-export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProps) {
+export function LyricsWorkflow({
+  maxAttempts,
+  supportEmail,
+  turnstileSiteKey,
+}: LyricsWorkflowProps) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [remainingAttempts, setRemainingAttempts] = useState(0);
@@ -174,6 +179,7 @@ export function LyricsWorkflow({ maxAttempts, supportEmail }: LyricsWorkflowProp
       remainingAttempts={remainingAttempts}
       isSubmitting={isGenerating}
       errorMessage={errorMessage}
+      turnstileSiteKey={turnstileSiteKey}
       onSubmit={handleGenerate}
     />
   );

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { GetLeadSessionStateUseCase } from "@/application/lead/use-cases/GetLeadSessionStateUseCase";
+import { RateLimiter } from "@/application/security/services/RateLimiter";
+import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
+import { appConfig } from "@/config/app";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
+import { getClientIp } from "@/infrastructure/http/getClientIp";
+import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
@@ -23,12 +29,35 @@ const getLeadSessionStateUseCase = new GetLeadSessionStateUseCase(
   new PrismaLyricsRepository(),
   new PrismaSongRepository(),
 );
+const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
+const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   const leadId = await getLeadSession();
 
   if (!leadId) {
     return errorResponse(401, "no_session", "No active session.");
+  }
+
+  const ip = getClientIp(request);
+
+  const sessionLimit = await rateLimiter.consume({
+    key: `session:lead:${leadId}`,
+    limit: appConfig.security.rateLimit.maxSessionRequestsPerWindow,
+    windowMinutes: appConfig.security.rateLimit.sessionWindowMinutes,
+  });
+  if (!sessionLimit.allowed) {
+    await securityEventRecorder.record({
+      action: "rate_limit_exceeded",
+      entity: "Lead",
+      entityId: leadId,
+      metadata: { ip, scope: "session_polling" },
+    });
+    return errorResponse(
+      429,
+      "too_many_requests",
+      "Too many requests. Please wait a few minutes before trying again.",
+    );
   }
 
   try {

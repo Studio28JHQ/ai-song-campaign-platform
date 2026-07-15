@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { FIELD_LIMITS } from "@/shared/validation/text";
@@ -35,6 +36,7 @@ const MOODS = [
 const formSchema = z.object({
   moodId: z.string().min(1, "Select a mood."),
   parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
+  turnstileToken: z.string().min(1, "Please complete the verification challenge."),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -44,6 +46,7 @@ export interface LyricsGenerationSubmitValues {
   moodName: string;
   moodDescription?: string;
   parentMessage: string;
+  turnstileToken: string;
 }
 
 interface LyricsGenerationFormProps {
@@ -51,6 +54,7 @@ interface LyricsGenerationFormProps {
   remainingAttempts: number;
   isSubmitting: boolean;
   errorMessage?: string | null;
+  turnstileSiteKey: string;
   onSubmit: (values: LyricsGenerationSubmitValues) => void;
 }
 
@@ -59,15 +63,17 @@ export function LyricsGenerationForm({
   remainingAttempts,
   isSubmitting,
   errorMessage,
+  turnstileSiteKey,
   onSubmit,
 }: LyricsGenerationFormProps) {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { moodId: MOODS[0].id, parentMessage: "" },
+    defaultValues: { moodId: MOODS[0].id, parentMessage: "", turnstileToken: "" },
   });
 
   function submit(values: FormValues) {
@@ -77,6 +83,7 @@ export function LyricsGenerationForm({
       moodName: mood.name,
       moodDescription: mood.description,
       parentMessage: values.parentMessage,
+      turnstileToken: values.turnstileToken,
     });
   }
 
@@ -135,6 +142,20 @@ export function LyricsGenerationForm({
       </div>
 
       <p className="text-caption text-muted-foreground">Remaining attempts: {remainingAttempts}</p>
+
+      <div className="flex flex-col gap-1.5">
+        <TurnstileWidget
+          siteKey={turnstileSiteKey}
+          onVerify={(token) => setValue("turnstileToken", token, { shouldValidate: true })}
+          onExpire={() => setValue("turnstileToken", "", { shouldValidate: true })}
+          onError={() => setValue("turnstileToken", "", { shouldValidate: true })}
+        />
+        {errors.turnstileToken ? (
+          <p role="alert" className="text-sm text-destructive">
+            {errors.turnstileToken.message}
+          </p>
+        ) : null}
+      </div>
 
       <Button type="submit" disabled={isSubmitting || noAttemptsLeft} className="mt-2 w-full">
         {isSubmitting ? "Generating..." : "Generate Lyrics"}

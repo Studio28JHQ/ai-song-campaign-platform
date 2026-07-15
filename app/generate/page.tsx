@@ -28,6 +28,7 @@ export default function GeneratePage() {
               <LyricsWorkflow
                 maxAttempts={appConfig.campaign.maxLyricAttempts}
                 supportEmail={appConfig.admin.email}
+                turnstileSiteKey={appConfig.security.turnstile.siteKey}
               />
             </div>
           </div>

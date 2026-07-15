@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { appConfig } from "@/config/app";
 import { CampaignExplanation } from "@/features/landing/components/CampaignExplanation";
 import { Faq } from "@/features/landing/components/Faq";
 import { HeroSection } from "@/features/landing/components/HeroSection";
@@ -44,7 +45,7 @@ export default function HomePage() {
       <HeroSection />
       <CampaignExplanation />
       <HowItWorks />
-      <RegistrationSection />
+      <RegistrationSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
       <Faq />
       <LegalDisclaimer />
       <LandingFooter campaignName={appName} />

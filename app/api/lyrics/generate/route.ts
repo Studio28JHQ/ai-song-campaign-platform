@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { GenerateLyricsForLeadUseCase } from "@/application/lyrics/use-cases/GenerateLyricsForLeadUseCase";
+import { RateLimiter } from "@/application/security/services/RateLimiter";
+import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
+import { appConfig } from "@/config/app";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
+import { getClientIp } from "@/infrastructure/http/getClientIp";
+import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
+import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
+import { TurnstileVerifier } from "@/infrastructure/security/turnstile/TurnstileVerifier";
 import { BusinessRuleError, ExternalApiError, ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { FIELD_LIMITS } from "@/shared/validation/text";
@@ -27,6 +35,9 @@ const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
   new PrismaLyricsRepository(),
   new ClaudeLyricsService(),
 );
+const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
+const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
+const turnstileVerifier = new TurnstileVerifier(new TurnstileClient());
 
 // Structural validation (shape/type/presence) plus the shared Sprint 8.1
 // input-hardening rules for `parentMessage` (trim, collapse whitespace,
@@ -40,6 +51,7 @@ const generateLyricsRequestSchema = z
     moodName: z.string().min(1),
     moodDescription: z.string().min(1).optional(),
     parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
+    turnstileToken: z.string().min(1, "Human verification is required."),
   })
   .strict();
 
@@ -61,6 +73,56 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!parsed.success) {
     const message = parsed.error.issues[0]?.message ?? "The request payload is invalid.";
     return errorResponse(400, "invalid_request", message);
+  }
+
+  const ip = getClientIp(request);
+
+  const sessionLimit = await rateLimiter.consume({
+    key: `lyrics_generation:lead:${leadId}`,
+    limit: appConfig.security.rateLimit.maxGenerationsPerHour,
+    windowMinutes: appConfig.security.rateLimit.windowMinutes,
+  });
+  if (!sessionLimit.allowed) {
+    await securityEventRecorder.record({
+      action: "excessive_generation_attempts",
+      entity: "Lead",
+      entityId: leadId,
+      metadata: { scope: "lyrics_generation" },
+    });
+    return tooManyRequestsResponse();
+  }
+
+  const ipLimit = await rateLimiter.consume({
+    key: `lyrics_generation:ip:${ip}`,
+    limit: appConfig.security.rateLimit.maxGenerationsPerIpPerHour,
+    windowMinutes: appConfig.security.rateLimit.windowMinutes,
+  });
+  if (!ipLimit.allowed) {
+    await securityEventRecorder.record({
+      action: "rate_limit_exceeded",
+      entity: "IpAddress",
+      metadata: { ip, scope: "lyrics_generation" },
+    });
+    return tooManyRequestsResponse();
+  }
+
+  try {
+    const verification = await turnstileVerifier.verify(parsed.data.turnstileToken, ip);
+    if (!verification.success) {
+      await securityEventRecorder.record({
+        action: "invalid_turnstile_token",
+        entity: "Lead",
+        entityId: leadId,
+        metadata: { ip, scope: "lyrics_generation", errorCodes: verification.errorCodes },
+      });
+      return errorResponse(
+        403,
+        "human_verification_failed",
+        "We couldn't verify you're not a robot. Please try again.",
+      );
+    }
+  } catch (error) {
+    return handleTurnstileError(error);
   }
 
   try {
@@ -123,6 +185,35 @@ function handleUseCaseError(error: unknown): NextResponse {
   });
 
   return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+}
+
+function handleTurnstileError(error: unknown): NextResponse {
+  if (error instanceof ExternalApiError) {
+    logger.error("Turnstile verification failed", {
+      error: error.message,
+      code: error.code,
+    });
+
+    return errorResponse(
+      503,
+      "verification_unavailable",
+      "Verification is temporarily unavailable. Please try again shortly.",
+    );
+  }
+
+  logger.error("Unexpected error while verifying Turnstile token", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+
+  return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+}
+
+function tooManyRequestsResponse(): NextResponse {
+  return errorResponse(
+    429,
+    "too_many_requests",
+    "Too many requests. Please wait a few minutes before trying again.",
+  );
 }
 
 function errorResponse(status: number, error: string, message: string): NextResponse {

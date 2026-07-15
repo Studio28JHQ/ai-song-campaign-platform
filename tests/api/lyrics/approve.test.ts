@@ -107,6 +107,26 @@ vi.mock("@/infrastructure/auth/getLeadSession", () => ({
   getLeadSession: mockGetLeadSession,
 }));
 
+// Sprint 8.2 — Abuse Protection. Mocked so no real DB call happens; see
+// dedicated rate-limiting tests for that behavior.
+vi.mock("@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository", () => ({
+  PrismaRateLimitRepository: vi.fn().mockImplementation(function PrismaRateLimitRepository() {
+    return {
+      countRecentEvents: vi.fn().mockResolvedValue(0),
+      recordEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", () => ({
+  PrismaAuditLogRepository: vi.fn().mockImplementation(function PrismaAuditLogRepository() {
+    return {
+      create: vi.fn().mockResolvedValue(undefined),
+      findByEntity: vi.fn().mockResolvedValue([]),
+    };
+  }),
+}));
+
 const { POST } = await import("../../../app/api/lyrics/approve/route");
 
 function buildLead(): Lead {

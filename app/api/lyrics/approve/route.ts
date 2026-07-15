@@ -1,12 +1,17 @@
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { ApproveLyricsUseCase } from "@/application/lyrics/use-cases/ApproveLyricsUseCase";
+import { RateLimiter } from "@/application/security/services/RateLimiter";
+import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
 import { SongGenerationWorker } from "@/application/song/use-cases/SongGenerationWorker";
+import { appConfig } from "@/config/app";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
+import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
@@ -42,6 +47,8 @@ const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 
 const approveLyricsUseCase = new ApproveLyricsUseCase(lyricsRepository);
+const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
+const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 
 const generateSongUseCase = new GenerateSongUseCase(
   leadRepository,
@@ -83,6 +90,25 @@ export async function POST(request: Request): Promise<NextResponse> {
   const parsed = approveLyricsRequestSchema.safeParse(payload);
   if (!parsed.success) {
     return errorResponse(400, "invalid_request", "The request payload is invalid.");
+  }
+
+  const approvalLimit = await rateLimiter.consume({
+    key: `lyrics_approval:lead:${leadId}`,
+    limit: appConfig.security.rateLimit.maxApprovalsPerHour,
+    windowMinutes: appConfig.security.rateLimit.windowMinutes,
+  });
+  if (!approvalLimit.allowed) {
+    await securityEventRecorder.record({
+      action: "rate_limit_exceeded",
+      entity: "Lead",
+      entityId: leadId,
+      metadata: { scope: "lyrics_approval" },
+    });
+    return errorResponse(
+      429,
+      "too_many_requests",
+      "Too many requests. Please wait a few minutes before trying again.",
+    );
   }
 
   try {

@@ -27,6 +27,33 @@ vi.mock("@/infrastructure/auth/PrismaLeadSessionService", () => ({
   }),
 }));
 
+// Sprint 8.2 — Abuse Protection. These tests exercise business logic,
+// not rate limiting/Turnstile themselves (see dedicated unit/integration
+// tests for those) — mocked here so no real DB/network call happens.
+vi.mock("@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository", () => ({
+  PrismaRateLimitRepository: vi.fn().mockImplementation(function PrismaRateLimitRepository() {
+    return {
+      countRecentEvents: vi.fn().mockResolvedValue(0),
+      recordEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", () => ({
+  PrismaAuditLogRepository: vi.fn().mockImplementation(function PrismaAuditLogRepository() {
+    return {
+      create: vi.fn().mockResolvedValue(undefined),
+      findByEntity: vi.fn().mockResolvedValue([]),
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/security/turnstile/TurnstileClient", () => ({
+  TurnstileClient: vi.fn().mockImplementation(function TurnstileClient() {
+    return { siteverify: vi.fn().mockResolvedValue({ success: true }) };
+  }),
+}));
+
 const { POST } = await import("../../../app/api/leads/route");
 
 const validPayload = {
@@ -34,6 +61,7 @@ const validPayload = {
   parentName: "Jane Doe",
   babyName: "Baby Doe",
   email: "jane@example.com",
+  turnstileToken: "test-turnstile-token",
 };
 
 function postRequest(body: unknown): Request {

@@ -34,9 +34,13 @@ export interface AdminUserSnapshot {
   updatedAt: Date;
 }
 
-/** Input to `AuditLogEntry.create`. */
+/**
+ * Input to `AuditLogEntry.create`. `adminId: null` records a
+ * system-recorded security/abuse event (Sprint 8.2) rather than an
+ * admin-initiated action.
+ */
 export interface CreateAuditLogEntryInput {
-  adminId: string;
+  adminId: string | null;
   action: string;
   entity: string;
   entityId?: string | null;
@@ -46,7 +50,7 @@ export interface CreateAuditLogEntryInput {
 /** Internal entity state for `AuditLogEntry`. Not exported for external mutation. */
 export interface AuditLogEntryProps {
   id: string;
-  adminId: string;
+  adminId: string | null;
   action: string;
   entity: string;
   entityId: string | null;
@@ -57,7 +61,7 @@ export interface AuditLogEntryProps {
 /** Plain, read-only view of an AuditLogEntry for callers that need primitives. */
 export interface AuditLogEntrySnapshot {
   id: string;
-  adminId: string;
+  adminId: string | null;
   action: string;
   entity: string;
   entityId: string | null;

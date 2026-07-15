@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-16
+
+Sprint 8.2 — Abuse Protection. Prevents automated abuse from consuming AI generation budget: Cloudflare Turnstile on every public form, DB-backed rate limiting on every public endpoint, and suspicious-behavior recording. No business rule changed.
+
+### Added
+
+- Cloudflare Turnstile, verified server-side only (`TurnstileClient`/`TurnstileVerifier`, `src/infrastructure/security/turnstile/`) on lead registration and lyrics generation/regeneration (`POST /api/leads`, `POST /api/lyrics/generate`) — a request without a valid token is rejected (403) before any business logic runs. Rendered client-side via `TurnstileWidget` (`src/components/security/`), Cloudflare's plain `api.js` script and explicit render API — no new npm dependency.
+- DB-backed sliding-window rate limiting (`RateLimiter`, `RateLimitRepository`/`PrismaRateLimitRepository`, new `rate_limit_events` table — no Redis, no message queue, see PROJECT_MANIFEST.md) on every public endpoint: registration by IP and email, lyrics generation by lead session and IP, lyrics approval by lead session, and the session-polling endpoint (`GET /api/leads/session`) by lead session — all return a friendly 429 ("Too many requests. Please wait a few minutes before trying again.") that never exposes the configured threshold.
+- Suspicious-behavior recording (`SecurityEventRecorder`) for rate-limit breaches, invalid Turnstile tokens, and excessive generation attempts — reuses the existing `AuditLog` with a new `adminId: null` variant for system-recorded (non-admin) events, rather than a parallel logging table.
+- Every limit and secret now lives in configuration (`appConfig.security`, `src/config/app.ts`/`env.ts`), never hardcoded in a route: `TURNSTILE_SECRET`, `TURNSTILE_SITE_KEY`, `RATE_LIMIT_WINDOW_MINUTES`, `MAX_REGISTRATIONS_PER_IP`, `MAX_REGISTRATIONS_PER_EMAIL`, `MAX_GENERATIONS_PER_HOUR`, `MAX_GENERATIONS_PER_IP_PER_HOUR`, `MAX_APPROVALS_PER_HOUR`, `MAX_SESSION_REQUESTS_PER_WINDOW`, `SESSION_RATE_LIMIT_WINDOW_MINUTES`. Turnstile defaults to Cloudflare's publicly documented "always passes" test keypair so local dev/tests need no secrets; production must override both.
+- `getClientIp` (`src/infrastructure/http/`) reads the client IP directly from each route's own `Request` (not the ambient `next/headers()`, which requires a live Next.js request scope) — documented rationale for why `x-forwarded-for`'s first entry is trustworthy on this app's Vercel deployment.
+
+### Changed
+
+- `AuditLog.adminId` is now nullable (Prisma migration `20260716083000_abuse_protection`, additive-only) — a `null` actor represents a system-recorded security event rather than an admin action.
+
 ## [1.2.0] - 2026-07-14
 
 Sprint 8.1 — Input Validation & Sanitization. Hardens every user-controlled field (Registration: parent name, baby name, city, email, phone; Lyrics generation: custom message) with a single shared set of validation rules enforced identically by the frontend, the API layer, and the domain layer. No business rule changed.
