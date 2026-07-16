@@ -229,6 +229,18 @@ body {
   --radius: 1rem;
   --font-heading: var(--font-fredoka), var(--font-sans);
   --font-sans: var(--font-inter), var(--font-geist-sans);
+  /* Sprint UI-3D — UX Polish: display/heading bumped for clearer
+     hierarchy (Hero headline "claramente más grande"; every section
+     title "aumentar tamaño"). Scoped here, not in `@theme inline`,
+     since `text-heading`/`text-display` are also used by the admin
+     panel (`DashboardSummaryCards`, `AdminDashboard`, admin login),
+     which must render unaffected — same pattern as every other
+     public-only token above. title/body/caption/label/button
+     untouched. */
+  --text-display: 4.5rem;
+  --text-display--line-height: 1.05;
+  --text-heading: 2.75rem;
+  --text-heading--line-height: 1.15;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);

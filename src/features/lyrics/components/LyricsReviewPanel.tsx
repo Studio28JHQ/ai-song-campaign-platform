@@ -40,15 +40,17 @@ export function LyricsReviewPanel({
         </p>
       ) : null}
 
-      <span className="text-label text-muted-foreground">
+      <span className="text-center text-label text-muted-foreground">
         Intento {version} / {maxAttempts}
       </span>
 
       <LyricsContent content={content} />
 
-      <p className="text-caption text-muted-foreground">Intentos restantes: {remainingAttempts}</p>
+      <p className="text-center text-caption text-muted-foreground">
+        Intentos restantes: {remainingAttempts}
+      </p>
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
         <Button
           type="button"
           onClick={onApprove}

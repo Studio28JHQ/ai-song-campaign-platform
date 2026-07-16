@@ -210,7 +210,18 @@ export function LyricsGenerationForm({
         disabled={isSubmitting || noAttemptsLeft}
         className="mt-2 h-12 w-full rounded-full text-base font-semibold shadow-md shadow-primary/25 hover:bg-[var(--primary-hover)]"
       >
-        {isSubmitting ? "Creando..." : "Crear la letra"}
+        {isSubmitting ? (
+          <>
+            <span
+              role="status"
+              aria-label="Generando"
+              className="size-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground"
+            />
+            Generando tu letra...
+          </>
+        ) : (
+          "Crear la letra"
+        )}
       </Button>
     </form>
   );

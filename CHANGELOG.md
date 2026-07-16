@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-08-03
+
+Sprint UI-3D — UX Polish. Fix-only pass on five specific UX details: no new components, no refactor, no backend/domain/database/architecture changes.
+
+### Changed
+
+- `LyricsGenerationForm`'s submit button now shows an animated spinner (the same `animate-spin` pattern already used in `SongResultView`) plus the text "Generando tu letra..." while `isSubmitting` — no fake progress bar, no invented percentage, just an ongoing-process indicator. Button stays disabled as before.
+- Hero headline (`variant="display"`) and every section title (`variant="section"` — "¿Qué es esta campaña?", "Cómo funciona", "Preguntas frecuentes", the `/generate` page heading, and `SongResultView`'s three states' `<h1>`, which use the same `text-heading` token directly) sized up via `--text-display` (3.5rem → 4.5rem) and `--text-heading` (2.25rem → 2.75rem) — scoped inside `.theme-campaign`, not the global `@theme inline` block, since `text-heading` is also used by the admin panel (`DashboardSummaryCards`, `AdminDashboard`, admin login), which must stay visually unchanged. Section titles also gained `font-bold` (were `font-semibold`); `title`/`display`'s own weights are untouched. Same typography (font-family) throughout — only size and weight changed.
+- Hero description: `text-body text-muted-foreground` → `text-lg text-foreground` — a slightly larger size and meaningfully higher contrast against the Hero's photographic background, using only already-defined tokens (no new color introduced).
+- `LyricsReviewPanel`: the "Intento X/Y" and "Intentos restantes" labels centered (`text-center`), and the button row now centers on desktop (`sm:justify-center`, was left-aligned by the flex default) — the lyrics card and buttons now read as horizontally balanced. No text changed.
+
 ## [1.17.0] - 2026-08-02
 
 Sprint UI-3C — UX Polish & Lyrics Experience. A fix-only pass on issues found after UI-3B: no new components, no architecture, no backend/domain/database/pipeline changes.

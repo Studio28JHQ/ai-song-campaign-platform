@@ -43,7 +43,7 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
   if (status === "FAILED") {
     return (
       <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
-        <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
+        <h1 className="font-heading text-heading font-bold text-foreground">{title}</h1>
         <p
           role="alert"
           className="rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-sm text-foreground"
@@ -73,7 +73,7 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
         <span aria-hidden className="text-4xl">
           🎉
         </span>
-        <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
+        <h1 className="font-heading text-heading font-bold text-foreground">{title}</h1>
         <p className="text-body text-muted-foreground">¡Tu canción personalizada está lista!</p>
 
         {audioUrl ? (
@@ -121,7 +121,7 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
 
   return (
     <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
-      <h1 className="font-heading text-heading font-semibold text-foreground">{title}</h1>
+      <h1 className="font-heading text-heading font-bold text-foreground">{title}</h1>
       <div
         role="status"
         aria-label="Tu canción está en producción"

@@ -2,9 +2,15 @@ import { type ComponentProps, type ElementType } from "react";
 import { cn } from "@/lib/utils";
 
 const VARIANT_CLASSES = {
-  display: "text-display",
-  section: "text-heading",
-  title: "text-title",
+  display: "text-display font-semibold",
+  // Sprint UI-3D — UX Polish: "aumentar tamaño y peso" for every
+  // section title — bold here (was inheriting the shared
+  // `font-semibold` below), size via `--text-heading` in
+  // `.theme-campaign`. `display`/`title` keep their existing weight,
+  // unaffected — display's own `font-bold` at the Hero call site
+  // still wins there regardless.
+  section: "text-heading font-bold",
+  title: "text-title font-semibold",
 } as const;
 
 type CampaignHeadingVariant = keyof typeof VARIANT_CLASSES;
@@ -39,7 +45,7 @@ export function CampaignHeading({
 }: CampaignHeadingProps) {
   return (
     <Tag
-      className={cn(VARIANT_CLASSES[variant], "font-semibold text-foreground", className)}
+      className={cn(VARIANT_CLASSES[variant], "text-foreground", className)}
       style={{ fontFamily: VARIANT_FONT[variant], ...style }}
       {...props}
     />

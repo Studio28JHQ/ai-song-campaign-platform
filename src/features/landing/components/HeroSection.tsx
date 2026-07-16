@@ -68,7 +68,7 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
         </CampaignHeading>
       }
       description={
-        <p className="mx-auto mt-5 max-w-md text-body text-muted-foreground lg:mx-0">
+        <p className="mx-auto mt-5 max-w-md text-lg text-foreground lg:mx-0">
           Cuéntanos sobre tu familia y recibe, sin costo, una canción única — escrita e interpretada
           especialmente para tu bebé — directo a tu correo.
         </p>
