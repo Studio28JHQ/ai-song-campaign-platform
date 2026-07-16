@@ -112,6 +112,9 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   async findByEntity(entity: string, entityId: string): Promise<AuditLogEntry[]> {
     return this.records.filter((r) => r.entity === entity && r.entityId === entityId);
   }
+  async findRecent(limit: number): Promise<AuditLogEntry[]> {
+    return this.records.slice(0, limit);
+  }
 }
 
 function createLead(): Lead {
@@ -235,7 +238,7 @@ describe("GetLeadDetailUseCase", () => {
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-42" });
 
     const viewed = findEvent(result.executionHistory, "lead_viewed");
-    expect(viewed).toMatchObject({ actor: "admin-42", label: "Lead viewed" });
+    expect(viewed).toMatchObject({ actor: "admin-42", label: "Ficha consultada" });
   });
 
   it("includes a lead_created event using the lead's own createdAt", async () => {

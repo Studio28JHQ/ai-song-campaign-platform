@@ -4,7 +4,7 @@ import { Section } from "@/components/layout/Section";
 import { AdminDashboard } from "@/features/admin/components/AdminDashboard";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard — AI Song Campaign",
+  title: "Dashboard | Bassa",
 };
 
 /**

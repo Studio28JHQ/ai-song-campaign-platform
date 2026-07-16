@@ -5,7 +5,7 @@ import { Section } from "@/components/layout/Section";
 import { LoginForm } from "@/features/admin/components/LoginForm";
 
 export const metadata: Metadata = {
-  title: "Admin Sign In — AI Song Campaign",
+  title: "Acceso administrativo | Bassa",
 };
 
 export default function AdminLoginPage() {
@@ -15,8 +15,8 @@ export default function AdminLoginPage() {
         <ContentWrapper>
           <div className="flex flex-col items-center gap-6">
             <div className="flex flex-col items-center gap-2 text-center">
-              <h1 className="text-heading font-bold text-foreground">Administration</h1>
-              <p className="text-body text-muted-foreground">Sign in to continue.</p>
+              <h1 className="text-heading font-bold text-foreground">Administración</h1>
+              <p className="text-body text-muted-foreground">Inicia sesión para continuar.</p>
             </div>
 
             <div className="w-full max-w-sm">

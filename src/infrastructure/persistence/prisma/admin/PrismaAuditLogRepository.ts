@@ -36,6 +36,18 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
     }
   }
 
+  async findRecent(limit: number): Promise<AuditLogEntry[]> {
+    try {
+      const records = await this.client.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      return records.map(AuditLogMapper.toDomain);
+    } catch (error) {
+      this.handleError(error, { operation: "findRecent" });
+    }
+  }
+
   private handleError(error: unknown, context: Record<string, unknown>): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       throw new DatabaseError(`Database request failed (${error.code}).`, {

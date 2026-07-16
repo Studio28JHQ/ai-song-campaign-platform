@@ -15,6 +15,16 @@ class InMemoryAdminUserRepository implements AdminUserRepository {
   async findByEmail(email: string): Promise<AdminUser | null> {
     return this.records.get(email) ?? null;
   }
+  async findById(id: string): Promise<AdminUser | null> {
+    return [...this.records.values()].find((admin) => admin.id === id) ?? null;
+  }
+  async findAll(): Promise<AdminUser[]> {
+    return [...this.records.values()];
+  }
+  async create(admin: AdminUser): Promise<AdminUser> {
+    this.records.set(admin.email, admin);
+    return admin;
+  }
   async update(admin: AdminUser): Promise<AdminUser> {
     this.records.set(admin.email, admin);
     return admin;
@@ -28,6 +38,9 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return entry;
   }
   async findByEntity() {
+    return [];
+  }
+  async findRecent() {
     return [];
   }
 }
@@ -56,12 +69,10 @@ function fakePasswordHasher(matches: boolean): PasswordHasher {
 
 function fakeSessionTokenService(): SessionTokenService {
   return {
-    issue: vi
-      .fn()
-      .mockResolvedValue({
-        token: "signed-token",
-        expiresAt: new Date("2026-01-02T00:00:00.000Z"),
-      }),
+    issue: vi.fn().mockResolvedValue({
+      token: "signed-token",
+      expiresAt: new Date("2026-01-02T00:00:00.000Z"),
+    }),
     verify: vi.fn(),
   };
 }

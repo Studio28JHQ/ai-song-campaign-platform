@@ -4,7 +4,11 @@ import type { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 
 function fakeRepository(create: AuditLogRepository["create"]): AuditLogRepository {
-  return { create, findByEntity: vi.fn().mockResolvedValue([]) };
+  return {
+    create,
+    findByEntity: vi.fn().mockResolvedValue([]),
+    findRecent: vi.fn().mockResolvedValue([]),
+  };
 }
 
 describe("SecurityEventRecorder.record", () => {

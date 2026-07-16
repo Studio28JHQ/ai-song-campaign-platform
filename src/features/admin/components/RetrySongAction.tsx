@@ -29,7 +29,7 @@ export function RetrySongAction({ songId, onSuccess }: RetrySongActionProps) {
     if (outcome.success) {
       setNotification({
         ok: true,
-        message: "Retry started — the song will regenerate in the background.",
+        message: "Reintento iniciado — la canción se generará de nuevo en segundo plano.",
       });
       onSuccess();
     } else {
@@ -42,12 +42,12 @@ export function RetrySongAction({ songId, onSuccess }: RetrySongActionProps) {
       {confirming ? (
         <div className="flex flex-col gap-2 rounded-md border border-border p-3">
           <p className="text-sm text-foreground">
-            Retry generating this song? The approved lyrics and mood will be reused as-is — this
-            will not consume another attempt.
+            ¿Reintentar la generación de esta canción? Se reutilizarán la letra aprobada y el estilo
+            tal como están — esto no consumirá otro intento.
           </p>
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={isSubmitting} onClick={handleConfirm}>
-              {isSubmitting ? "Retrying..." : "Confirm Retry"}
+              {isSubmitting ? "Reintentando..." : "Confirmar reintento"}
             </Button>
             <Button
               type="button"
@@ -56,13 +56,13 @@ export function RetrySongAction({ songId, onSuccess }: RetrySongActionProps) {
               disabled={isSubmitting}
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              Cancelar
             </Button>
           </div>
         </div>
       ) : (
         <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)}>
-          Retry Generation
+          Reintentar generación
         </Button>
       )}
 

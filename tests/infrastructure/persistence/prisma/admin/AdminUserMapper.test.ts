@@ -35,12 +35,34 @@ describe("AdminUserMapper.toDomain", () => {
 });
 
 describe("AdminUserMapper.toUpdateInput", () => {
-  it("only ever writes lastLogin and updatedAt", () => {
+  it("writes every mutable field — name, role, passwordHash, active, lastLogin, updatedAt", () => {
     const admin = AdminUserMapper.toDomain(buildRecord());
     admin.recordLogin();
 
     const input = AdminUserMapper.toUpdateInput(admin);
 
-    expect(Object.keys(input).sort()).toEqual(["lastLogin", "updatedAt"]);
+    expect(Object.keys(input).sort()).toEqual(
+      ["active", "lastLogin", "name", "passwordHash", "role", "updatedAt"].sort(),
+    );
+  });
+});
+
+describe("AdminUserMapper.toCreateInput", () => {
+  it("writes every field, including id, email and createdAt", () => {
+    const admin = AdminUserMapper.toDomain(buildRecord());
+
+    const input = AdminUserMapper.toCreateInput(admin);
+
+    expect(input).toEqual({
+      id: "admin-1",
+      email: "admin@example.com",
+      passwordHash: "salt:hash",
+      name: "Jane Admin",
+      role: "admin",
+      active: true,
+      lastLogin: null,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt,
+    });
   });
 });

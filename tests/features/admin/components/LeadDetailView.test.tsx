@@ -69,7 +69,7 @@ function buildDetailBody(overrides: { song?: Record<string, unknown> | null } = 
     executionHistory: [
       {
         type: "song_retried",
-        label: "Retry executed",
+        label: "Reintento ejecutado",
         timestamp: "2026-01-01T02:00:00.000Z",
         actor: "admin-1",
       },
@@ -92,12 +92,12 @@ describe("LeadDetailView", () => {
     expect(await screen.findByText("jane@example.com")).toBeInTheDocument();
     expect(screen.getByText("+1 555 123 4567")).toBeInTheDocument();
     expect(screen.getAllByText("COMPLETED").length).toBe(2);
-    expect(screen.getByText(/Duration: 2:05/)).toBeInTheDocument();
-    expect(screen.getByText(/Sent at/)).toBeInTheDocument();
-    expect(screen.getByText("Retry executed")).toBeInTheDocument();
-    expect(screen.getByText(/by admin-1/)).toBeInTheDocument();
+    expect(screen.getByText(/Duración: 2:05/)).toBeInTheDocument();
+    expect(screen.getByText(/Enviado el/)).toBeInTheDocument();
+    expect(screen.getByText("Reintento ejecutado")).toBeInTheDocument();
+    expect(screen.getByText(/por admin-1/)).toBeInTheDocument();
 
-    const downloadLink = screen.getByText("Download Song").closest("a");
+    const downloadLink = screen.getByText("Descargar canción").closest("a");
     expect(downloadLink).toHaveAttribute("href", "https://cdn.example.com/song.mp3");
     expect(downloadLink).toHaveAttribute("download");
   });
@@ -111,7 +111,7 @@ describe("LeadDetailView", () => {
 
     render(<LeadDetailView leadId="missing" />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("This lead could not be found.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se encontró esta familia.");
   });
 
   it("shows placeholders when there is no song or approved lyrics yet", async () => {
@@ -124,9 +124,9 @@ describe("LeadDetailView", () => {
 
     render(<LeadDetailView leadId="lead-1" />);
 
-    expect(await screen.findByText("No song generated yet.")).toBeInTheDocument();
-    expect(screen.getByText("No approved lyrics yet.")).toBeInTheDocument();
-    expect(screen.getByText("No history yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no se ha generado ninguna canción.")).toBeInTheDocument();
+    expect(screen.getByText("Aún no hay una letra aprobada.")).toBeInTheDocument();
+    expect(screen.getByText("Aún no hay historial.")).toBeInTheDocument();
   });
 
   it("shows Retry Generation only for a FAILED song, and confirms before retrying", async () => {
@@ -143,15 +143,15 @@ describe("LeadDetailView", () => {
 
     render(<LeadDetailView leadId="lead-1" />);
 
-    const retryButton = await screen.findByRole("button", { name: "Retry Generation" });
-    expect(screen.queryByRole("button", { name: "Resend Email" })).not.toBeInTheDocument();
+    const retryButton = await screen.findByRole("button", { name: "Reintentar generación" });
+    expect(screen.queryByRole("button", { name: "Reenviar correo" })).not.toBeInTheDocument();
 
     await user.click(retryButton);
-    expect(await screen.findByText(/reused as-is/)).toBeInTheDocument();
+    expect(await screen.findByText(/tal como están/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Confirm Retry" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar reintento" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/Retry started/);
+    expect(await screen.findByRole("status")).toHaveTextContent(/Reintento iniciado/);
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith("/api/admin/songs/song-1/retry", { method: "POST" }),
     );
@@ -172,17 +172,17 @@ describe("LeadDetailView", () => {
 
     render(<LeadDetailView leadId="lead-1" />);
 
-    const resendButton = await screen.findByRole("button", { name: "Resend Email" });
-    expect(screen.queryByRole("button", { name: "Retry Generation" })).not.toBeInTheDocument();
+    const resendButton = await screen.findByRole("button", { name: "Reenviar correo" });
+    expect(screen.queryByRole("button", { name: "Reintentar generación" })).not.toBeInTheDocument();
 
     await user.click(resendButton);
-    await user.click(screen.getByRole("button", { name: "Confirm Resend" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Please provide a reason");
+    await user.click(screen.getByRole("button", { name: "Confirmar reenvío" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Indica un motivo");
 
-    await user.type(screen.getByLabelText("Reason for resending"), "Parent never got it.");
-    await user.click(screen.getByRole("button", { name: "Confirm Resend" }));
+    await user.type(screen.getByLabelText("Motivo del reenvío"), "Parent never got it.");
+    await user.click(screen.getByRole("button", { name: "Confirmar reenvío" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/resent successfully/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/reenviado correctamente/i);
     const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
     const resendCall = calls.find((c) => c[0].includes("/resend-email"));
     expect(resendCall).toBeDefined();
@@ -199,7 +199,7 @@ describe("LeadDetailView", () => {
     render(<LeadDetailView leadId="lead-1" />);
 
     await screen.findByText("jane@example.com");
-    expect(screen.queryByRole("button", { name: "Retry Generation" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Resend Email" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar generación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reenviar correo" })).not.toBeInTheDocument();
   });
 });

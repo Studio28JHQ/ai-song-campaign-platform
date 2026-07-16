@@ -1,3 +1,9 @@
+export interface AverageGenerationMinutes {
+  today: number | null;
+  last7Days: number | null;
+  last30Days: number | null;
+}
+
 export interface DashboardSummary {
   totalLeads: number;
   lyricsGenerated: number;
@@ -10,6 +16,8 @@ export interface DashboardSummary {
   emailsSent: number;
   emailsResent: number;
   generationSuccessRate: number;
+  campaignGoal: number;
+  averageGenerationMinutes: AverageGenerationMinutes;
 }
 
 export class GetDashboardSummaryError extends Error {

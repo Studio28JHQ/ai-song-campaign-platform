@@ -28,7 +28,7 @@ export function ResendEmailAction({ songId, onSuccess }: ResendEmailActionProps)
   async function handleConfirm() {
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
-      setNotification({ ok: false, message: "Please provide a reason for the resend." });
+      setNotification({ ok: false, message: "Indica un motivo para el reenvío." });
       return;
     }
 
@@ -38,7 +38,7 @@ export function ResendEmailAction({ songId, onSuccess }: ResendEmailActionProps)
     if (outcome.success) {
       setConfirming(false);
       setReason("");
-      setNotification({ ok: true, message: "Email resent successfully." });
+      setNotification({ ok: true, message: "Correo reenviado correctamente." });
       onSuccess();
     } else {
       setNotification({ ok: false, message: outcome.message });
@@ -49,17 +49,17 @@ export function ResendEmailAction({ songId, onSuccess }: ResendEmailActionProps)
     <div className="flex flex-col gap-2">
       {confirming ? (
         <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-          <Label htmlFor="resend-email-reason">Reason for resending</Label>
+          <Label htmlFor="resend-email-reason">Motivo del reenvío</Label>
           <Input
             id="resend-email-reason"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="e.g. Parent said they never received it."
+            placeholder="Ej. La familia dice que nunca lo recibió."
             disabled={isSubmitting}
           />
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={isSubmitting} onClick={handleConfirm}>
-              {isSubmitting ? "Sending..." : "Confirm Resend"}
+              {isSubmitting ? "Enviando..." : "Confirmar reenvío"}
             </Button>
             <Button
               type="button"
@@ -68,13 +68,13 @@ export function ResendEmailAction({ songId, onSuccess }: ResendEmailActionProps)
               disabled={isSubmitting}
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              Cancelar
             </Button>
           </div>
         </div>
       ) : (
         <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)}>
-          Resend Email
+          Reenviar correo
         </Button>
       )}
 

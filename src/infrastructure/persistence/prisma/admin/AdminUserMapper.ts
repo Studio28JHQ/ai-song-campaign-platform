@@ -20,10 +20,28 @@ export class AdminUserMapper {
     return AdminUser.fromPersistence(props);
   }
 
-  /** Only `lastLogin`/`updatedAt` are ever written by this module — there is no create/edit flow (see `AdminUserRepository`). */
+  /** Persists every mutable field — profile, password, active-state and login bookkeeping all flow through the same entity (see `AdminUser`). */
   static toUpdateInput(adminUser: AdminUser): Prisma.AdminUserUncheckedUpdateInput {
     return {
+      name: adminUser.name,
+      role: adminUser.role,
+      passwordHash: adminUser.passwordHash,
+      active: adminUser.active,
       lastLogin: adminUser.lastLogin,
+      updatedAt: adminUser.updatedAt,
+    };
+  }
+
+  static toCreateInput(adminUser: AdminUser): Prisma.AdminUserUncheckedCreateInput {
+    return {
+      id: adminUser.id,
+      email: adminUser.email,
+      passwordHash: adminUser.passwordHash,
+      name: adminUser.name,
+      role: adminUser.role,
+      active: adminUser.active,
+      lastLogin: adminUser.lastLogin,
+      createdAt: adminUser.createdAt,
       updatedAt: adminUser.updatedAt,
     };
   }

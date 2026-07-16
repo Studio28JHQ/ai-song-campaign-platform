@@ -7,6 +7,19 @@
  * Prisma-backed adapter in `src/infrastructure/`, the same pattern as
  * `CampaignGate`.
  */
+/**
+ * Sprint ADMIN-1 — Backoffice de Campaña. Average minutes between
+ * `Song.submittedAt` and `Song.completedAt`, over `COMPLETED` songs
+ * whose `completedAt` falls in the given window — `null` when no song
+ * completed in that window yet ("Display average times when
+ * available. Otherwise show 'No disponible'. Do not fail.").
+ */
+export interface AverageGenerationMinutes {
+  today: number | null;
+  last7Days: number | null;
+  last30Days: number | null;
+}
+
 export interface DashboardSummaryCounts {
   totalLeads: number;
   lyricsGenerated: number;
@@ -18,6 +31,7 @@ export interface DashboardSummaryCounts {
   songsFailed: number;
   emailsSent: number;
   emailsResent: number;
+  averageGenerationMinutes: AverageGenerationMinutes;
 }
 
 export interface AdminDashboardGate {

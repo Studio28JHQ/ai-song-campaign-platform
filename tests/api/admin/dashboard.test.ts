@@ -28,6 +28,7 @@ describe("GET /api/admin/dashboard", () => {
       songsFailed: 3,
       emailsSent: 4,
       emailsResent: 2,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
 
     const response = await GET();
@@ -46,6 +47,8 @@ describe("GET /api/admin/dashboard", () => {
       emailsSent: 4,
       emailsResent: 2,
       generationSuccessRate: 50,
+      campaignGoal: 3000,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
   });
 

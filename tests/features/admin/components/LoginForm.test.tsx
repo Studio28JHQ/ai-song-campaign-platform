@@ -30,9 +30,9 @@ describe("LoginForm", () => {
     });
 
     render(<LoginForm />);
-    await user.type(screen.getByLabelText("Email"), "admin@example.com");
-    await user.type(screen.getByLabelText("Password"), "correct-password");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Correo electrónico"), "admin@example.com");
+    await user.type(screen.getByLabelText("Contraseña"), "correct-password");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/admin/dashboard"));
     expect(global.fetch).toHaveBeenCalledWith(
@@ -50,9 +50,9 @@ describe("LoginForm", () => {
     });
 
     render(<LoginForm />);
-    await user.type(screen.getByLabelText("Email"), "admin@example.com");
-    await user.type(screen.getByLabelText("Password"), "wrong-password");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Correo electrónico"), "admin@example.com");
+    await user.type(screen.getByLabelText("Contraseña"), "wrong-password");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
     expect(pushMock).not.toHaveBeenCalled();
@@ -63,10 +63,10 @@ describe("LoginForm", () => {
     global.fetch = vi.fn();
 
     render(<LoginForm />);
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
-    expect(await screen.findByText("Enter your email address.")).toBeInTheDocument();
-    expect(screen.getByText("Enter your password.")).toBeInTheDocument();
+    expect(await screen.findByText("Ingresa tu correo electrónico.")).toBeInTheDocument();
+    expect(screen.getByText("Ingresa tu contraseña.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -78,10 +78,10 @@ describe("LoginForm", () => {
     });
 
     render(<LoginForm />);
-    await user.type(screen.getByLabelText("Email"), "admin@example.com");
-    await user.type(screen.getByLabelText("Password"), "correct-password");
-    await user.click(screen.getByLabelText(/remember me/i));
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(screen.getByLabelText("Correo electrónico"), "admin@example.com");
+    await user.type(screen.getByLabelText("Contraseña"), "correct-password");
+    await user.click(screen.getByLabelText(/mantener sesión iniciada/i));
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];

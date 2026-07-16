@@ -18,6 +18,11 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
 
   async getSummary(): Promise<DashboardSummaryCounts> {
     try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
       const [
         totalLeads,
         lyricsGenerated,
@@ -29,6 +34,9 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         songsFailed,
         emailsSent,
         emailsResent,
+        today,
+        last7Days,
+        last30Days,
       ] = await Promise.all([
         this.client.lead.count(),
         this.client.lyrics.count(),
@@ -40,6 +48,9 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         this.client.song.count({ where: { status: PrismaSongStatus.FAILED } }),
         this.client.song.count({ where: { emailedAt: { not: null } } }),
         this.client.auditLog.count({ where: { action: "resend_email" } }),
+        this.averageGenerationMinutesSince(startOfToday),
+        this.averageGenerationMinutesSince(sevenDaysAgo),
+        this.averageGenerationMinutesSince(thirtyDaysAgo),
       ]);
 
       return {
@@ -53,6 +64,7 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         songsFailed,
         emailsSent,
         emailsResent,
+        averageGenerationMinutes: { today, last7Days, last30Days },
       };
     } catch (error) {
       throw new DatabaseError("Unexpected database error while loading the dashboard summary.", {
@@ -61,5 +73,35 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         context: { operation: "getSummary" },
       });
     }
+  }
+
+  /**
+   * Sprint ADMIN-1 — Backoffice de Campaña. Average minutes between
+   * `submittedAt` and `completedAt` over `COMPLETED` songs finished
+   * since `since` — `null` (never a throw) when none have completed in
+   * that window yet, per the brief's "Do not fail" requirement. A plain
+   * in-memory average over a handful of rows, not a raw SQL aggregate —
+   * this campaign is capped at a few thousand songs total (see
+   * PROJECT_MANIFEST.md), so this stays cheap without extra query
+   * complexity.
+   */
+  private async averageGenerationMinutesSince(since: Date): Promise<number | null> {
+    const songs = await this.client.song.findMany({
+      where: {
+        status: PrismaSongStatus.COMPLETED,
+        completedAt: { gte: since },
+        submittedAt: { not: null },
+      },
+      select: { submittedAt: true, completedAt: true },
+    });
+
+    if (songs.length === 0) return null;
+
+    const totalMinutes = songs.reduce((sum, song) => {
+      const minutes = (song.completedAt!.getTime() - song.submittedAt!.getTime()) / 60_000;
+      return sum + minutes;
+    }, 0);
+
+    return Math.round((totalMinutes / songs.length) * 10) / 10;
   }
 }

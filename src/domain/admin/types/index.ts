@@ -1,10 +1,13 @@
 /**
- * Internal entity state for `AdminUser`. Not exported for external
- * mutation. There is no `CreateAdminUserInput` here — accounts are
- * provisioned directly against the database (see PROJECT_MANIFEST.md;
- * user management is out of scope for this module), so the only lifecycle
- * this domain models is authentication itself.
+ * Sprint ADMIN-1 — Backoffice de Campaña. The two prepared roles — no
+ * permission difference is implemented yet between them (see
+ * `AdminUser.assertValidRole`); this only constrains what can be
+ * persisted, ready for a future authorization pass.
  */
+export const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+/** Internal entity state for `AdminUser`. Not exported for external mutation. */
 export interface AdminUserProps {
   id: string;
   email: string;
@@ -15,6 +18,18 @@ export interface AdminUserProps {
   lastLogin: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Input to `AdminUser.create` (Sprint ADMIN-1 — Backoffice de
+ * Campaña). `passwordHash` is already hashed by the caller (see
+ * `PasswordHasher`) — the domain layer never sees a plaintext password.
+ */
+export interface CreateAdminUserInput {
+  email: string;
+  passwordHash: string;
+  name: string;
+  role: string;
 }
 
 /**

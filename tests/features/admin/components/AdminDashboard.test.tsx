@@ -1,13 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminDashboard } from "@/features/admin/components/AdminDashboard";
-
-const pushMock = vi.fn();
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
-}));
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body };
@@ -25,132 +18,92 @@ const summaryBody = {
   emailsSent: 5,
   emailsResent: 2,
   generationSuccessRate: 63,
-};
-const searchBody = {
-  items: [
-    {
-      id: "lead-1",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      parentName: "Jane Doe",
-      babyName: "Baby Doe",
-      email: "jane@example.com",
-      phone: null,
-      songStatus: "COMPLETED",
-      emailSent: true,
-    },
-  ],
-  total: 1,
-  page: 1,
-  pageSize: 20,
+  campaignGoal: 3000,
+  averageGenerationMinutes: { today: null, last7Days: 4.5, last30Days: 6.2 },
 };
 
+/**
+ * Sprint ADMIN-1 — Backoffice de Campaña. `AdminDashboard` no longer
+ * renders the participants table (moved to its own "Familias" page,
+ * see `LeadSearchTable.test.tsx`) — this only covers the KPI cards,
+ * campaign goal progress, generation-time stats, and funnel.
+ */
 describe("AdminDashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("loads and displays the summary indicators", async () => {
-    global.fetch = vi.fn((url: string) => {
-      if (url.startsWith("/api/admin/dashboard")) return Promise.resolve(jsonResponse(summaryBody));
-      return Promise.resolve(jsonResponse(searchBody));
-    }) as unknown as typeof fetch;
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(summaryBody)),
+    ) as unknown as typeof fetch;
 
     render(<AdminDashboard />);
 
-    expect(screen.getByText("Loading summary...")).toBeInTheDocument();
+    expect(screen.getByText("Cargando resumen...")).toBeInTheDocument();
 
-    expect(await screen.findByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Total Leads")).toBeInTheDocument();
-    expect(screen.getByText("Lyrics Generated")).toBeInTheDocument();
-    expect(screen.getByText("Lyrics Approved")).toBeInTheDocument();
-    expect(screen.getByText("Songs Requested")).toBeInTheDocument();
-    expect(screen.getByText("Songs Queued")).toBeInTheDocument();
-    expect(screen.getByText("Songs Generating")).toBeInTheDocument();
-    expect(screen.getByText("Songs Completed")).toBeInTheDocument();
-    expect(screen.getByText("Songs Failed")).toBeInTheDocument();
-    expect(screen.getByText("Emails Sent")).toBeInTheDocument();
-    expect(screen.getByText("Email Resent")).toBeInTheDocument();
-    expect(screen.getByText("Generation Success Rate")).toBeInTheDocument();
-    expect(screen.getByText("63%")).toBeInTheDocument();
+    const totalLeadsLabel = await screen.findByText("Familias registradas");
+    const totalLeadsCard = totalLeadsLabel.closest("div")?.parentElement as HTMLElement;
+    expect(within(totalLeadsCard).getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("Letras generadas")).toBeInTheDocument();
+    expect(screen.getByText("Letras aprobadas")).toBeInTheDocument();
+    expect(screen.getByText("Canciones completadas")).toBeInTheDocument();
+
+    const pendingLabel = screen.getByText("Canciones pendientes");
+    const pendingCard = pendingLabel.closest("div")?.parentElement as HTMLElement;
+    expect(within(pendingCard).getByText("2")).toBeInTheDocument(); // songsQueued + songsGenerating
+
+    expect(screen.getByText("Canciones fallidas")).toBeInTheDocument();
+    expect(screen.getByText("Correos enviados")).toBeInTheDocument();
   });
 
   it("shows a friendly error message when the summary fails to load", async () => {
-    global.fetch = vi.fn((url: string) => {
-      if (url.startsWith("/api/admin/dashboard")) {
-        return Promise.resolve(jsonResponse({ message: "Something went wrong." }, false, 500));
-      }
-      return Promise.resolve(jsonResponse(searchBody));
-    }) as unknown as typeof fetch;
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ message: "Something went wrong." }, false, 500)),
+    ) as unknown as typeof fetch;
 
     render(<AdminDashboard />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong.");
   });
 
-  it("searches participants and renders matching rows in the table", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi.fn((url: string) => {
-      if (url.startsWith("/api/admin/dashboard")) return Promise.resolve(jsonResponse(summaryBody));
-      return Promise.resolve(jsonResponse(searchBody));
-    });
-    global.fetch = fetchMock as unknown as typeof fetch;
+  it("shows the campaign goal progress bar using the real goal and completed count", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(summaryBody)),
+    ) as unknown as typeof fetch;
 
     render(<AdminDashboard />);
 
-    expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
-    expect(screen.getByText("Baby Doe")).toBeInTheDocument();
-    expect(screen.getByText("jane@example.com")).toBeInTheDocument();
-    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
-    const row = screen.getByText("jane@example.com").closest("tr");
-    expect(row).toHaveTextContent("Sent");
-
-    await user.type(screen.getByLabelText(/search participants/i), "jane");
-
-    await waitFor(() => {
-      const lastCall = fetchMock.mock.calls.at(-1)?.[0] as string;
-      expect(lastCall).toContain("q=jane");
-    });
+    expect(await screen.findByText("5 / 3000 (0%)")).toBeInTheDocument();
+    const progressbar = screen.getByRole("progressbar");
+    expect(progressbar).toHaveAttribute("aria-valuenow", "0");
   });
 
-  it("combines filters with the search query, and points the export link at the same filters", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi.fn((url: string) => {
-      if (url.startsWith("/api/admin/dashboard")) return Promise.resolve(jsonResponse(summaryBody));
-      return Promise.resolve(jsonResponse(searchBody));
-    });
-    global.fetch = fetchMock as unknown as typeof fetch;
+  it("shows 'No disponible' for a period with no completed songs, and the real value otherwise", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(summaryBody)),
+    ) as unknown as typeof fetch;
 
     render(<AdminDashboard />);
-    await screen.findByText("Jane Doe");
 
-    await user.selectOptions(screen.getByLabelText("Song status"), "FAILED");
-    await user.selectOptions(screen.getByLabelText("Email status"), "NOT_SENT");
-    await user.type(screen.getByLabelText("City"), "Austin");
-
-    await waitFor(() => {
-      const lastCall = fetchMock.mock.calls.at(-1)?.[0] as string;
-      expect(lastCall).toContain("songStatus=FAILED");
-      expect(lastCall).toContain("emailStatus=NOT_SENT");
-      expect(lastCall).toContain("city=Austin");
-    });
-
-    const exportLink = screen.getByRole("link", { name: "Export CSV" });
-    const href = exportLink.getAttribute("href") ?? "";
-    expect(href).toContain("/api/admin/leads/export");
-    expect(href).toContain("songStatus=FAILED");
-    expect(href).toContain("emailStatus=NOT_SENT");
-    expect(href).toContain("city=Austin");
+    expect(await screen.findByText("No disponible")).toBeInTheDocument();
+    expect(screen.getByText("4.5 min")).toBeInTheDocument();
+    expect(screen.getByText("6.2 min")).toBeInTheDocument();
   });
 
-  it("links each row to the read-only lead detail page", async () => {
-    global.fetch = vi.fn((url: string) => {
-      if (url.startsWith("/api/admin/dashboard")) return Promise.resolve(jsonResponse(summaryBody));
-      return Promise.resolve(jsonResponse(searchBody));
-    }) as unknown as typeof fetch;
+  it("shows the conversion funnel with real counts, in order", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(summaryBody)),
+    ) as unknown as typeof fetch;
 
     render(<AdminDashboard />);
 
-    const link = await screen.findByRole("link", { name: /view/i });
-    expect(link).toHaveAttribute("href", "/admin/leads/lead-1");
+    const funnelHeading = await screen.findByText("Embudo de conversión");
+    const funnelList = funnelHeading.parentElement?.querySelector("ol");
+    expect(funnelList).toHaveTextContent("Registro");
+    expect(funnelList).toHaveTextContent("Letra generada");
+    expect(funnelList).toHaveTextContent("Letra aprobada");
+    expect(funnelList).toHaveTextContent("Canción generada");
+    expect(funnelList).toHaveTextContent("Correo enviado");
   });
 });

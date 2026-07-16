@@ -95,13 +95,13 @@ export class GetLeadDetailUseCase {
     song: SongSnapshot | null,
   ): Promise<ExecutionHistoryItem[]> {
     const history: ExecutionHistoryItem[] = [
-      { type: "lead_created", label: "Lead created", timestamp: leadCreatedAt, actor: null },
+      { type: "lead_created", label: "Familia registrada", timestamp: leadCreatedAt, actor: null },
     ];
 
     for (const version of lyricsHistory) {
       history.push({
         type: "lyrics_generated",
-        label: `Lyrics generated (v${version.version})`,
+        label: `Letra generada (v${version.version})`,
         timestamp: version.createdAt,
         actor: null,
       });
@@ -109,7 +109,7 @@ export class GetLeadDetailUseCase {
       if (version.approved) {
         history.push({
           type: "lyrics_approved",
-          label: `Lyrics approved (v${version.version})`,
+          label: `Letra aprobada (v${version.version})`,
           timestamp: version.createdAt,
           actor: null,
         });
@@ -121,7 +121,7 @@ export class GetLeadDetailUseCase {
       if (entry.action === "view_lead") {
         history.push({
           type: "lead_viewed",
-          label: "Lead viewed",
+          label: "Ficha consultada",
           timestamp: entry.createdAt,
           actor: entry.adminId,
         });
@@ -131,7 +131,7 @@ export class GetLeadDetailUseCase {
     if (song) {
       history.push({
         type: "song_requested",
-        label: "Song requested",
+        label: "Canción solicitada",
         timestamp: song.createdAt,
         actor: null,
       });
@@ -139,7 +139,7 @@ export class GetLeadDetailUseCase {
       if (song.status === SongStatus.COMPLETED && song.generatedAt) {
         history.push({
           type: "song_completed",
-          label: "Song completed",
+          label: "Canción completada",
           timestamp: song.generatedAt,
           actor: null,
         });
@@ -148,7 +148,7 @@ export class GetLeadDetailUseCase {
       if (song.status === SongStatus.FAILED) {
         history.push({
           type: "song_failed",
-          label: "Song failed",
+          label: "Canción fallida",
           timestamp: song.updatedAt,
           actor: null,
         });
@@ -157,7 +157,7 @@ export class GetLeadDetailUseCase {
       if (song.emailedAt) {
         history.push({
           type: "email_sent_automatic",
-          label: "Automatic email sent",
+          label: "Correo enviado automáticamente",
           timestamp: song.emailedAt,
           actor: null,
         });
@@ -169,7 +169,7 @@ export class GetLeadDetailUseCase {
           const reason = entry.metadata?.reason;
           history.push({
             type: "email_resent_manual",
-            label: "Manual email resent",
+            label: "Correo reenviado manualmente",
             timestamp: entry.createdAt,
             actor: entry.adminId,
             detail: typeof reason === "string" ? reason : null,
@@ -177,7 +177,7 @@ export class GetLeadDetailUseCase {
         } else if (entry.action === "retry_song") {
           history.push({
             type: "song_retried",
-            label: "Retry executed",
+            label: "Reintento ejecutado",
             timestamp: entry.createdAt,
             actor: entry.adminId,
           });

@@ -13,9 +13,9 @@ const loginFormSchema = z.object({
   email: z
     .string()
     .trim()
-    .min(1, "Enter your email address.")
-    .email("Enter a valid email address."),
-  password: z.string().min(1, "Enter your password."),
+    .min(1, "Ingresa tu correo electrónico.")
+    .email("Ingresa un correo electrónico válido."),
+  password: z.string().min(1, "Ingresa tu contraseña."),
   rememberMe: z.boolean(),
 });
 
@@ -51,7 +51,7 @@ export function LoginForm() {
       ) : null}
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="admin-email">Email</Label>
+        <Label htmlFor="admin-email">Correo electrónico</Label>
         <Input
           id="admin-email"
           type="email"
@@ -67,7 +67,7 @@ export function LoginForm() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="admin-password">Password</Label>
+        <Label htmlFor="admin-password">Contraseña</Label>
         <Input
           id="admin-password"
           type="password"
@@ -84,11 +84,11 @@ export function LoginForm() {
 
       <Label className="flex items-center gap-2 text-sm font-normal">
         <input type="checkbox" className="size-4" {...register("rememberMe")} />
-        Remember me
+        Mantener sesión iniciada
       </Label>
 
       <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
-        {isSubmitting ? "Signing in..." : "Sign In"}
+        {isSubmitting ? "Iniciando sesión..." : "Iniciar sesión"}
       </Button>
     </form>
   );

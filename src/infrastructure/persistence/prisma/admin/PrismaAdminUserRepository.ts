@@ -22,6 +22,35 @@ export class PrismaAdminUserRepository implements AdminUserRepository {
     }
   }
 
+  async findById(id: string): Promise<AdminUser | null> {
+    try {
+      const record = await this.client.adminUser.findUnique({ where: { id } });
+      return record ? AdminUserMapper.toDomain(record) : null;
+    } catch (error) {
+      this.handleError(error, { operation: "findById" });
+    }
+  }
+
+  async findAll(): Promise<AdminUser[]> {
+    try {
+      const records = await this.client.adminUser.findMany({ orderBy: { createdAt: "asc" } });
+      return records.map(AdminUserMapper.toDomain);
+    } catch (error) {
+      this.handleError(error, { operation: "findAll" });
+    }
+  }
+
+  async create(adminUser: AdminUser): Promise<AdminUser> {
+    try {
+      const record = await this.client.adminUser.create({
+        data: AdminUserMapper.toCreateInput(adminUser),
+      });
+      return AdminUserMapper.toDomain(record);
+    } catch (error) {
+      this.handleError(error, { operation: "create", adminId: adminUser.id });
+    }
+  }
+
   async update(adminUser: AdminUser): Promise<AdminUser> {
     try {
       const record = await this.client.adminUser.update({

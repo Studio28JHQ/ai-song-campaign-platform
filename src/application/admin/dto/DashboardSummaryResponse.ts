@@ -1,3 +1,5 @@
+import type { AverageGenerationMinutes } from "../contracts/AdminDashboardGate";
+
 /** Output of `GetDashboardSummaryUseCase`. Plain indicators — no charts, no trends, no BI. */
 export interface DashboardSummaryResponse {
   totalLeads: number;
@@ -12,4 +14,7 @@ export interface DashboardSummaryResponse {
   emailsResent: number;
   /** `songsCompleted / songsRequested`, as a whole-number percentage (0 when no songs have been requested yet). */
   generationSuccessRate: number;
+  /** Sprint ADMIN-1 — Backoffice de Campaña. `CAMPAIGN_MAX_SONGS` ("3000 canciones"), for the goal progress bar. */
+  campaignGoal: number;
+  averageGenerationMinutes: AverageGenerationMinutes;
 }

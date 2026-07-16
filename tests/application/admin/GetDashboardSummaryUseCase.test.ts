@@ -17,15 +17,16 @@ function fakeGate(
       songsFailed: 3,
       emailsSent: 5,
       emailsResent: 2,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       ...counts,
     }),
   };
 }
 
 describe("GetDashboardSummaryUseCase", () => {
-  it("returns the indicators, computing generationSuccessRate from the gate's counts", async () => {
+  it("returns the indicators, computing generationSuccessRate from the gate's counts, plus the campaign goal", async () => {
     const gate = fakeGate();
-    const useCase = new GetDashboardSummaryUseCase(gate);
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
 
     const result = await useCase.execute();
 
@@ -41,13 +42,15 @@ describe("GetDashboardSummaryUseCase", () => {
       emailsSent: 5,
       emailsResent: 2,
       generationSuccessRate: 63, // round(5/8 * 100)
+      campaignGoal: 3000,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
     expect(gate.getSummary).toHaveBeenCalledTimes(1);
   });
 
   it("returns a 0% success rate when no songs have been requested yet, without dividing by zero", async () => {
     const gate = fakeGate({ songsRequested: 0, songsCompleted: 0, songsFailed: 0 });
-    const useCase = new GetDashboardSummaryUseCase(gate);
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
 
     const result = await useCase.execute();
 
@@ -56,10 +59,19 @@ describe("GetDashboardSummaryUseCase", () => {
 
   it("returns a 100% success rate when every requested song completed", async () => {
     const gate = fakeGate({ songsRequested: 4, songsCompleted: 4, songsFailed: 0 });
-    const useCase = new GetDashboardSummaryUseCase(gate);
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
 
     const result = await useCase.execute();
 
     expect(result.generationSuccessRate).toBe(100);
+  });
+
+  it("passes the campaign goal through unchanged", async () => {
+    const gate = fakeGate();
+    const useCase = new GetDashboardSummaryUseCase(gate, 500);
+
+    const result = await useCase.execute();
+
+    expect(result.campaignGoal).toBe(500);
   });
 });

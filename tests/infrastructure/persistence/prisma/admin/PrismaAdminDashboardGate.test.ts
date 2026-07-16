@@ -13,6 +13,7 @@ function fakeClient(counts: {
   songsFailed: number;
   emailsSent: number;
   emailsResent: number;
+  completedSongs?: Array<{ submittedAt: Date; completedAt: Date }>;
 }): PrismaClient {
   const leadCount = vi.fn().mockResolvedValue(counts.totalLeads);
   const lyricsCount = vi
@@ -28,17 +29,18 @@ function fakeClient(counts: {
     .mockResolvedValueOnce(counts.songsFailed)
     .mockResolvedValueOnce(counts.emailsSent);
   const auditLogCount = vi.fn().mockResolvedValue(counts.emailsResent);
+  const songFindMany = vi.fn().mockResolvedValue(counts.completedSongs ?? []);
 
   return {
     lead: { count: leadCount },
     lyrics: { count: lyricsCount },
-    song: { count: songCount },
+    song: { count: songCount, findMany: songFindMany },
     auditLog: { count: auditLogCount },
   } as unknown as PrismaClient;
 }
 
 describe("PrismaAdminDashboardGate.getSummary", () => {
-  it("returns the dashboard indicators as plain counts", async () => {
+  it("returns the dashboard indicators as plain counts, with no completed songs in any window", async () => {
     const client = fakeClient({
       totalLeads: 10,
       lyricsGenerated: 12,
@@ -66,6 +68,7 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       songsFailed: 2,
       emailsSent: 4,
       emailsResent: 1,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
   });
 
@@ -89,11 +92,43 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     expect(client.auditLog.count).toHaveBeenCalledWith({ where: { action: "resend_email" } });
   });
 
+  it("averages submittedAt-to-completedAt minutes over completed songs in the window", async () => {
+    const client = fakeClient({
+      totalLeads: 1,
+      lyricsGenerated: 1,
+      lyricsApproved: 1,
+      songsRequested: 1,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 1,
+      songsFailed: 0,
+      emailsSent: 1,
+      emailsResent: 0,
+      completedSongs: [
+        {
+          submittedAt: new Date("2026-01-01T00:00:00.000Z"),
+          completedAt: new Date("2026-01-01T00:05:00.000Z"),
+        },
+        {
+          submittedAt: new Date("2026-01-01T00:00:00.000Z"),
+          completedAt: new Date("2026-01-01T00:07:00.000Z"),
+        },
+      ],
+    });
+    const gate = new PrismaAdminDashboardGate(client);
+
+    const summary = await gate.getSummary();
+
+    expect(summary.averageGenerationMinutes.today).toBe(6);
+    expect(summary.averageGenerationMinutes.last7Days).toBe(6);
+    expect(summary.averageGenerationMinutes.last30Days).toBe(6);
+  });
+
   it("throws a shared DatabaseError on an unexpected failure", async () => {
     const client = {
       lead: { count: vi.fn().mockRejectedValue(new Error("connection lost")) },
       lyrics: { count: vi.fn() },
-      song: { count: vi.fn() },
+      song: { count: vi.fn(), findMany: vi.fn() },
       auditLog: { count: vi.fn() },
     } as unknown as PrismaClient;
     const gate = new PrismaAdminDashboardGate(client);

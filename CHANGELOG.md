@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.17.1] - 2026-08-03
+## [1.18.0] - 2026-08-04
+
+Sprint ADMIN-1 — Backoffice de Campaña. Transforms the admin area into a sidebar-driven backoffice, entirely in Spanish, for the campaign team — reusing the existing design system, colors, and shared components throughout. No change to authentication, the queue, AI providers, the generation pipeline, or the public site.
+
+### Added
+
+- Sidebar layout (`AdminSidebar`, `app/admin/layout.tsx`): one entry per module — Dashboard, Familias, Canciones, Letras, Administradores, Auditoría, Configuración — each with a `lucide-react` icon, active-link highlighting, and the existing `LogoutButton` at the bottom. Renders only when a session exists, so `/admin/login` is unaffected; no existing page was moved to a new route.
+- Dashboard: campaign goal progress bar (`campaignGoal` from `CAMPAIGN_MAX_SONGS`, never hardcoded), average generation time for Hoy/Últimos 7 días/Últimos 30 días (`"No disponible"` when a window has no completed songs — never fails), and a real-count conversion funnel (Registro → Letra generada → Letra aprobada → Canción generada → Correo enviado). KPI cards gained icons and a "Canciones pendientes" card (queued + generating).
+- Familias (`/admin/leads`): the existing search/filter/export table, moved to its own page (previously embedded in the Dashboard).
+- Canciones (`/admin/songs`) and Letras (`/admin/lyrics`): two new read-only lists via the existing "Gate" pattern (`AdminSongListGate`/`AdminLyricsListGate`, mirroring `AdminDashboardGate`) — no new methods were added to the core `SongRepository`/`LyricsRepository`. Canciones reuses the existing signed-URL resolver and `ResendEmailAction` for reenviar correo.
+- Detalle de familia: existing execution history restyled as a visual timeline (Registro → Letras → Aprobación → Canción → Correo) with timestamps — same underlying data (`GetLeadDetailUseCase.buildExecutionHistory`), only presentation and Spanish labels changed.
+- Administradores (`/admin/users`): full CRUD — listar, crear, editar, cambiar contraseña, activar/desactivar (soft delete via the existing `active` field). `AdminUser` gained a `create`/`updateProfile`/`changePasswordHash`/`activate`/`deactivate` lifecycle (previously login-only); `AdminUserRepository` gained `findAll`/`findById`/`create`. Roles `ADMIN`/`SUPER_ADMIN` are persisted (existing `role` string column) with no permission difference yet.
+- Auditoría (`/admin/audit`): a read-only view over the existing `AuditLog` table (`AuditLogRepository.findRecent`), covering both admin actions and system-recorded security events, with the acting admin's name resolved and every action/entity label in Spanish.
+- Configuración (`/admin/settings`): read-only display of the campaign's operational settings (goal, max lyric attempts, generation timeout) from `appConfig` — never secrets.
+
+### Changed
+
+- Every existing admin-facing string (login, logout, resend/retry actions, the Familias table, Lead Detail) translated to Spanish; date/time formatting switched to `es-MX`.
 
 Sprint UI-3D — UX Polish. Fix-only pass on five specific UX details: no new components, no refactor, no backend/domain/database/architecture changes.
 

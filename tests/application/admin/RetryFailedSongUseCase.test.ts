@@ -46,6 +46,9 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   async findByEntity(entity: string, entityId: string): Promise<AuditLogEntry[]> {
     return this.created.filter((e) => e.entity === entity && e.entityId === entityId);
   }
+  async findRecent(limit: number): Promise<AuditLogEntry[]> {
+    return this.created.slice(0, limit);
+  }
 }
 
 function buildFailedSong(): Song {

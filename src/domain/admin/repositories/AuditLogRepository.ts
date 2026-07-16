@@ -8,4 +8,6 @@ import type { AuditLogEntry } from "../entities/AuditLogEntry";
 export interface AuditLogRepository {
   create(entry: AuditLogEntry): Promise<AuditLogEntry>;
   findByEntity(entity: string, entityId: string): Promise<AuditLogEntry[]>;
+  /** Sprint ADMIN-1 — Backoffice de Campaña. The most recent entries across every entity, newest first — for the "Auditoría" screen. */
+  findRecent(limit: number): Promise<AuditLogEntry[]>;
 }

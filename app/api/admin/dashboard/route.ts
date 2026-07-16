@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import { GetDashboardSummaryUseCase } from "@/application/admin/use-cases/GetDashboardSummaryUseCase";
+import { appConfig } from "@/config/app";
 import { PrismaAdminDashboardGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminDashboardGate";
 import { logger } from "@/shared/logger/logger";
 
 /**
- * GET /api/admin/dashboard — the four summary cards (Total Leads, Songs
- * Completed, Songs Pending, Songs Failed). No charts, no analytics. Access
- * is already gated by `middleware.ts`.
+ * GET /api/admin/dashboard — the Dashboard's summary cards, campaign
+ * goal progress, generation-time stats, and funnel counts (Sprint
+ * ADMIN-1 — Backoffice de Campaña). No charts, no analytics. Access is
+ * already gated by `middleware.ts`.
  */
 
-const getDashboardSummaryUseCase = new GetDashboardSummaryUseCase(new PrismaAdminDashboardGate());
+const getDashboardSummaryUseCase = new GetDashboardSummaryUseCase(
+  new PrismaAdminDashboardGate(),
+  appConfig.campaign.maxSongs,
+);
 
 export async function GET(): Promise<NextResponse> {
   try {

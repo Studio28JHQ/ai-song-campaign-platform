@@ -1,20 +1,72 @@
-import { BusinessRuleError } from "@/shared/errors";
-import type { AdminUserProps, AdminUserSnapshot } from "../types";
+import { BusinessRuleError, ValidationError } from "@/shared/errors";
+import { isValidEmailFormat } from "@/shared/validation/email";
+import {
+  ADMIN_ROLES,
+  type AdminUserProps,
+  type AdminUserSnapshot,
+  type CreateAdminUserInput,
+} from "../types";
 
 /**
- * A campaign operator account. There is no registration/creation flow in
- * this module — accounts are provisioned directly against the database
- * (see PROJECT_MANIFEST.md; user management and role management are out
- * of scope). This entity only models the read/login lifecycle: whether
- * the account is currently allowed to authenticate, and recording a
- * successful login.
+ * A campaign operator account. Sprint ADMIN-1 (Backoffice de Campaña)
+ * added the create/edit/password/activation lifecycle on top of the
+ * original read/login lifecycle — accounts are no longer provisioned
+ * only by hand against the database.
  */
 export class AdminUser {
   private constructor(private props: AdminUserProps) {}
 
+  /** Creates a brand-new admin account. `passwordHash` must already be hashed (see `PasswordHasher`) — this layer never sees a plaintext password. */
+  static create(input: CreateAdminUserInput): AdminUser {
+    const email = AdminUser.requireNonEmpty(input.email, "email").toLowerCase();
+    if (!isValidEmailFormat(email)) {
+      throw new ValidationError("Enter a valid email address.", {
+        code: "admin_user.invalid_email_format",
+      });
+    }
+
+    const name = AdminUser.requireNonEmpty(input.name, "name");
+    const passwordHash = AdminUser.requireNonEmpty(input.passwordHash, "passwordHash");
+    const role = AdminUser.assertValidRole(input.role);
+
+    const now = new Date();
+
+    return new AdminUser({
+      id: crypto.randomUUID(),
+      email,
+      passwordHash,
+      name,
+      role,
+      active: true,
+      lastLogin: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
   /** Rehydrates an AdminUser from already-persisted state. */
   static fromPersistence(props: AdminUserProps): AdminUser {
     return new AdminUser({ ...props });
+  }
+
+  private static requireNonEmpty(value: string, field: string): string {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      throw new ValidationError(`${field} is required.`, {
+        code: `admin_user.${field}_required`,
+      });
+    }
+    return trimmed;
+  }
+
+  private static assertValidRole(role: string): string {
+    if (!ADMIN_ROLES.includes(role as (typeof ADMIN_ROLES)[number])) {
+      throw new ValidationError(`role must be one of: ${ADMIN_ROLES.join(", ")}.`, {
+        code: "admin_user.invalid_role",
+        context: { role },
+      });
+    }
+    return role;
   }
 
   /** Throws if this account is not currently allowed to authenticate. */
@@ -30,6 +82,30 @@ export class AdminUser {
   /** Records a successful login. */
   recordLogin(): void {
     this.props.lastLogin = new Date();
+    this.props.updatedAt = new Date();
+  }
+
+  /** Updates the editable profile fields — name and role. Email and password have their own dedicated operations. */
+  updateProfile(input: { name: string; role: string }): void {
+    this.props.name = AdminUser.requireNonEmpty(input.name, "name");
+    this.props.role = AdminUser.assertValidRole(input.role);
+    this.props.updatedAt = new Date();
+  }
+
+  /** Replaces the stored password hash — the caller must have already hashed the new password (see `PasswordHasher`). */
+  changePasswordHash(newPasswordHash: string): void {
+    this.props.passwordHash = AdminUser.requireNonEmpty(newPasswordHash, "passwordHash");
+    this.props.updatedAt = new Date();
+  }
+
+  /** Soft-disables the account — it can no longer authenticate, but the row (and its audit trail) is preserved (see `AdminUserRepository` — no hard delete). */
+  deactivate(): void {
+    this.props.active = false;
+    this.props.updatedAt = new Date();
+  }
+
+  activate(): void {
+    this.props.active = true;
     this.props.updatedAt = new Date();
   }
 

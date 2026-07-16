@@ -9,26 +9,26 @@ import { buildLeadsExportUrl } from "../services/exportLeadsCsv";
 import type { LeadSortField } from "../services/searchLeads";
 
 const COLUMNS: Array<{ field: LeadSortField; label: string }> = [
-  { field: "createdAt", label: "Created" },
-  { field: "parentName", label: "Parent" },
-  { field: "babyName", label: "Baby" },
-  { field: "email", label: "Email" },
-  { field: "songStatus", label: "Song Status" },
+  { field: "createdAt", label: "Registro" },
+  { field: "parentName", label: "Familia" },
+  { field: "babyName", label: "Bebé" },
+  { field: "email", label: "Correo" },
+  { field: "songStatus", label: "Estado de la canción" },
 ];
 
 const SONG_STATUS_OPTIONS = [
-  { value: "", label: "Any song status" },
-  { value: "QUEUED", label: "Queued" },
-  { value: "GENERATING", label: "Generating" },
-  { value: "COMPLETED", label: "Completed" },
-  { value: "FAILED", label: "Failed" },
-  { value: "NONE", label: "No song yet" },
+  { value: "", label: "Cualquier estado" },
+  { value: "QUEUED", label: "En cola" },
+  { value: "GENERATING", label: "Generando" },
+  { value: "COMPLETED", label: "Completada" },
+  { value: "FAILED", label: "Fallida" },
+  { value: "NONE", label: "Sin canción aún" },
 ] as const;
 
 const EMAIL_STATUS_OPTIONS = [
-  { value: "", label: "Any email status" },
-  { value: "SENT", label: "Sent" },
-  { value: "NOT_SENT", label: "Not sent" },
+  { value: "", label: "Cualquier estado" },
+  { value: "SENT", label: "Enviado" },
+  { value: "NOT_SENT", label: "No enviado" },
 ] as const;
 
 function formatDate(value: string): string {
@@ -76,8 +76,8 @@ export function LeadSearchTable() {
       <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
         <Input
           type="search"
-          placeholder="Search by parent name, baby name, email, or phone..."
-          aria-label="Search participants"
+          placeholder="Buscar por nombre, correo o teléfono..."
+          aria-label="Buscar familias"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-sm"
@@ -85,7 +85,7 @@ export function LeadSearchTable() {
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <Label htmlFor="filter-date-from">From</Label>
+            <Label htmlFor="filter-date-from">Desde</Label>
             <Input
               id="filter-date-from"
               type="date"
@@ -94,7 +94,7 @@ export function LeadSearchTable() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor="filter-date-to">To</Label>
+            <Label htmlFor="filter-date-to">Hasta</Label>
             <Input
               id="filter-date-to"
               type="date"
@@ -103,7 +103,7 @@ export function LeadSearchTable() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor="filter-song-status">Song status</Label>
+            <Label htmlFor="filter-song-status">Estado</Label>
             <select
               id="filter-song-status"
               value={songStatus}
@@ -120,7 +120,7 @@ export function LeadSearchTable() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor="filter-email-status">Email status</Label>
+            <Label htmlFor="filter-email-status">Correo</Label>
             <select
               id="filter-email-status"
               value={emailStatus}
@@ -137,12 +137,12 @@ export function LeadSearchTable() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor="filter-city">City</Label>
+            <Label htmlFor="filter-city">Ciudad</Label>
             <Input
               id="filter-city"
               value={city}
               onChange={(event) => setCity(event.target.value)}
-              placeholder="e.g. Austin"
+              placeholder="Ej. Guadalajara"
             />
           </div>
         </div>
@@ -151,7 +151,7 @@ export function LeadSearchTable() {
           href={buildLeadsExportUrl(currentFilters)}
           className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
         >
-          Export CSV
+          Exportar CSV
         </a>
       </div>
 
@@ -178,10 +178,10 @@ export function LeadSearchTable() {
                 </th>
               ))}
               <th scope="col" className="px-3 py-2 font-medium">
-                Email Status
+                Estado del correo
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Actions
+                Acciones
               </th>
             </tr>
           </thead>
@@ -192,7 +192,7 @@ export function LeadSearchTable() {
                   colSpan={COLUMNS.length + 2}
                   className="px-3 py-4 text-center text-muted-foreground"
                 >
-                  Loading...
+                  Cargando...
                 </td>
               </tr>
             ) : items.length === 0 ? (
@@ -201,7 +201,7 @@ export function LeadSearchTable() {
                   colSpan={COLUMNS.length + 2}
                   className="px-3 py-4 text-center text-muted-foreground"
                 >
-                  No participants found.
+                  No se encontraron familias.
                 </td>
               </tr>
             ) : (
@@ -212,10 +212,10 @@ export function LeadSearchTable() {
                   <td className="px-3 py-2">{item.babyName}</td>
                   <td className="px-3 py-2">{item.email}</td>
                   <td className="px-3 py-2">{item.songStatus ?? "—"}</td>
-                  <td className="px-3 py-2">{item.emailSent ? "Sent" : "Not sent"}</td>
+                  <td className="px-3 py-2">{item.emailSent ? "Enviado" : "No enviado"}</td>
                   <td className="px-3 py-2">
                     <Link href={`/admin/leads/${item.id}`} className="text-primary underline">
-                      View
+                      Ver
                     </Link>
                   </td>
                 </tr>
@@ -227,7 +227,7 @@ export function LeadSearchTable() {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          Page {page} of {totalPages} ({total} total)
+          Página {page} de {totalPages} ({total} en total)
         </span>
         <div className="flex gap-2">
           <button
@@ -236,7 +236,7 @@ export function LeadSearchTable() {
             onClick={() => setPage(page - 1)}
             className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
-            Previous
+            Anterior
           </button>
           <button
             type="button"
@@ -244,7 +244,7 @@ export function LeadSearchTable() {
             onClick={() => setPage(page + 1)}
             className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
-            Next
+            Siguiente
           </button>
         </div>
       </div>

@@ -17,30 +17,31 @@ function formatDuration(seconds: number | null): string | null {
 }
 
 function formatTimestamp(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? new Date(value).toLocaleString("es-MX") : "—";
 }
 
 /**
  * The read-only Lead Detail screen (see docs/Product/User_Flow.md):
  * lead information, lyrics history, the approved version, song
  * status/audio/download, generation timestamps, email delivery status,
- * and the complete execution history. The only interactive controls are
- * the two operational recovery actions — Retry Generation (only for a
- * `FAILED` song) and Resend Email (only for a `COMPLETED` song whose
- * automatic email has already gone out) — everything else on this screen
- * is strictly read-only.
+ * and the complete execution history — presented as a timeline (Sprint
+ * ADMIN-1). The only interactive controls are the two operational
+ * recovery actions — Retry Generation (only for a `FAILED` song) and
+ * Resend Email (only for a `COMPLETED` song whose automatic email has
+ * already gone out) — everything else on this screen is strictly
+ * read-only.
  */
 export function LeadDetailView({ leadId }: LeadDetailViewProps) {
   const { detail, isLoading, notFound, errorMessage, refetch } = useLeadDetail(leadId);
 
   if (isLoading) {
-    return <p className="text-body text-muted-foreground">Loading...</p>;
+    return <p className="text-body text-muted-foreground">Cargando...</p>;
   }
 
   if (notFound) {
     return (
       <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        This lead could not be found.
+        No se encontró esta familia.
       </p>
     );
   }
@@ -48,7 +49,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
   if (errorMessage || !detail) {
     return (
       <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {errorMessage ?? "Something went wrong."}
+        {errorMessage ?? "Algo salió mal."}
       </p>
     );
   }
@@ -58,51 +59,51 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Lead Information</h2>
+        <h2 className="text-title font-semibold text-foreground">Información de la familia</h2>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-muted-foreground">Parent</dt>
+            <dt className="text-muted-foreground">Nombre</dt>
             <dd>{lead.parentName}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Baby</dt>
+            <dt className="text-muted-foreground">Bebé</dt>
             <dd>{lead.babyName}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Email</dt>
+            <dt className="text-muted-foreground">Correo</dt>
             <dd>{lead.email}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Phone</dt>
+            <dt className="text-muted-foreground">Teléfono</dt>
             <dd>{lead.phone ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">City</dt>
+            <dt className="text-muted-foreground">Ciudad</dt>
             <dd>{lead.city ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Status</dt>
+            <dt className="text-muted-foreground">Estado</dt>
             <dd>{lead.status}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Registered</dt>
+            <dt className="text-muted-foreground">Registrado</dt>
             <dd>{formatTimestamp(lead.createdAt)}</dd>
           </div>
         </dl>
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Lyrics History</h2>
+        <h2 className="text-title font-semibold text-foreground">Historial de letras</h2>
         {lyricsHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No lyrics generated yet.</p>
+          <p className="text-sm text-muted-foreground">Aún no se ha generado ninguna letra.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {lyricsHistory.map((version) => (
               <li key={version.id} className="rounded-lg border border-border p-3 text-sm">
                 <div className="mb-1 flex items-center justify-between text-muted-foreground">
-                  <span>Version {version.version}</span>
+                  <span>Versión {version.version}</span>
                   <span>
-                    {version.approved ? "Approved" : (version.rejectionReason ?? "Not approved")}
+                    {version.approved ? "Aprobada" : (version.rejectionReason ?? "No aprobada")}
                   </span>
                 </div>
                 <pre className="whitespace-pre-wrap text-foreground">{version.content}</pre>
@@ -113,45 +114,45 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Approved Lyrics</h2>
+        <h2 className="text-title font-semibold text-foreground">Letra aprobada</h2>
         {approvedLyrics ? (
           <pre className="whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground">
             {approvedLyrics.content}
           </pre>
         ) : (
-          <p className="text-sm text-muted-foreground">No approved lyrics yet.</p>
+          <p className="text-sm text-muted-foreground">Aún no hay una letra aprobada.</p>
         )}
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Song</h2>
+        <h2 className="text-title font-semibold text-foreground">Canción</h2>
         {song ? (
           <div className="flex flex-col gap-2 text-sm">
             <p>
-              <span className="text-muted-foreground">Status: </span>
+              <span className="text-muted-foreground">Estado: </span>
               {song.status}
             </p>
             <p>
-              <span className="text-muted-foreground">Generated at: </span>
+              <span className="text-muted-foreground">Generada el: </span>
               {formatTimestamp(song.generatedAt)}
             </p>
             <p>
-              <span className="text-muted-foreground">Email delivery: </span>
-              {song.emailedAt ? `Sent at ${formatTimestamp(song.emailedAt)}` : "Not sent"}
+              <span className="text-muted-foreground">Entrega por correo: </span>
+              {song.emailedAt ? `Enviado el ${formatTimestamp(song.emailedAt)}` : "No enviado"}
             </p>
 
             {song.audioUrl ? (
               <>
                 <audio controls src={song.audioUrl} className="w-full max-w-sm" />
                 {song.duration ? (
-                  <p className="text-muted-foreground">Duration: {formatDuration(song.duration)}</p>
+                  <p className="text-muted-foreground">Duración: {formatDuration(song.duration)}</p>
                 ) : null}
                 <a
                   href={song.audioUrl}
                   download
                   className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
                 >
-                  Download Song
+                  Descargar canción
                 </a>
               </>
             ) : null}
@@ -165,34 +166,47 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No song generated yet.</p>
+          <p className="text-sm text-muted-foreground">Aún no se ha generado ninguna canción.</p>
         )}
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Execution History</h2>
+        <h2 className="text-title font-semibold text-foreground">Línea de tiempo</h2>
         {executionHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No history yet.</p>
+          <p className="text-sm text-muted-foreground">Aún no hay historial.</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ol className="flex flex-col gap-0">
             {executionHistory.map((item, index) => (
               <li
                 key={`${item.type}-${item.timestamp}-${index}`}
-                className="flex flex-col gap-0.5 border-b border-border py-1 last:border-0"
+                className="relative flex gap-3 pb-5 pl-1 last:pb-0"
               >
-                <div className="flex justify-between">
-                  <span>
-                    {item.label}
-                    {item.actor ? (
-                      <span className="text-muted-foreground"> — by {item.actor}</span>
-                    ) : null}
-                  </span>
-                  <span className="text-muted-foreground">{formatTimestamp(item.timestamp)}</span>
+                <span aria-hidden className="flex flex-col items-center">
+                  <span className="mt-1 size-2.5 shrink-0 rounded-full bg-primary" />
+                  {index < executionHistory.length - 1 ? (
+                    <span className="w-px flex-1 bg-border" />
+                  ) : null}
+                </span>
+                <div className="flex flex-1 flex-col gap-0.5 text-sm">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="font-medium text-foreground">
+                      {item.label}
+                      {item.actor ? (
+                        <span className="font-normal text-muted-foreground">
+                          {" "}
+                          — por {item.actor}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="text-muted-foreground">{formatTimestamp(item.timestamp)}</span>
+                  </div>
+                  {item.detail ? (
+                    <span className="text-muted-foreground">{item.detail}</span>
+                  ) : null}
                 </div>
-                {item.detail ? <span className="text-muted-foreground">{item.detail}</span> : null}
               </li>
             ))}
-          </ul>
+          </ol>
         )}
       </section>
     </div>
