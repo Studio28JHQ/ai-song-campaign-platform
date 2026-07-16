@@ -56,7 +56,7 @@ export function CampaignHero({
         <div className="flex flex-col items-center gap-10 lg:flex-row lg:items-center lg:gap-16">
           <div className="mx-auto flex max-w-2xl flex-col lg:mx-0 lg:w-1/2">
             <div
-              className="flex flex-col rounded-[10px] p-[30px]"
+              className="flex flex-col rounded-[10px] p-[30px] text-center"
               style={{ backgroundColor: "rgba(255, 255, 255, 0.4)" }}
             >
               {headline}
