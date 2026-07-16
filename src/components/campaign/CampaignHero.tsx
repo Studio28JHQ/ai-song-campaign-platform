@@ -32,6 +32,12 @@ interface CampaignHeroProps {
  * composition. Mobile: a single `flex-col` in the same order the JSX
  * already declares (left column's content, then right column's) — no
  * `order-*` needed, since that's already the natural reading order.
+ *
+ * HOTFIX-UI — Hero Left Column. The left column is capped at
+ * `max-w-2xl` (was unconstrained) and its content now sits inside a
+ * translucent panel (`rgba(255,255,255,.4)`, matching a supplied
+ * reference) so the headline/description/form stay legible over the
+ * background artwork. Right column is untouched.
  */
 export function CampaignHero({
   headline,
@@ -48,10 +54,15 @@ export function CampaignHero({
       {decorations}
       <CampaignContainer className="relative z-10 pt-32 pb-16 lg:pt-44 lg:pb-20">
         <div className="flex flex-col items-center gap-10 lg:flex-row lg:items-center lg:gap-16">
-          <div className="flex flex-col lg:w-1/2">
-            {headline}
-            {description}
-            {form}
+          <div className="mx-auto flex max-w-2xl flex-col lg:mx-0 lg:w-1/2">
+            <div
+              className="flex flex-col rounded-[10px] p-[30px]"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.4)" }}
+            >
+              {headline}
+              {description}
+              {form}
+            </div>
           </div>
 
           <div className="flex flex-col items-center lg:w-1/2">

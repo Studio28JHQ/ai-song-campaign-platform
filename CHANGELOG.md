@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-08-06
+
+HOTFIX-UI — Hero Left Column. Layout and typography only, matching a supplied reference — no change to the right column, images, animations, copy, or spacing outside the new panel.
+
+### Changed
+
+- `CampaignHero`: the left column is now capped at `max-w-2xl` (`mx-auto`/`lg:mx-0`, was unconstrained), and its headline/description/form sit inside a new translucent panel (`background: rgba(255,255,255,.4)`, `padding: 30px`, `border-radius: 10px`) for legibility over the background artwork. Right column untouched.
+- `HeroSection`: the H1 is pinned to `font-size: 2em` via inline style (font-family/font-weight unchanged — already `var(--font-display), var(--font-heading)` / 700); the description gained `leading-[1.7]` and `max-w-full` (was `max-w-md`) for readability, with the same `margin-top` (`mt-5` = 20px) as before; the form card is now always centered (`mx-auto`, dropped the desktop-only `lg:mx-0`) since the panel — not the card — now owns left/right alignment on desktop.
+- `app/globals.css`: added `.theme-campaign h2 { font-size: 2em; }` so every `<h2>` on a public campaign page is sized consistently, regardless of which `CampaignHeading` variant it uses — scoped to `.theme-campaign`, so the admin panel is unaffected.
+
 ## [1.18.1] - 2026-08-05
 
 HOTFIX-ADMIN-2 — Bootstrap First Administrator. A one-off provisioning script only — no change to the Backoffice, authentication, authorization, or any UI.

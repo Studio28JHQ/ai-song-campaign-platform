@@ -253,6 +253,20 @@ body {
 }
 
 /**
+ * HOTFIX-UI — Hero Left Column. "Apply the H2 size consistently across
+ * all pages" — every `<h2>` on a public campaign page (`.theme-campaign`
+ * — `/`, `/generate`, `/song`) is 2em, regardless of which
+ * `CampaignHeading` variant (and therefore which font-size utility —
+ * `text-heading`, `text-title`) it was using before. The element
+ * selector's specificity wins over those single-class utilities without
+ * `!important`. Scoped to `.theme-campaign` only, so the admin panel
+ * (which never applies that class) is unaffected.
+ */
+.theme-campaign h2 {
+  font-size: 2em;
+}
+
+/**
  * Sprint UI-3A — Landing Experience. Activates Gotham Book
  * (`--font-body-campaign`, loaded but dormant since UI-2.5) as the body
  * font for the landing page only — applied on `app/page.tsx`'s root

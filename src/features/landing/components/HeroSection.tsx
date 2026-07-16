@@ -31,6 +31,15 @@ interface HeroSectionProps {
  * that component). Here, the right column stacks the seal above the
  * product (`z-10` on `CampaignAnimal`, a small `-mt-*` pull on
  * `CampaignProduct`) so they read as one composition, seal on top.
+ *
+ * HOTFIX-UI — Hero Left Column. Headline/description/form no longer
+ * carry their own `mx-auto`/`lg:mx-0`/max-width — `CampaignHero`'s left
+ * column and translucent panel now own that alignment. Headline's
+ * font-size is pinned to `2em` via inline `style` (guaranteed to win
+ * over the `text-display` utility's own font-size, regardless of class
+ * order); description gained `leading-[1.7]` and `max-w-full` for
+ * readability over the panel. The h2's font-size comes from the new
+ * `.theme-campaign h2` rule (`app/globals.css`), not a local override.
  */
 export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
   return (
@@ -63,18 +72,23 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
         />
       }
       headline={
-        <CampaignHeading as="h1" variant="display" className="mx-auto max-w-2xl font-bold lg:mx-0">
+        <CampaignHeading
+          as="h1"
+          variant="display"
+          className="font-bold"
+          style={{ fontSize: "2em" }}
+        >
           Una canción hecha con amor, solo para tu bebé
         </CampaignHeading>
       }
       description={
-        <p className="mx-auto mt-5 max-w-md text-lg text-foreground lg:mx-0">
+        <p className="mt-5 max-w-full text-lg leading-[1.7] text-foreground">
           Cuéntanos sobre tu familia y recibe, sin costo, una canción única — escrita e interpretada
           especialmente para tu bebé — directo a tu correo.
         </p>
       }
       form={
-        <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6 lg:mx-0">
+        <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6">
           <CampaignHeading as="h2" variant="title" className="mb-2.5">
             Crea la canción de tu bebé
           </CampaignHeading>
