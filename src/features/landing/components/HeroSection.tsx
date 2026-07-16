@@ -44,7 +44,7 @@ interface HeroSectionProps {
 export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
   return (
     <CampaignHero
-      background={<CampaignBackground variant="ba-da-ba" />}
+      background={<CampaignBackground variant="plup-pup" />}
       decorations={
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <CampaignGlow className="absolute -top-10 left-1/3 h-96 w-96" />
@@ -83,8 +83,11 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
       }
       description={
         <p className="mt-5 max-w-full text-lg leading-[1.7] text-foreground">
-          Cuéntanos sobre tu familia y recibe, sin costo, una canción única — escrita e interpretada
-          especialmente para tu bebé — directo a tu correo.
+          Cuéntanos sobre tu familia y recibe, sin costo, una canción única{" "}
+          <em>
+            <strong>escrita e interpretada especialmente para tu bebé</strong>
+          </em>{" "}
+          directo a tu correo.
         </p>
       }
       form={

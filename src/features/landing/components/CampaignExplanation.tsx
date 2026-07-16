@@ -21,15 +21,15 @@ export function CampaignExplanation() {
             ¿Qué es esta campaña?
           </CampaignHeading>
           <p className="max-w-prose text-body text-muted-foreground">
-            Por tiempo limitado, celebramos a las familias con un regalo hecho de ternura: una
-            canción completamente original, escrita solo para tu bebé. Cuéntanos algunos detalles
-            sobre tu pequeño, nuestra IA escribe una letra que capture ese momento y — una vez que
-            la apruebes — la convertimos en una canción totalmente producida que podrás conservar
-            para siempre.
+            Por tiempo limitado, queremos celebrar a las familias con un regalo muy especial: una
+            canción completamente original, escrita e interpretada exclusivamente para tu bebé.
+            Cuéntanos un poco sobre tu pequeño y nuestra inteligencia artificial creará una letra
+            inspirada en su historia. Cuando la apruebes, la convertiremos en una canción totalmente
+            producida para que puedas conservarla y recordarla siempre.
           </p>
           <p className="max-w-prose text-body text-muted-foreground">
-            Sin costo, sin trucos — solo un pequeño regalo para celebrar a tu familia, disponible
-            mientras dure la campaña.
+            Es un regalo sin costo, creado con mucho cariño para tu familia y disponible únicamente
+            durante el tiempo que dure esta campaña.
           </p>
         </div>
       </CampaignContainer>
