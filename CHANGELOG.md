@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-08-05
+
+HOTFIX-ADMIN-2 — Bootstrap First Administrator. A one-off provisioning script only — no change to the Backoffice, authentication, authorization, or any UI.
+
+### Added
+
+- `scripts/bootstrapAdmin.ts` (`npm run admin:bootstrap -- --email=... --password=... --name=... [--role=ADMIN|SUPER_ADMIN]`): creates or updates a single `AdminUser` row from CLI arguments (never environment variables, never hardcoded), reusing the existing `AdminUserRepository`, `PasswordHasher`, and `AdminUser` domain entity exactly as the Administradores screen does — no raw SQL. Idempotent: an existing email has its password/role/active state updated rather than being duplicated.
+- Ran once against the production database to provision the first administrator account (`SUPER_ADMIN`, active); login verified end-to-end through the real `LoginUseCase` (password check, session token issuance, audit log entry).
+
 ## [1.18.0] - 2026-08-04
 
 Sprint ADMIN-1 — Backoffice de Campaña. Transforms the admin area into a sidebar-driven backoffice, entirely in Spanish, for the campaign team — reusing the existing design system, colors, and shared components throughout. No change to authentication, the queue, AI providers, the generation pipeline, or the public site.

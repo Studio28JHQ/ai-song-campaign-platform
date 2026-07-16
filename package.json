@@ -18,6 +18,7 @@
     "test:e2e": "playwright test",
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
+    "admin:bootstrap": "tsx --conditions=react-server scripts/bootstrapAdmin.ts",
     "prepare": "husky"
   },
   "dependencies": {
