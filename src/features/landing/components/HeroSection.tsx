@@ -25,9 +25,12 @@ interface HeroSectionProps {
  * application-flow change, only where and how it's presented).
  *
  * UI-3B removed the cloud illustrations introduced in UI-3A (didn't
- * match the client's reference artwork) and pulls the product up over
- * the animal (`-mt-*` on `CampaignProduct`) so the two read as one
- * composed scene instead of two separately floating images.
+ * match the client's reference artwork).
+ *
+ * UI-3C simplified `CampaignHero` to a plain two-column layout (see
+ * that component). Here, the right column stacks the seal above the
+ * product (`z-10` on `CampaignAnimal`, a small `-mt-*` pull on
+ * `CampaignProduct`) so they read as one composition, seal on top.
  */
 export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
   return (
@@ -45,12 +48,18 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
           />
         </div>
       }
-      animal={<CampaignAnimal variant="seal" priority className="h-40 w-auto sm:h-52 lg:h-64" />}
+      animal={
+        <CampaignAnimal
+          variant="seal"
+          priority
+          className="relative z-10 h-40 w-auto sm:h-52 lg:h-64"
+        />
+      }
       product={
         <CampaignProduct
           variant="product-infant"
           priority
-          className="-mt-10 h-56 w-auto sm:h-72 lg:-mt-24 lg:h-[26rem]"
+          className="-mt-6 h-56 w-auto sm:h-72 lg:-mt-10 lg:h-[26rem]"
         />
       }
       headline={
@@ -66,7 +75,7 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
       }
       form={
         <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6 lg:mx-0">
-          <CampaignHeading as="h2" variant="title" className="mb-3">
+          <CampaignHeading as="h2" variant="title" className="mb-2.5">
             Crea la canción de tu bebé
           </CampaignHeading>
           <RegistrationForm turnstileSiteKey={turnstileSiteKey} />

@@ -63,4 +63,12 @@ describe("PromptBuilder.build", () => {
     expect(prompt.system).toContain('"approved": false, "reason"');
     expect(prompt.system).toMatch(/no free text/i);
   });
+
+  it("always requires the lyrics in Spanish, regardless of the parent message's language", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/entirely in spanish/i);
+    expect(prompt.system).toMatch(/do not mix languages/i);
+    expect(prompt.system).toMatch(/proper name.*kept exactly as given/i);
+    expect(prompt.system).toMatch(/neutral latin american spanish/i);
+  });
 });

@@ -159,7 +159,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-2.5">
       {formError ? (
         <p
           role="alert"
@@ -170,17 +170,11 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
       ) : null}
 
       {/*
-        Sprint UI-3B — two columns on desktop for "compatible" fields,
-        one column on mobile ("without affecting mobile"). Fields stay
-        in the exact same DOM order as always (parentName, babyName,
-        babyAge, city, email, phone) — a CSS grid only changes where
-        each one *sits*, never re-ordered via `order-*`, so visual
-        reading order, DOM order, and keyboard tab order all stay
-        identical. Reordering them to a different pairing would have
-        decoupled tab order from visual order, which the brief's own
-        "do NOT reduce accessibility" rules out.
+        Sprint UI-3C — reverted to a single column (was a two-column
+        grid as of UI-3B). Fields stay in the same DOM order as always
+        (parentName, babyName, babyAge, city, email, phone).
       */}
-      <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+      <div className="flex flex-col gap-2.5">
         <CampaignField
           label="Tu nombre"
           placeholder="Ej. María Fernández"
@@ -259,7 +253,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         ) : null}
       </div>
 
-      <CampaignButton type="submit" disabled={isSubmitting} className="mt-3 h-14 w-full text-lg">
+      <CampaignButton type="submit" disabled={isSubmitting} className="mt-2.5 h-14 w-full text-lg">
         {isSubmitting ? "Creando tu canción..." : "Crear la canción de mi bebé"}
       </CampaignButton>
     </form>

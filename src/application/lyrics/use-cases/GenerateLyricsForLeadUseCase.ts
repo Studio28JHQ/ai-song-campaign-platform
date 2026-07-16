@@ -12,7 +12,12 @@ import type { GenerateLyricsForLeadRequest } from "../dto/GenerateLyricsForLeadR
 import type { GenerateLyricsForLeadResponse } from "../dto/GenerateLyricsForLeadResponse";
 import { GenerateLyricsUseCase } from "./GenerateLyricsUseCase";
 
-const DEFAULT_LANGUAGE = "en";
+// Sprint UI-3C — UX Polish: was "en", which contradicted the Claude
+// prompt's own language rules (see `PromptBuilder`) and could produce
+// English or mixed-language lyrics for this entirely Spanish-speaking
+// campaign. This is prompt content, not a flow change — every other
+// step of generation is untouched.
+const DEFAULT_LANGUAGE = "es";
 
 /**
  * Orchestrates a full lyrics generation request for a lead: validates the

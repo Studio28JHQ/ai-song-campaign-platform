@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-08-02
+
+Sprint UI-3C — UX Polish & Lyrics Experience. A fix-only pass on issues found after UI-3B: no new components, no architecture, no backend/domain/database/pipeline changes.
+
+### Changed
+
+- `CampaignHero` rebuilt as a plain two-column `flex` layout (was five independently `order`/`col-start`/`row-start`-placed grid cells) — left column stacks headline → description → form; right column stacks the seal above the product as one composition (`z-10` on `CampaignAnimal`, a small `-mt-*` pull on `CampaignProduct`, was the reverse direction in UI-3B). Mobile stays a single column, now simply the same DOM order (no `order-*` needed).
+- `RegistrationForm` reverted to a single column (was a `sm:grid-cols-2` two-column layout as of UI-3B); vertical spacing tightened ~20% throughout (form `gap-3`→`gap-2.5`, fields grid → `flex flex-col gap-2.5`, `CampaignField`'s label-to-input gap `gap-1.5`→`gap-1`, the card's heading-to-first-field `mb-3`→`mb-2.5`, submit button's `mt-3`→`mt-2.5`). No field removed, no validation changed.
+- `PromptBuilder` (Claude): added an explicit "Language rules" block to the system prompt — write entirely in Spanish, never mix languages, keep proper names (the baby's name) exactly as given, warm/childlike/family tone, neutral Latin American Spanish. `GenerateLyricsForLeadUseCase`'s `DEFAULT_LANGUAGE` corrected from `"en"` to `"es"` — it was contradicting the very language the campaign is entirely in, which is very likely why lyrics could come back in English or mixed-language. Generation flow itself is unchanged — this is prompt content only.
+- `app/generate/page.tsx` now reuses the landing's visual identity instead of a bare, second look: added `Navigation`/`LandingFooter` (existing components) as header/footer, `CampaignBackground`/`CampaignGlow`/`CampaignBubble` (existing components) for background/gradient/decoration, `.campaign-landing` (existing class) for the campaign typography, and `CampaignHeading` for the page's own heading — no new component was created.
+- Same file: the lyrics container widened from `max-w-sm` (384px) to `max-w-3xl` (768px, inside the requested 700–820px desktop range); `w-full` already keeps it at 100% on mobile.
+- `Button` (`src/components/ui/button.tsx`, shared — also used by admin): added `cursor-pointer` (browsers default `<button>` to `cursor: default`, unlike `<a>`) and `disabled:cursor-not-allowed`. Every button, CTA, "approve lyrics", and "regenerate lyrics" control goes through this one component, so this single change covers all of them; the FAQ accordion's `<summary>` already had `cursor-pointer`, and plain `<a href>` links get it natively from the browser.
+- Hover/focus/active/disabled/transition states were reviewed and found already correct (existing `Button`/`Input`/`CampaignInput` styling) — no design change beyond the cursor fix above, per the brief's own "sin modificar el diseño existente."
+
 ## [1.16.3] - 2026-08-01
 
 HOTFIX-DB-4 — Recover Failed Prisma Migration. Documentation-only: the migration file itself was already corrected (HOTFIX-DB-3); this expands the recovery procedure with the exact `_prisma_migrations` mechanics and command sequence needed to clear the failed attempt Prisma recorded before that fix. No code, schema, or migration changed.

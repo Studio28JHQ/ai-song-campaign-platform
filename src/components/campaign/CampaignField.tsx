@@ -42,7 +42,7 @@ export function CampaignField({
   const errorId = `${id}-error`;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <CampaignLabel htmlFor={id}>{label}</CampaignLabel>
       <CampaignInput
         id={id}

@@ -50,6 +50,18 @@ Keep the total length suitable for approximately 2-3 minutes of music.
 Return the lyrics as plain text only — no markdown, no explanations, no section labels beyond the five listed above.
 `.trim();
 
+// Sprint UI-3C — UX Polish. The lyrics must always come back in Spanish,
+// regardless of what language the parent's own message happens to be
+// written in — this campaign's audience is entirely Spanish-speaking,
+// and a mixed- or English-language song is a defect, not a valid
+// creative choice.
+const LANGUAGE_RULES = `
+Write the lyrics entirely in Spanish, regardless of the language the parent's message is written in.
+Do not mix languages within the lyrics — every word must be Spanish, except the baby's name and any other proper name, which must be kept exactly as given, never translated or altered.
+Use a warm, tender, childlike tone suitable for a family audience.
+Use neutral Latin American Spanish — avoid regional slang, "vosotros" forms, or wording tied to a single country.
+`.trim();
+
 const RESPONSE_FORMAT_INSTRUCTIONS = `
 Respond with a single JSON object and nothing else — no free text, no markdown code fences, no commentary before or after it.
 The JSON object must match exactly one of these two shapes:
@@ -81,6 +93,9 @@ export class PromptBuilder {
       "",
       "Writing instructions:",
       WRITING_INSTRUCTIONS,
+      "",
+      "Language rules:",
+      LANGUAGE_RULES,
       "",
       RESPONSE_FORMAT_INSTRUCTIONS,
     ].join("\n");
