@@ -46,7 +46,7 @@ export default function GeneratePage() {
           <ContentWrapper>
             <div className="flex flex-col items-center gap-6">
               <div className="flex flex-col items-center gap-2 text-center">
-                <CampaignHeading as="h1" variant="section">
+                <CampaignHeading as="h2" variant="section">
                   Crea la letra de la canción de tu bebé
                 </CampaignHeading>
                 <p className="max-w-prose text-body text-muted-foreground">
