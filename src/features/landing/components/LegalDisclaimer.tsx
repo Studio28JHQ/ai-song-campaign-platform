@@ -12,7 +12,7 @@ export function LegalDisclaimer() {
   return (
     <Section spacing="sm">
       <CampaignContainer narrow>
-        <p className="text-caption text-muted-foreground">
+        <p className="text-caption text-muted-foreground text-center">
           Esta es una campaña promocional por tiempo limitado y no representa un producto o servicio
           continuo. Las canciones se generan con ayuda de inteligencia artificial a partir de la
           información que proporcionas; el contenido se revisa automáticamente antes de la

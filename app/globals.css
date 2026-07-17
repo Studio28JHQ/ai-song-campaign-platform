@@ -412,3 +412,12 @@ body {
     transition: none;
   }
 }
+
+@media (max-width: 480px) {
+  .max-w-2xl {
+    max-width: 100%;
+  }
+  .max-w-\(--container-narrow\) {
+    max-width: 90%;
+  }
+}
