@@ -5,6 +5,7 @@ import { logger } from "@/shared/logger/logger";
 import type { AudioDownloader } from "../contracts/AudioDownloader";
 import type { AudioStorage } from "../contracts/AudioStorage";
 import type { AudioUrlResolver } from "../contracts/AudioUrlResolver";
+import type { CampaignGate } from "../contracts/CampaignGate";
 import type { EmailDeliveryTracker } from "../contracts/EmailDeliveryTracker";
 import type { SongEmailSender } from "../contracts/SongEmailSender";
 import type { SongGenerationProvider } from "../contracts/SongGenerationProvider";
@@ -61,6 +62,7 @@ export class GenerationPoller {
     private readonly leadRepository: LeadRepository,
     private readonly emailSender: SongEmailSender,
     private readonly deliveryTracker: EmailDeliveryTracker,
+    private readonly campaignGate: CampaignGate,
   ) {}
 
   async execute(): Promise<GenerationPollerResponse | null> {
@@ -140,6 +142,7 @@ export class GenerationPoller {
       });
       const updated = await this.songRepository.update(song);
 
+      await this.incrementCampaignSongsGenerated(updated);
       await this.deliverReadyEmail(updated);
 
       return { song: updated.toSnapshot(), outcome };
@@ -147,6 +150,26 @@ export class GenerationPoller {
       song.markFailed(error instanceof Error ? error.message : String(error));
       await this.songRepository.update(song);
       throw error;
+    }
+  }
+
+  /**
+   * Counts this Song toward its campaign's `maximumSongs` budget — never
+   * before `COMPLETED` is already persisted, and never allowed to undo a
+   * successful generation if it fails (same non-blocking pattern as
+   * `deliverReadyEmail`).
+   */
+  private async incrementCampaignSongsGenerated(song: Song): Promise<void> {
+    try {
+      const lead = await this.leadRepository.findById(song.leadId);
+      if (!lead) return;
+
+      await this.campaignGate.incrementSongsGenerated(lead.campaignId);
+    } catch (error) {
+      logger.error("Failed to increment campaign songsGenerated counter", {
+        songId: song.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

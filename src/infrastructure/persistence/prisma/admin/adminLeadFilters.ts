@@ -17,7 +17,7 @@ export function toPublicSongStatus(status: PrismaSongStatus): string {
   return status === PrismaSongStatus.DELIVERED ? "COMPLETED" : status;
 }
 
-function toPrismaSongStatuses(
+export function toPrismaSongStatuses(
   filter: Exclude<AdminLeadSongStatusFilter, "NONE">,
 ): PrismaSongStatus[] {
   switch (filter) {

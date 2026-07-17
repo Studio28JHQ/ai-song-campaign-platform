@@ -81,6 +81,23 @@ export class PrismaSongRepository implements SongRepository {
     }
   }
 
+  async claimQueued(song: Song): Promise<Song | null> {
+    try {
+      const result = await this.client.song.updateMany({
+        where: { id: song.id, status: PrismaSongStatus.QUEUED },
+        data: SongMapper.toUpdateInput(song),
+      });
+
+      if (result.count !== 1) {
+        return null;
+      }
+
+      return this.findById(song.id);
+    } catch (error) {
+      this.handleError(error, { operation: "claimQueued", songId: song.id });
+    }
+  }
+
   /** A unique-constraint violation on create has a specific business meaning: this lead already has a song row. */
   private handleCreateError(error: unknown, context: Record<string, unknown>): never {
     if (

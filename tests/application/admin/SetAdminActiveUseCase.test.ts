@@ -38,7 +38,7 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return [];
   }
   async findRecent() {
-    return [];
+    return { items: [], total: 0 };
   }
 }
 
@@ -54,10 +54,18 @@ function buildAdmin(): AdminUser {
 describe("SetAdminActiveUseCase", () => {
   let adminUserRepository: InMemoryAdminUserRepository;
   let auditLogRepository: InMemoryAuditLogRepository;
+  let superAdmin: AdminUser;
 
   beforeEach(() => {
     adminUserRepository = new InMemoryAdminUserRepository();
     auditLogRepository = new InMemoryAuditLogRepository();
+    superAdmin = AdminUser.create({
+      email: "super@example.com",
+      passwordHash: "hash",
+      name: "Super Admin",
+      role: "SUPER_ADMIN",
+    });
+    adminUserRepository.seed(superAdmin);
   });
 
   it("deactivates an active account and writes a deactivate_admin_user audit entry", async () => {
@@ -68,7 +76,7 @@ describe("SetAdminActiveUseCase", () => {
     const result = await useCase.execute({
       adminId: admin.id,
       active: false,
-      actingAdminId: "admin-9",
+      actingAdminId: superAdmin.id,
     });
 
     expect(result.admin.active).toBe(false);
@@ -86,7 +94,7 @@ describe("SetAdminActiveUseCase", () => {
     const result = await useCase.execute({
       adminId: admin.id,
       active: true,
-      actingAdminId: "admin-9",
+      actingAdminId: superAdmin.id,
     });
 
     expect(result.admin.active).toBe(true);
@@ -99,7 +107,95 @@ describe("SetAdminActiveUseCase", () => {
     const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
 
     await expect(
-      useCase.execute({ adminId: "missing", active: false, actingAdminId: "admin-1" }),
+      useCase.execute({ adminId: "missing", active: false, actingAdminId: superAdmin.id }),
     ).rejects.toThrow();
+  });
+
+  it("rejects when the acting admin is a plain ADMIN, not a SUPER_ADMIN", async () => {
+    const admin = buildAdmin();
+    adminUserRepository.seed(admin);
+    const plainAdmin = AdminUser.create({
+      email: "plain@example.com",
+      passwordHash: "hash",
+      name: "Plain Admin",
+      role: "ADMIN",
+    });
+    adminUserRepository.seed(plainAdmin);
+    const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
+
+    await expect(
+      useCase.execute({ adminId: admin.id, active: false, actingAdminId: plainAdmin.id }),
+    ).rejects.toThrow();
+    expect(auditLogRepository.created).toHaveLength(0);
+  });
+
+  describe("last-super-admin lockout guard (RC-final — Production Hardening)", () => {
+    it("rejects deactivating the only active super admin", async () => {
+      const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
+
+      await expect(
+        useCase.execute({
+          adminId: superAdmin.id,
+          active: false,
+          actingAdminId: superAdmin.id,
+        }),
+      ).rejects.toThrow();
+      expect(auditLogRepository.created).toHaveLength(0);
+      const persisted = await adminUserRepository.findById(superAdmin.id);
+      expect(persisted?.active).toBe(true);
+    });
+
+    it("allows deactivating a super admin when another active super admin exists", async () => {
+      const secondSuperAdmin = AdminUser.create({
+        email: "super2@example.com",
+        passwordHash: "hash",
+        name: "Second Super Admin",
+        role: "SUPER_ADMIN",
+      });
+      adminUserRepository.seed(secondSuperAdmin);
+      const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
+
+      const result = await useCase.execute({
+        adminId: superAdmin.id,
+        active: false,
+        actingAdminId: secondSuperAdmin.id,
+      });
+
+      expect(result.admin.active).toBe(false);
+    });
+
+    it("does not block deactivating the only active super admin's own account by some other super admin, once already inactive elsewhere is irrelevant — only ACTIVE super admins count", async () => {
+      const inactiveSecondSuperAdmin = AdminUser.create({
+        email: "super3@example.com",
+        passwordHash: "hash",
+        name: "Inactive Super Admin",
+        role: "SUPER_ADMIN",
+      });
+      inactiveSecondSuperAdmin.deactivate();
+      adminUserRepository.seed(inactiveSecondSuperAdmin);
+      const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
+
+      await expect(
+        useCase.execute({
+          adminId: superAdmin.id,
+          active: false,
+          actingAdminId: superAdmin.id,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("allows deactivating a plain ADMIN even when they are the only ADMIN (lockout only guards SUPER_ADMIN)", async () => {
+      const admin = buildAdmin();
+      adminUserRepository.seed(admin);
+      const useCase = new SetAdminActiveUseCase(adminUserRepository, auditLogRepository);
+
+      const result = await useCase.execute({
+        adminId: admin.id,
+        active: false,
+        actingAdminId: superAdmin.id,
+      });
+
+      expect(result.admin.active).toBe(false);
+    });
   });
 });

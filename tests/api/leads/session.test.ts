@@ -11,6 +11,7 @@ const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  updateAttemptConsumption: vi.fn(),
 };
 
 const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof vi.fn> } = {
@@ -29,6 +30,7 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
   findGenerating: vi.fn(),
   findOldestQueued: vi.fn(),
   update: vi.fn(),
+  claimQueued: vi.fn(),
 };
 
 const mockGetLeadSession = vi.fn();

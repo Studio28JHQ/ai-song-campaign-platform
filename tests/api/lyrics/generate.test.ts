@@ -12,6 +12,7 @@ const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  updateAttemptConsumption: vi.fn(),
 };
 
 const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof vi.fn> } = {
@@ -113,6 +114,7 @@ describe("POST /api/lyrics/generate", () => {
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockLyricsRepository.create.mockImplementation(async (lyrics: Lyrics) => lyrics);
     mockLeadRepository.update.mockImplementation(async (lead: Lead) => lead);
+    mockLeadRepository.updateAttemptConsumption.mockImplementation(async (lead: Lead) => lead);
   });
 
   it("returns 401 when there is no active session, without touching the use case", async () => {

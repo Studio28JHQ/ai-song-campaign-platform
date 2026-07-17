@@ -3,6 +3,7 @@ import type { AdminUserRepository } from "@/domain/admin/repositories/AdminUserR
 import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
 import { BusinessRuleError } from "@/shared/errors";
 import type { UpdateAdminUserRequest, UpdateAdminUserResponse } from "../dto/AdminUserDto";
+import { assertSuperAdmin } from "../services/adminAuthorization";
 
 /** Edits an operator account's name/role from the Administradores screen. Email and password are changed through their own dedicated operations. */
 export class UpdateAdminUserUseCase {
@@ -12,6 +13,8 @@ export class UpdateAdminUserUseCase {
   ) {}
 
   async execute(request: UpdateAdminUserRequest): Promise<UpdateAdminUserResponse> {
+    await assertSuperAdmin(this.adminUserRepository, request.actingAdminId);
+
     const admin = await this.adminUserRepository.findById(request.adminId);
 
     if (!admin) {

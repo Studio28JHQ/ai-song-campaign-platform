@@ -7,6 +7,7 @@ import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
@@ -38,6 +39,7 @@ const moodProvider = new PrismaMoodSunoPromptProvider();
 const songGenerator = new MurekaSongService();
 const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
+const campaignGate = new PrismaCampaignGate();
 const auditLogRepository = new PrismaAuditLogRepository();
 
 const retryFailedSongUseCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
@@ -58,6 +60,7 @@ const generationPoller = new GenerationPoller(
   leadRepository,
   emailSender,
   emailDeliveryTracker,
+  campaignGate,
 );
 
 interface RouteContext {

@@ -12,6 +12,7 @@ import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller"
 import type { AudioDownloader } from "@/application/song/contracts/AudioDownloader";
 import type { AudioStorage } from "@/application/song/contracts/AudioStorage";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
+import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
 import type { EmailDeliveryTracker } from "@/application/song/contracts/EmailDeliveryTracker";
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
 import type { MoodSunoPromptProvider } from "@/application/song/contracts/MoodSunoPromptProvider";
@@ -59,6 +60,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class InMemoryLyricsRepository implements LyricsRepository {
@@ -91,11 +103,15 @@ class InMemoryLyricsRepository implements LyricsRepository {
 
 class InMemorySongRepository implements SongRepository {
   private readonly records = new Map<string, Song>();
+  /** See the identical comment in GenerationDispatcher.test.ts's copy of this fake. */
+  private readonly persistedStatus = new Map<string, SongStatus>();
   seed(song: Song): void {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
   }
   async create(song: Song): Promise<Song> {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
     return song;
   }
   async findById(id: string): Promise<Song | null> {
@@ -116,6 +132,15 @@ class InMemorySongRepository implements SongRepository {
   }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
+    return song;
+  }
+  async claimQueued(song: Song): Promise<Song | null> {
+    if (this.persistedStatus.get(song.id) !== SongStatus.QUEUED) {
+      return null;
+    }
+    this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
     return song;
   }
 }
@@ -158,6 +183,13 @@ function fakeAudioUrlResolver(): AudioUrlResolver {
 
 function fakeEmailSender(): SongEmailSender {
   return { sendSongReadyEmail: vi.fn().mockResolvedValue(undefined) };
+}
+
+function fakeCampaignGate(): CampaignGate {
+  return {
+    isActiveAndGenerationEnabled: vi.fn().mockResolvedValue(true),
+    incrementSongsGenerated: vi.fn().mockResolvedValue(undefined),
+  };
 }
 
 function createApprovedLyrics(leadId: string): Lyrics {
@@ -261,6 +293,7 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       leadRepository,
       emailSender,
       new InMemoryEmailDeliveryTracker(),
+      fakeCampaignGate(),
     );
 
     const dispatchResult = await dispatcher.execute();
@@ -337,6 +370,7 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       leadRepository,
       emailSender,
       new InMemoryEmailDeliveryTracker(),
+      fakeCampaignGate(),
     );
 
     await dispatcher.execute();

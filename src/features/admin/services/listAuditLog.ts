@@ -7,8 +7,17 @@ export interface AuditLogRow {
   entityId: string | null;
 }
 
+export interface ListAuditLogInput {
+  query?: string;
+  page: number;
+  pageSize: number;
+}
+
 export interface ListAuditLogResult {
   items: AuditLogRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export class ListAuditLogError extends Error {
@@ -19,11 +28,16 @@ export class ListAuditLogError extends Error {
 }
 
 /** Thin HTTP client for `GET /api/admin/audit`. No business rule is evaluated here. */
-export async function listAuditLog(): Promise<ListAuditLogResult> {
+export async function listAuditLog(input: ListAuditLogInput): Promise<ListAuditLogResult> {
+  const params = new URLSearchParams();
+  if (input.query) params.set("q", input.query);
+  params.set("page", String(input.page));
+  params.set("pageSize", String(input.pageSize));
+
   let response: Response;
 
   try {
-    response = await fetch("/api/admin/audit");
+    response = await fetch(`/api/admin/audit?${params.toString()}`);
   } catch {
     throw new ListAuditLogError(
       "We couldn't reach the server. Please check your connection and try again.",

@@ -6,6 +6,7 @@ import { verifyInternalSecret } from "@/infrastructure/http/verifyInternalSecret
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
@@ -54,6 +55,7 @@ const moodProvider = new PrismaMoodSunoPromptProvider();
 const songGenerator = new MurekaSongService();
 const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
+const campaignGate = new PrismaCampaignGate();
 
 const generationDispatcher = new GenerationDispatcher(
   songRepository,
@@ -71,6 +73,7 @@ const generationPoller = new GenerationPoller(
   leadRepository,
   emailSender,
   emailDeliveryTracker,
+  campaignGate,
 );
 
 export async function GET(request: Request): Promise<NextResponse> {

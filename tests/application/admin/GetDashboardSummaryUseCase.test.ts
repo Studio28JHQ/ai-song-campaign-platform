@@ -18,6 +18,8 @@ function fakeGate(
       emailsSent: 5,
       emailsResent: 2,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
+      campaignMaximumSongs: null,
+      campaignSongsGenerated: null,
       ...counts,
     }),
   };
@@ -44,6 +46,8 @@ describe("GetDashboardSummaryUseCase", () => {
       generationSuccessRate: 63, // round(5/8 * 100)
       campaignGoal: 3000,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
+      campaignMaximumSongs: null,
+      campaignSongsGenerated: null,
     });
     expect(gate.getSummary).toHaveBeenCalledTimes(1);
   });
@@ -66,12 +70,22 @@ describe("GetDashboardSummaryUseCase", () => {
     expect(result.generationSuccessRate).toBe(100);
   });
 
-  it("passes the campaign goal through unchanged", async () => {
+  it("passes the campaign goal through unchanged when the gate has no campaign row", async () => {
     const gate = fakeGate();
     const useCase = new GetDashboardSummaryUseCase(gate, 500);
 
     const result = await useCase.execute();
 
     expect(result.campaignGoal).toBe(500);
+  });
+
+  it("prefers the campaign's real maximumSongs over the configured fallback", async () => {
+    const gate = fakeGate({ campaignMaximumSongs: 3000, campaignSongsGenerated: 42 });
+    const useCase = new GetDashboardSummaryUseCase(gate, 500);
+
+    const result = await useCase.execute();
+
+    expect(result.campaignGoal).toBe(3000);
+    expect(result.campaignSongsGenerated).toBe(42);
   });
 });

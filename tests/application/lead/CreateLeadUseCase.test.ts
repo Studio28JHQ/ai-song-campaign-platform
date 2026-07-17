@@ -34,6 +34,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class FixedCampaignConfig implements LeadCampaignConfig {

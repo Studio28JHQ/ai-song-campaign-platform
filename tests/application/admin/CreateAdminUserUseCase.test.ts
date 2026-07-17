@@ -39,7 +39,7 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return [];
   }
   async findRecent() {
-    return [];
+    return { items: [], total: 0 };
   }
 }
 
@@ -53,10 +53,18 @@ function fakePasswordHasher(): PasswordHasher {
 describe("CreateAdminUserUseCase", () => {
   let adminUserRepository: InMemoryAdminUserRepository;
   let auditLogRepository: InMemoryAuditLogRepository;
+  let superAdmin: AdminUser;
 
   beforeEach(() => {
     adminUserRepository = new InMemoryAdminUserRepository();
     auditLogRepository = new InMemoryAuditLogRepository();
+    superAdmin = AdminUser.create({
+      email: "super@example.com",
+      passwordHash: "hash",
+      name: "Super Admin",
+      role: "SUPER_ADMIN",
+    });
+    adminUserRepository.seed(superAdmin);
   });
 
   it("creates a new admin with a hashed password and writes an audit entry", async () => {
@@ -72,7 +80,7 @@ describe("CreateAdminUserUseCase", () => {
       password: "plaintext-password",
       name: "New Admin",
       role: "ADMIN",
-      actingAdminId: "admin-1",
+      actingAdminId: superAdmin.id,
     });
 
     expect(passwordHasher.hash).toHaveBeenCalledWith("plaintext-password");
@@ -109,7 +117,52 @@ describe("CreateAdminUserUseCase", () => {
         password: "x",
         name: "Y",
         role: "ADMIN",
-        actingAdminId: "admin-1",
+        actingAdminId: superAdmin.id,
+      }),
+    ).rejects.toThrow();
+    expect(auditLogRepository.created).toHaveLength(0);
+  });
+
+  it("rejects when the acting admin is a plain ADMIN, not a SUPER_ADMIN", async () => {
+    const plainAdmin = AdminUser.create({
+      email: "plain@example.com",
+      passwordHash: "hash",
+      name: "Plain Admin",
+      role: "ADMIN",
+    });
+    adminUserRepository.seed(plainAdmin);
+    const useCase = new CreateAdminUserUseCase(
+      adminUserRepository,
+      auditLogRepository,
+      fakePasswordHasher(),
+    );
+
+    await expect(
+      useCase.execute({
+        email: "new.admin@example.com",
+        password: "plaintext-password",
+        name: "New Admin",
+        role: "ADMIN",
+        actingAdminId: plainAdmin.id,
+      }),
+    ).rejects.toThrow();
+    expect(auditLogRepository.created).toHaveLength(0);
+  });
+
+  it("rejects when the acting admin does not exist", async () => {
+    const useCase = new CreateAdminUserUseCase(
+      adminUserRepository,
+      auditLogRepository,
+      fakePasswordHasher(),
+    );
+
+    await expect(
+      useCase.execute({
+        email: "new.admin@example.com",
+        password: "plaintext-password",
+        name: "New Admin",
+        role: "ADMIN",
+        actingAdminId: "missing",
       }),
     ).rejects.toThrow();
     expect(auditLogRepository.created).toHaveLength(0);

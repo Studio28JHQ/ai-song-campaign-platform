@@ -78,6 +78,7 @@ const generationPoller = new GenerationPoller(
   leadRepository,
   emailSender,
   emailDeliveryTracker,
+  campaignGate,
 );
 
 const approveLyricsRequestSchema = z

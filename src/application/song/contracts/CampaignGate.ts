@@ -6,5 +6,8 @@
  * in `src/infrastructure/`.
  */
 export interface CampaignGate {
+  /** `false` also when the campaign has already reached its `maximumSongs` budget. */
   isActiveAndGenerationEnabled(campaignId: string): Promise<boolean>;
+  /** Atomically increments the campaign's `songsGenerated` counter — called only after a Song completes successfully. */
+  incrementSongsGenerated(campaignId: string): Promise<void>;
 }

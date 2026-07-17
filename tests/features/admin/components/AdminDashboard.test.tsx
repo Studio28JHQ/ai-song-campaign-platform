@@ -79,6 +79,18 @@ describe("AdminDashboard", () => {
     expect(progressbar).toHaveAttribute("aria-valuenow", "0");
   });
 
+  it("prefers campaignSongsGenerated (the real enforced counter) over songsCompleted when present", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({ ...summaryBody, campaignSongsGenerated: 3000, campaignMaximumSongs: 3000 }),
+      ),
+    ) as unknown as typeof fetch;
+
+    render(<AdminDashboard />);
+
+    expect(await screen.findByText("3000 / 3000 (100%)")).toBeInTheDocument();
+  });
+
   it("shows 'No disponible' for a period with no completed songs, and the real value otherwise", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(jsonResponse(summaryBody)),

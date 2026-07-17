@@ -39,6 +39,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class InMemoryLyricsRepository implements LyricsRepository {
@@ -98,6 +109,14 @@ class InMemorySongRepository implements SongRepository {
     );
   }
   async update(song: Song): Promise<Song> {
+    this.songs.set(song.id, song);
+    return song;
+  }
+  async claimQueued(song: Song): Promise<Song | null> {
+    const existing = this.songs.get(song.id);
+    if (!existing || existing.status !== SongStatus.QUEUED) {
+      return null;
+    }
     this.songs.set(song.id, song);
     return song;
   }

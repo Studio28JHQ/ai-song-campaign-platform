@@ -11,6 +11,7 @@ const mockRepository: {
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  updateAttemptConsumption: vi.fn(),
 };
 
 const mockCreateSession = vi.fn();

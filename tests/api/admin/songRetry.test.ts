@@ -8,6 +8,7 @@ const mockSongFindById = vi.fn();
 const mockSongUpdate = vi.fn();
 const mockSongFindGenerating = vi.fn();
 const mockSongFindOldestQueued = vi.fn();
+const mockSongClaimQueued = vi.fn();
 const mockAuditCreate = vi.fn();
 const mockSubmitGeneration = vi.fn();
 const mockPollGenerationStatus = vi.fn();
@@ -43,6 +44,7 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => (
       update: mockSongUpdate,
       findGenerating: mockSongFindGenerating,
       findOldestQueued: mockSongFindOldestQueued,
+      claimQueued: mockSongClaimQueued,
     };
   }),
 }));
@@ -147,14 +149,18 @@ function fakeFailedSong(): Song {
 
 describe("POST /api/admin/songs/[songId]/retry", () => {
   let updatedSong: Song | undefined;
+  // See the identical comment in tests/api/song/generate.test.ts.
+  let persistedStatus: SongStatus | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     capturedAfterCallbacks.length = 0;
     updatedSong = undefined;
+    persistedStatus = undefined;
     mockGetAdminSession.mockResolvedValue({ adminId: "admin-1", email: "admin@example.com" });
     mockSongUpdate.mockImplementation(async (song: Song) => {
       updatedSong = song;
+      persistedStatus = song.status;
       return song;
     });
     mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
@@ -164,6 +170,12 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
     mockSongFindOldestQueued.mockImplementation(async () =>
       updatedSong?.status === SongStatus.QUEUED ? updatedSong : null,
     );
+    mockSongClaimQueued.mockImplementation(async (song: Song) => {
+      if (persistedStatus !== SongStatus.QUEUED) return null;
+      updatedSong = song;
+      persistedStatus = song.status;
+      return song;
+    });
   });
 
   it("returns 202 with QUEUED status for a FAILED song, and schedules background regeneration", async () => {

@@ -39,7 +39,7 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return [];
   }
   async findRecent() {
-    return [];
+    return { items: [], total: 0 };
   }
 }
 
@@ -53,10 +53,18 @@ function fakePasswordHasher(): PasswordHasher {
 describe("ChangeAdminPasswordUseCase", () => {
   let adminUserRepository: InMemoryAdminUserRepository;
   let auditLogRepository: InMemoryAuditLogRepository;
+  let superAdmin: AdminUser;
 
   beforeEach(() => {
     adminUserRepository = new InMemoryAdminUserRepository();
     auditLogRepository = new InMemoryAuditLogRepository();
+    superAdmin = AdminUser.create({
+      email: "super@example.com",
+      passwordHash: "hash",
+      name: "Super Admin",
+      role: "SUPER_ADMIN",
+    });
+    adminUserRepository.seed(superAdmin);
   });
 
   it("hashes the new password, persists it, and writes an audit entry", async () => {
@@ -77,7 +85,7 @@ describe("ChangeAdminPasswordUseCase", () => {
     await useCase.execute({
       adminId: admin.id,
       newPassword: "new-plaintext",
-      actingAdminId: "admin-9",
+      actingAdminId: superAdmin.id,
     });
 
     expect(passwordHasher.hash).toHaveBeenCalledWith("new-plaintext");
@@ -96,7 +104,38 @@ describe("ChangeAdminPasswordUseCase", () => {
     );
 
     await expect(
-      useCase.execute({ adminId: "missing", newPassword: "x", actingAdminId: "admin-1" }),
+      useCase.execute({ adminId: "missing", newPassword: "x", actingAdminId: superAdmin.id }),
     ).rejects.toThrow();
+  });
+
+  it("rejects when the acting admin is a plain ADMIN, not a SUPER_ADMIN", async () => {
+    const admin = AdminUser.create({
+      email: "admin@example.com",
+      passwordHash: "old-hash",
+      name: "Jane Admin",
+      role: "ADMIN",
+    });
+    adminUserRepository.seed(admin);
+    const plainAdmin = AdminUser.create({
+      email: "plain@example.com",
+      passwordHash: "hash",
+      name: "Plain Admin",
+      role: "ADMIN",
+    });
+    adminUserRepository.seed(plainAdmin);
+    const useCase = new ChangeAdminPasswordUseCase(
+      adminUserRepository,
+      auditLogRepository,
+      fakePasswordHasher(),
+    );
+
+    await expect(
+      useCase.execute({
+        adminId: admin.id,
+        newPassword: "new-plaintext",
+        actingAdminId: plainAdmin.id,
+      }),
+    ).rejects.toThrow();
+    expect(auditLogRepository.created).toHaveLength(0);
   });
 });

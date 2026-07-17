@@ -38,7 +38,7 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return [];
   }
   async findRecent() {
-    return [];
+    return { items: [], total: 0 };
   }
 }
 
@@ -54,10 +54,18 @@ function buildAdmin(): AdminUser {
 describe("UpdateAdminUserUseCase", () => {
   let adminUserRepository: InMemoryAdminUserRepository;
   let auditLogRepository: InMemoryAuditLogRepository;
+  let superAdmin: AdminUser;
 
   beforeEach(() => {
     adminUserRepository = new InMemoryAdminUserRepository();
     auditLogRepository = new InMemoryAuditLogRepository();
+    superAdmin = AdminUser.create({
+      email: "super@example.com",
+      passwordHash: "hash",
+      name: "Super Admin",
+      role: "SUPER_ADMIN",
+    });
+    adminUserRepository.seed(superAdmin);
   });
 
   it("updates name and role, and writes an audit entry attributed to the acting admin", async () => {
@@ -69,7 +77,7 @@ describe("UpdateAdminUserUseCase", () => {
       adminId: admin.id,
       name: "Renamed Admin",
       role: "SUPER_ADMIN",
-      actingAdminId: "admin-9",
+      actingAdminId: superAdmin.id,
     });
 
     expect(result.admin.name).toBe("Renamed Admin");
@@ -87,8 +95,31 @@ describe("UpdateAdminUserUseCase", () => {
         adminId: "missing",
         name: "X",
         role: "ADMIN",
-        actingAdminId: "admin-1",
+        actingAdminId: superAdmin.id,
       }),
     ).rejects.toThrow();
+  });
+
+  it("rejects when the acting admin is a plain ADMIN, not a SUPER_ADMIN", async () => {
+    const admin = buildAdmin();
+    adminUserRepository.seed(admin);
+    const plainAdmin = AdminUser.create({
+      email: "plain@example.com",
+      passwordHash: "hash",
+      name: "Plain Admin",
+      role: "ADMIN",
+    });
+    adminUserRepository.seed(plainAdmin);
+    const useCase = new UpdateAdminUserUseCase(adminUserRepository, auditLogRepository);
+
+    await expect(
+      useCase.execute({
+        adminId: admin.id,
+        name: "Renamed Admin",
+        role: "SUPER_ADMIN",
+        actingAdminId: plainAdmin.id,
+      }),
+    ).rejects.toThrow();
+    expect(auditLogRepository.created).toHaveLength(0);
   });
 });

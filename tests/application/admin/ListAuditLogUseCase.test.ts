@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { AdminUser } from "@/domain/admin/entities/AdminUser";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AdminUserRepository } from "@/domain/admin/repositories/AdminUserRepository";
-import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
+import type {
+  AuditLogRepository,
+  AuditLogSearchFilter,
+} from "@/domain/admin/repositories/AuditLogRepository";
 import { ListAuditLogUseCase } from "@/application/admin/use-cases/ListAuditLogUseCase";
 
 class FakeAdminUserRepository implements AdminUserRepository {
@@ -32,8 +35,12 @@ class FakeAuditLogRepository implements AuditLogRepository {
   async findByEntity(): Promise<AuditLogEntry[]> {
     return [];
   }
-  async findRecent(): Promise<AuditLogEntry[]> {
-    return this.entries;
+  async findRecent(
+    filter: AuditLogSearchFilter,
+  ): Promise<{ items: AuditLogEntry[]; total: number }> {
+    const start = (filter.page - 1) * filter.pageSize;
+    const page = this.entries.slice(start, start + filter.pageSize);
+    return { items: page, total: this.entries.length };
   }
 }
 
@@ -57,7 +64,7 @@ describe("ListAuditLogUseCase", () => {
       new FakeAdminUserRepository([admin]),
     );
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ page: 1 });
 
     expect(result.items).toEqual([
       {
@@ -84,7 +91,7 @@ describe("ListAuditLogUseCase", () => {
       new FakeAdminUserRepository([]),
     );
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ page: 1 });
 
     expect(result.items[0].adminName).toBe("Sistema");
   });
@@ -102,7 +109,7 @@ describe("ListAuditLogUseCase", () => {
       new FakeAdminUserRepository([]),
     );
 
-    const result = await useCase.execute();
+    const result = await useCase.execute({ page: 1 });
 
     expect(result.items[0].adminName).toBe("deleted-admin");
   });

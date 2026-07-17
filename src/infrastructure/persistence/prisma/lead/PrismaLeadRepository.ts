@@ -66,6 +66,26 @@ export class PrismaLeadRepository implements LeadRepository {
     }
   }
 
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    try {
+      const result = await this.client.lead.updateMany({
+        where: { id: lead.id, remainingAttempts: expectedRemainingAttempts },
+        data: LeadMapper.toUpdateInput(lead),
+      });
+
+      if (result.count !== 1) {
+        return null;
+      }
+
+      return this.findById(lead.id);
+    } catch (error) {
+      this.handleError(error, { operation: "updateAttemptConsumption", leadId: lead.id });
+    }
+  }
+
   private handleError(error: unknown, context: Record<string, unknown>): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === UNIQUE_CONSTRAINT_VIOLATION) {

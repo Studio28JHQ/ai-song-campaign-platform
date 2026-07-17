@@ -4,6 +4,7 @@ import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRep
 import { BusinessRuleError } from "@/shared/errors";
 import type { PasswordHasher } from "../contracts/PasswordHasher";
 import type { ChangeAdminPasswordRequest, ChangeAdminPasswordResponse } from "../dto/AdminUserDto";
+import { assertSuperAdmin } from "../services/adminAuthorization";
 
 /** Resets an operator account's password from the Administradores screen. Never stores or logs the plaintext password (see `PasswordHasher`). */
 export class ChangeAdminPasswordUseCase {
@@ -14,6 +15,8 @@ export class ChangeAdminPasswordUseCase {
   ) {}
 
   async execute(request: ChangeAdminPasswordRequest): Promise<ChangeAdminPasswordResponse> {
+    await assertSuperAdmin(this.adminUserRepository, request.actingAdminId);
+
     const admin = await this.adminUserRepository.findById(request.adminId);
 
     if (!admin) {

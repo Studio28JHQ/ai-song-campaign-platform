@@ -14,9 +14,21 @@ import type { GenerateLyricsForLeadRequest } from "@/application/lyrics/dto/Gene
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
+  /**
+   * `Lead` is mutated in place before a repository write ever happens
+   * (`consumeAttempt()` runs before `updateAttemptConsumption()` is
+   * called), so comparing against `leads.get(id).remainingAttempts`
+   * inside `updateAttemptConsumption` would see the caller's own
+   * not-yet-persisted mutation, not the last *persisted* value —
+   * defeating the whole point of the conditional update. This tracks
+   * `remainingAttempts` as of the last successful write, independent of
+   * the live (shared-reference) `Lead` object's current in-memory state.
+   */
+  private readonly persistedRemainingAttempts = new Map<string, number>();
 
   seed(lead: Lead): void {
     this.leads.set(lead.id, lead);
+    this.persistedRemainingAttempts.set(lead.id, lead.remainingAttempts);
   }
 
   async findById(id: string): Promise<Lead | null> {
@@ -41,6 +53,18 @@ class InMemoryLeadRepository implements LeadRepository {
 
   async update(lead: Lead): Promise<Lead> {
     this.leads.set(lead.id, lead);
+    this.persistedRemainingAttempts.set(lead.id, lead.remainingAttempts);
+    return lead;
+  }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    if (this.persistedRemainingAttempts.get(lead.id) !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    this.persistedRemainingAttempts.set(lead.id, lead.remainingAttempts);
     return lead;
   }
 }
@@ -227,6 +251,33 @@ describe("GenerateLyricsForLeadUseCase", () => {
 
     const persistedLead = await leadRepository.findById(lead.id);
     expect(persistedLead?.status).toBe(LeadStatus.BLOCKED);
+  });
+
+  it("rejects a regeneration when a concurrent request already consumed the attempt (atomic consumption)", async () => {
+    const lead = createLead(5);
+    leadRepository.seed(lead);
+    const consumeSpy = vi.spyOn(leadRepository, "updateAttemptConsumption").mockResolvedValue(null);
+    const useCase = new GenerateLyricsForLeadUseCase(
+      leadRepository,
+      lyricsRepository,
+      fakeGenerator({ approved: true, reason: null, lyrics: "Title\nVerse 1\n..." }),
+    );
+
+    // Regeneration path always consumes an attempt — force it via a prior version.
+    const existing = Lyrics.create({
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\n...",
+      version: 1,
+    });
+    await lyricsRepository.create(existing);
+
+    await expect(useCase.execute({ leadId: lead.id, ...baseRequest })).rejects.toThrow();
+
+    expect(consumeSpy).toHaveBeenCalledTimes(1);
+    // No new lyrics version was persisted despite the generator having approved the content.
+    expect(await lyricsRepository.findAllByLead(lead.id)).toHaveLength(1);
   });
 
   it("refuses to generate a new version once the lead already has an approved lyrics version (GATE 6.6)", async () => {

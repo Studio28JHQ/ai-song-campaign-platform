@@ -14,6 +14,7 @@ function fakeClient(counts: {
   emailsSent: number;
   emailsResent: number;
   completedSongs?: Array<{ submittedAt: Date; completedAt: Date }>;
+  campaign?: { maximumSongs: number; songsGenerated: number } | null;
 }): PrismaClient {
   const leadCount = vi.fn().mockResolvedValue(counts.totalLeads);
   const lyricsCount = vi
@@ -30,12 +31,14 @@ function fakeClient(counts: {
     .mockResolvedValueOnce(counts.emailsSent);
   const auditLogCount = vi.fn().mockResolvedValue(counts.emailsResent);
   const songFindMany = vi.fn().mockResolvedValue(counts.completedSongs ?? []);
+  const campaignFindFirst = vi.fn().mockResolvedValue(counts.campaign ?? null);
 
   return {
     lead: { count: leadCount },
     lyrics: { count: lyricsCount },
     song: { count: songCount, findMany: songFindMany },
     auditLog: { count: auditLogCount },
+    campaign: { findFirst: campaignFindFirst },
   } as unknown as PrismaClient;
 }
 
@@ -69,7 +72,31 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       emailsSent: 4,
       emailsResent: 1,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
+      campaignMaximumSongs: null,
+      campaignSongsGenerated: null,
     });
+  });
+
+  it("returns the campaign's real maximumSongs and songsGenerated when a campaign row exists", async () => {
+    const client = fakeClient({
+      totalLeads: 1,
+      lyricsGenerated: 1,
+      lyricsApproved: 1,
+      songsRequested: 1,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 1,
+      songsFailed: 0,
+      emailsSent: 1,
+      emailsResent: 0,
+      campaign: { maximumSongs: 3000, songsGenerated: 42 },
+    });
+    const gate = new PrismaAdminDashboardGate(client);
+
+    const summary = await gate.getSummary();
+
+    expect(summary.campaignMaximumSongs).toBe(3000);
+    expect(summary.campaignSongsGenerated).toBe(42);
   });
 
   it("counts resent emails via AuditLog entries with action resend_email", async () => {
@@ -130,6 +157,7 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       lyrics: { count: vi.fn() },
       song: { count: vi.fn(), findMany: vi.fn() },
       auditLog: { count: vi.fn() },
+      campaign: { findFirst: vi.fn() },
     } as unknown as PrismaClient;
     const gate = new PrismaAdminDashboardGate(client);
 

@@ -68,6 +68,7 @@ const generationPoller = new GenerationPoller(
   leadRepository,
   emailSender,
   emailDeliveryTracker,
+  campaignGate,
 );
 
 const generateSongRequestSchema = z.object({}).strict();

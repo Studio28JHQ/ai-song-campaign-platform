@@ -14,4 +14,12 @@ export interface SongRepository {
   findGenerating(): Promise<Song | null>;
   /** The oldest `QUEUED` song, if any, ordered by `createdAt` ascending — the queue's "next up". */
   findOldestQueued(): Promise<Song | null>;
+  /**
+   * Atomically persists `song` (already transitioned in memory, e.g. via
+   * `markGenerating()`) only if the row is still `QUEUED` at the database
+   * level. Returns the persisted `Song` on a successful claim, or `null` if
+   * another dispatcher run already claimed it first — this is what prevents
+   * two concurrent runs from ever submitting the same song twice.
+   */
+  claimQueued(song: Song): Promise<Song | null>;
 }

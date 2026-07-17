@@ -7,7 +7,10 @@ import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsReposi
 import { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
-import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
+import type {
+  AuditLogRepository,
+  AuditLogSearchFilter,
+} from "@/domain/admin/repositories/AuditLogRepository";
 import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
@@ -39,6 +42,17 @@ class InMemoryLeadRepository implements LeadRepository {
     return lead;
   }
   async update(lead: Lead): Promise<Lead> {
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
     this.leads.set(lead.id, lead);
     return lead;
   }
@@ -101,6 +115,14 @@ class InMemorySongRepository implements SongRepository {
     this.records.set(song.id, song);
     return song;
   }
+  async claimQueued(song: Song): Promise<Song | null> {
+    const existing = this.records.get(song.id);
+    if (!existing || existing.status !== SongStatus.QUEUED) {
+      return null;
+    }
+    this.records.set(song.id, song);
+    return song;
+  }
 }
 
 class InMemoryAuditLogRepository implements AuditLogRepository {
@@ -112,8 +134,10 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
   async findByEntity(entity: string, entityId: string): Promise<AuditLogEntry[]> {
     return this.records.filter((r) => r.entity === entity && r.entityId === entityId);
   }
-  async findRecent(limit: number): Promise<AuditLogEntry[]> {
-    return this.records.slice(0, limit);
+  async findRecent(
+    filter: AuditLogSearchFilter,
+  ): Promise<{ items: AuditLogEntry[]; total: number }> {
+    return { items: this.records.slice(0, filter.pageSize), total: this.records.length };
   }
 }
 

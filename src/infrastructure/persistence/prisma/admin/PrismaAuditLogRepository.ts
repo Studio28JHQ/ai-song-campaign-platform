@@ -1,6 +1,10 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import type { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
-import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRepository";
+import type {
+  AuditLogRepository,
+  AuditLogSearchFilter,
+  AuditLogSearchResult,
+} from "@/domain/admin/repositories/AuditLogRepository";
 import { DatabaseError } from "@/shared/errors";
 import { prisma as defaultPrismaClient } from "../client";
 import { AuditLogMapper } from "./AuditLogMapper";
@@ -36,16 +40,48 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
     }
   }
 
-  async findRecent(limit: number): Promise<AuditLogEntry[]> {
+  async findRecent(filter: AuditLogSearchFilter): Promise<AuditLogSearchResult> {
     try {
-      const records = await this.client.auditLog.findMany({
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      });
-      return records.map(AuditLogMapper.toDomain);
+      const where = this.buildWhere(filter);
+
+      const [records, total] = await Promise.all([
+        this.client.auditLog.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip: (filter.page - 1) * filter.pageSize,
+          take: filter.pageSize,
+        }),
+        this.client.auditLog.count({ where }),
+      ]);
+
+      return { items: records.map(AuditLogMapper.toDomain), total };
     } catch (error) {
       this.handleError(error, { operation: "findRecent" });
     }
+  }
+
+  private buildWhere(filter: AuditLogSearchFilter): Prisma.AuditLogWhereInput {
+    if (!filter.query) {
+      return {};
+    }
+
+    const clauses: Prisma.AuditLogWhereInput[] = [
+      { action: { contains: filter.query, mode: "insensitive" } },
+      { entity: { contains: filter.query, mode: "insensitive" } },
+    ];
+
+    // `entityId` is a UUID column — an exact match only, and only ever
+    // attempted when `query` is itself a well-formed UUID, otherwise
+    // Postgres rejects the comparison outright.
+    if (this.isUuid(filter.query)) {
+      clauses.push({ entityId: filter.query });
+    }
+
+    return { OR: clauses };
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
   private handleError(error: unknown, context: Record<string, unknown>): never {

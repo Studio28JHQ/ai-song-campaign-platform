@@ -33,6 +33,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class InMemoryLyricsRepository implements LyricsRepository {
@@ -92,10 +103,21 @@ class InMemorySongRepository implements SongRepository {
     this.records.set(song.id, song);
     return song;
   }
+  async claimQueued(song: Song): Promise<Song | null> {
+    const existing = this.records.get(song.id);
+    if (!existing || existing.status !== SongStatus.QUEUED) {
+      return null;
+    }
+    this.records.set(song.id, song);
+    return song;
+  }
 }
 
 function fakeCampaignGate(allowed = true): CampaignGate {
-  return { isActiveAndGenerationEnabled: vi.fn().mockResolvedValue(allowed) };
+  return {
+    isActiveAndGenerationEnabled: vi.fn().mockResolvedValue(allowed),
+    incrementSongsGenerated: vi.fn().mockResolvedValue(undefined),
+  };
 }
 
 function createLead(): Lead {

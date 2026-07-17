@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-08-07
+
+Sprint FINAL-1 — Production Hardening. Closes the correctness, authorization, and scale gaps found in a pre-launch production-readiness review, ahead of the campaign's ~3,000-song run. No UI redesign, no copy changes, no new public routes, no database schema changes — every fix reuses the existing architecture.
+
+### Fixed
+
+- **Song queue race condition**: `GenerationDispatcher` claimed a `QUEUED` song via check-then-write (find → mutate in memory → unconditional update), so two overlapping runs (a cron tick racing a user request, or two admin retries) could both pass the check and submit the same song to Mureka twice. `SongRepository` gained `claimQueued(song)` — an atomic conditional update (`WHERE status = 'QUEUED'`) that only one caller can ever win; the dispatcher now aborts cleanly when it loses the race.
+- **Lyric-attempt race condition**: `GenerateLyricsForLeadUseCase` had the same check-then-write shape around `Lead.remainingAttempts`, letting a double-click or duplicate tab consume more attempts than the campaign's 5-attempt budget allows. `LeadRepository` gained `updateAttemptConsumption(lead, expectedRemainingAttempts)` — a conditional update that fails the request instead of silently over-consuming when a concurrent request already changed the count.
+
+### Added
+
+- **Campaign song budget enforcement**: `Campaign.maximumSongs`/`songsGenerated` were persisted but never read. `CampaignGate.isActiveAndGenerationEnabled` now also checks `songsGenerated < maximumSongs`; `GenerationPoller` atomically increments `songsGenerated` the moment a song completes successfully (never on failure, never twice). The admin dashboard's goal progress bar now reads this same persisted counter instead of a separately computed count, so what operators see can never disagree with what the gate enforces.
+- **Admin RBAC**: creating/editing/deactivating/activating admins, changing passwords, and promoting roles are now restricted to `SUPER_ADMIN` (a shared `assertSuperAdmin` check, reusing the existing `BusinessRuleError` → HTTP mapping pattern); a plain `ADMIN` still authenticates and uses every operational screen unchanged. Deactivating the last active `SUPER_ADMIN` is now rejected outright, closing a self-lockout risk.
+- **Canciones (admin songs) at scale**: added pagination, a status filter, free-text search (parent/baby name), a "Reintentar" action directly on the list (previously only reachable from a lead's detail page), and the provider's failure reason for `FAILED` rows (persisted since Sprint 9.1 but never shown anywhere).
+- **Letras and Auditoría pagination/search**: both screens were hard-capped at 200 rows with no way to reach older entries. Both now support pagination and free-text search (parent/baby name for Letras; action/entity/entityId for Auditoría), the same pattern Familias already used.
+- **CSV export hardening**: lead export cells starting with `=`, `+`, `-`, or `@` are now prefixed with `'` before writing, closing a CSV/formula-injection vector when a staff member opens the export in Excel/Sheets. Every export now writes an `export_leads` audit entry (acting admin, filters used) — PII leaves the system on every export, and this closes the one action in the admin panel that previously left no trail.
+
 ## [1.18.2] - 2026-08-06
 
 HOTFIX-UI — Hero Left Column. Layout and typography only, matching a supplied reference — no change to the right column, images, animations, copy, or spacing outside the new panel.

@@ -69,13 +69,19 @@ export class GenerationDispatcher {
       await this.songRepository.update(alreadyGenerating);
     }
 
-    const song = await this.songRepository.findOldestQueued();
-    if (!song) {
+    const oldestQueued = await this.songRepository.findOldestQueued();
+    if (!oldestQueued) {
       return null;
     }
 
-    song.markGenerating();
-    await this.songRepository.update(song);
+    oldestQueued.markGenerating();
+    const song = await this.songRepository.claimQueued(oldestQueued);
+    if (!song) {
+      logger.info("Generation dispatcher: song was already claimed by another run, skipping", {
+        songId: oldestQueued.id,
+      });
+      return null;
+    }
 
     try {
       const lyrics = await this.lyricsRepository.findById(song.lyricsId);

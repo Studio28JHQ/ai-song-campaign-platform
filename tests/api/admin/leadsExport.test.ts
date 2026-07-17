@@ -2,10 +2,22 @@ import "dotenv/config";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockStreamRows = vi.fn();
+const mockGetAdminSession = vi.fn();
+const mockAuditCreate = vi.fn();
 
 vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAdminLeadExportGate", () => ({
   PrismaAdminLeadExportGate: vi.fn().mockImplementation(function PrismaAdminLeadExportGate() {
     return { streamRows: mockStreamRows };
+  }),
+}));
+
+vi.mock("@/infrastructure/auth/getAdminSession", () => ({
+  getAdminSession: mockGetAdminSession,
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", () => ({
+  PrismaAuditLogRepository: vi.fn().mockImplementation(function PrismaAuditLogRepository() {
+    return { create: mockAuditCreate, findByEntity: vi.fn(), findRecent: vi.fn() };
   }),
 }));
 
@@ -48,6 +60,58 @@ function fakeRow(overrides: Record<string, unknown> = {}) {
 describe("GET /api/admin/leads/export", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetAdminSession.mockResolvedValue({ adminId: "admin-1", email: "admin@example.com" });
+    mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
+  });
+
+  it("returns 401 and never starts the stream when there is no active session", async () => {
+    mockGetAdminSession.mockResolvedValue(null);
+
+    const response = await GET(getRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.error).toBe("unauthorized");
+    expect(mockStreamRows).not.toHaveBeenCalled();
+  });
+
+  it("writes an export_leads audit entry attributed to the acting admin before streaming", async () => {
+    mockStreamRows.mockImplementation(async function* () {
+      yield [fakeRow()];
+    });
+
+    await GET(getRequest("?q=jane&songStatus=FAILED&emailStatus=NOT_SENT&city=Austin"));
+
+    expect(mockAuditCreate).toHaveBeenCalledTimes(1);
+    const [entry] = mockAuditCreate.mock.calls[0];
+    expect(entry.adminId).toBe("admin-1");
+    expect(entry.action).toBe("export_leads");
+    expect(entry.entity).toBe("Lead");
+    expect(entry.metadata).toMatchObject({
+      query: "jane",
+      songStatus: "FAILED",
+      emailStatus: "NOT_SENT",
+      city: "Austin",
+    });
+  });
+
+  it("escapes a leading =, +, -, or @ so the cell can never open as a formula (CSV injection)", async () => {
+    mockStreamRows.mockImplementation(async function* () {
+      yield [
+        fakeRow({ parentName: "=cmd|'/c calc'!A1" }),
+        fakeRow({ babyName: "+1+1", email: "b@example.com" }),
+        fakeRow({ babyName: "-1-1", email: "c@example.com" }),
+        fakeRow({ babyName: "@SUM(1+1)", email: "d@example.com" }),
+      ];
+    });
+
+    const response = await GET(getRequest());
+    const body = await readBody(response);
+
+    expect(body).toContain("'=cmd|'/c calc'!A1");
+    expect(body).toContain("'+1+1");
+    expect(body).toContain("'-1-1");
+    expect(body).toContain("'@SUM(1+1)");
   });
 
   it("streams a CSV with the header row and one line per lead", async () => {

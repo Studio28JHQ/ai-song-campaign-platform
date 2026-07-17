@@ -83,10 +83,23 @@ export class GenerateLyricsForLeadUseCase {
     });
 
     if (isRegeneration || !result.approved) {
+      const remainingAttemptsBeforeConsumption = lead.remainingAttempts;
       lead.consumeAttempt();
-    }
 
-    await this.leadRepository.update(lead);
+      const persisted = await this.leadRepository.updateAttemptConsumption(
+        lead,
+        remainingAttemptsBeforeConsumption,
+      );
+
+      if (!persisted) {
+        throw new BusinessRuleError("No remaining attempts left to generate lyrics.", {
+          code: "lyrics.no_remaining_attempts",
+          context: { leadId: lead.id },
+        });
+      }
+    } else {
+      await this.leadRepository.update(lead);
+    }
 
     if (!result.approved) {
       return {

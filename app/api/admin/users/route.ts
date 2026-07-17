@@ -82,6 +82,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
 function handleUseCaseError(error: unknown): NextResponse {
   if (error instanceof BusinessRuleError) {
+    if (error.code === "admin.forbidden") {
+      return errorResponse(403, "forbidden", error.message);
+    }
     if (error.code === "admin.email_already_exists") {
       return errorResponse(409, "email_already_exists", error.message);
     }

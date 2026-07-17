@@ -27,6 +27,10 @@ export class GetDashboardSummaryUseCase {
         ? Math.round((counts.songsCompleted / counts.songsRequested) * 100)
         : 0;
 
-    return { ...counts, generationSuccessRate, campaignGoal: this.campaignMaxSongs };
+    return {
+      ...counts,
+      generationSuccessRate,
+      campaignGoal: counts.campaignMaximumSongs ?? this.campaignMaxSongs,
+    };
   }
 }

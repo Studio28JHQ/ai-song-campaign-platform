@@ -14,6 +14,7 @@ const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  updateAttemptConsumption: vi.fn(),
 };
 
 const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof vi.fn> } = {
@@ -32,6 +33,7 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
   findGenerating: vi.fn(),
   findOldestQueued: vi.fn(),
   update: vi.fn(),
+  claimQueued: vi.fn(),
 };
 
 const mockIsActiveAndGenerationEnabled = vi.fn();
@@ -82,7 +84,10 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => (
 
 vi.mock("@/infrastructure/persistence/prisma/song/PrismaCampaignGate", () => ({
   PrismaCampaignGate: vi.fn().mockImplementation(function PrismaCampaignGate() {
-    return { isActiveAndGenerationEnabled: mockIsActiveAndGenerationEnabled };
+    return {
+      isActiveAndGenerationEnabled: mockIsActiveAndGenerationEnabled,
+      incrementSongsGenerated: vi.fn().mockResolvedValue(undefined),
+    };
   }),
 }));
 
@@ -176,15 +181,23 @@ async function runScheduledBackgroundWork(): Promise<void> {
 
 describe("POST /api/song/generate", () => {
   let createdSong: Song | undefined;
+  // Mirrors the "status as of the last successful write" tracking the
+  // in-memory fakes use elsewhere: `song` is mutated in place (e.g.
+  // `markGenerating()`) before a repository write ever happens, so
+  // `createdSong?.status` alone can't tell `claimQueued` what was
+  // actually last persisted.
+  let persistedStatus: SongStatus | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     capturedAfterCallbacks.length = 0;
     createdSong = undefined;
+    persistedStatus = undefined;
     mockGetLeadSession.mockResolvedValue("lead-1");
     mockSongRepository.findByLead.mockResolvedValue(null);
     mockSongRepository.create.mockImplementation(async (song: Song) => {
       createdSong = song;
+      persistedStatus = song.status;
       return song;
     });
     // GenerationDispatcher/GenerationPoller pick up the oldest QUEUED (then
@@ -199,6 +212,13 @@ describe("POST /api/song/generate", () => {
     );
     mockSongRepository.update.mockImplementation(async (song: Song) => {
       createdSong = song;
+      persistedStatus = song.status;
+      return song;
+    });
+    mockSongRepository.claimQueued.mockImplementation(async (song: Song) => {
+      if (persistedStatus !== SongStatus.QUEUED) return null;
+      createdSong = song;
+      persistedStatus = song.status;
       return song;
     });
     mockIsActiveAndGenerationEnabled.mockResolvedValue(true);

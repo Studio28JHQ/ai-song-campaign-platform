@@ -58,8 +58,14 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
 
 function handleUseCaseError(error: unknown, adminId: string): NextResponse {
   if (error instanceof BusinessRuleError) {
+    if (error.code === "admin.forbidden") {
+      return errorResponse(403, "forbidden", error.message);
+    }
     if (error.code === "admin.user_not_found") {
       return errorResponse(404, "admin_not_found", error.message);
+    }
+    if (error.code === "admin.cannot_deactivate_last_super_admin") {
+      return errorResponse(422, "cannot_deactivate_last_super_admin", error.message);
     }
     return errorResponse(422, "business_rule_violation", error.message);
   }

@@ -12,6 +12,7 @@ import type {
 } from "@/application/song/contracts/AudioDownloader";
 import type { AudioStorage } from "@/application/song/contracts/AudioStorage";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
+import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
 import type { EmailDeliveryTracker } from "@/application/song/contracts/EmailDeliveryTracker";
 import type {
   SongEmailSender,
@@ -45,6 +46,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class InMemorySongRepository implements SongRepository {
@@ -73,6 +85,14 @@ class InMemorySongRepository implements SongRepository {
     );
   }
   async update(song: Song): Promise<Song> {
+    this.records.set(song.id, song);
+    return song;
+  }
+  async claimQueued(song: Song): Promise<Song | null> {
+    const existing = this.records.get(song.id);
+    if (!existing || existing.status !== SongStatus.QUEUED) {
+      return null;
+    }
     this.records.set(song.id, song);
     return song;
   }
@@ -127,6 +147,13 @@ function fakeEmailSender(error?: Error): SongEmailSender {
   };
 }
 
+function fakeCampaignGate(): CampaignGate {
+  return {
+    isActiveAndGenerationEnabled: vi.fn().mockResolvedValue(true),
+    incrementSongsGenerated: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function createLead(): Lead {
   return Lead.create(
     {
@@ -169,6 +196,7 @@ describe("GenerationPoller", () => {
       audioUrlResolver?: AudioUrlResolver;
       emailSender?: SongEmailSender;
       deliveryTracker?: EmailDeliveryTracker;
+      campaignGate?: CampaignGate;
     } = {},
   ): GenerationPoller {
     return new GenerationPoller(
@@ -180,6 +208,7 @@ describe("GenerationPoller", () => {
       leadRepository,
       options.emailSender ?? fakeEmailSender(),
       options.deliveryTracker ?? deliveryTracker,
+      options.campaignGate ?? fakeCampaignGate(),
     );
   }
 
@@ -259,6 +288,16 @@ describe("GenerationPoller", () => {
       expect(persisted?.providerSongId).toBe("mureka-123");
       expect(persisted?.duration).toBe(90);
       expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("provider.example.com");
+    });
+
+    it("increments the campaign's songsGenerated counter once the song completes", async () => {
+      seedGeneratingSong(lead.id, songRepository);
+      const campaignGate = fakeCampaignGate();
+      const poller = readyToDownloadPoller({ campaignGate });
+
+      await poller.execute();
+
+      expect(campaignGate.incrementSongsGenerated).toHaveBeenCalledWith(lead.campaignId);
     });
 
     it("sends the song-ready email exactly once, using a resolved signed URL, once the song completes", async () => {
@@ -342,8 +381,10 @@ describe("GenerationPoller", () => {
 
   it("marks the song FAILED with the provider's error when polling reports failure", async () => {
     const song = seedGeneratingSong(lead.id, songRepository);
+    const campaignGate = fakeCampaignGate();
     const poller = buildPoller({
       songGenerator: fakeSongGenerator({ status: "failed", error: "Provider rejected the job." }),
+      campaignGate,
     });
 
     const response = await poller.execute();
@@ -352,6 +393,7 @@ describe("GenerationPoller", () => {
     const persisted = await songRepository.findById(song.id);
     expect(persisted?.status).toBe(SongStatus.FAILED);
     expect(persisted?.providerError).toBe("Provider rejected the job.");
+    expect(campaignGate.incrementSongsGenerated).not.toHaveBeenCalled();
   });
 
   it("downloads the audio, uploads it to R2, and persists only the storage key — never a URL", async () => {

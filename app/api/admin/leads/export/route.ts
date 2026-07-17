@@ -3,7 +3,10 @@ import { z } from "zod";
 import type { AdminLeadExportRow } from "@/application/admin/contracts/AdminLeadExportGate";
 import { validateDateRange } from "@/application/admin/validateDateRange";
 import { ExportLeadsUseCase } from "@/application/admin/use-cases/ExportLeadsUseCase";
+import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
+import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
 import { PrismaAdminLeadExportGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminLeadExportGate";
+import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 
@@ -19,9 +22,22 @@ import { logger } from "@/shared/logger/logger";
  * has been sent, so every validation that *can* fail (bad filters, no
  * session) happens before the stream starts; only a genuine mid-export
  * database error is limited to being logged and ending the stream early.
+ *
+ * Sprint FINAL-1 — Production Hardening: every export writes an
+ * `export_leads` audit entry (who exported which filter combination,
+ * and when) before the stream starts — PII (email/phone) leaves the
+ * system on every export, so this is exactly the kind of action the
+ * audit trail exists for. Cell values are also escaped against
+ * CSV/formula injection: a lead-supplied field starting with
+ * `=`, `+`, `-`, or `@` is prefixed with `'` so it opens as text, never
+ * a formula, in Excel/Sheets.
  */
 
 const exportLeadsUseCase = new ExportLeadsUseCase(new PrismaAdminLeadExportGate());
+const auditLogRepository = new PrismaAuditLogRepository();
+
+/** Characters that, left unescaped, let a lead's own text field open as a formula when the exported CSV is opened in Excel/Sheets (CSV/formula injection). */
+const FORMULA_TRIGGER_CHARS = new Set(["=", "+", "-", "@"]);
 
 const CSV_HEADER = [
   "Lead",
@@ -46,7 +62,8 @@ const exportParamsSchema = z.object({
 });
 
 function csvEscape(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const safe = FORMULA_TRIGGER_CHARS.has(value[0]) ? `'${value}` : value;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 function toCsvLine(cells: string[]): string {
@@ -69,6 +86,11 @@ function toCsvRow(row: AdminLeadExportRow): string {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const session = await getAdminSession();
+  if (!session) {
+    return errorResponse(401, "unauthorized", "Authentication required.");
+  }
+
   const { searchParams } = new URL(request.url);
 
   const parsed = exportParamsSchema.safeParse({
@@ -101,6 +123,22 @@ export async function GET(request: Request): Promise<Response> {
     emailStatus: parsed.data.emailStatus,
     city: parsed.data.city,
   };
+
+  await auditLogRepository.create(
+    AuditLogEntry.create({
+      adminId: session.adminId,
+      action: "export_leads",
+      entity: "Lead",
+      metadata: {
+        query: filter.query ?? null,
+        dateFrom: filter.dateFrom ? filter.dateFrom.toISOString() : null,
+        dateTo: filter.dateTo ? filter.dateTo.toISOString() : null,
+        songStatus: filter.songStatus ?? null,
+        emailStatus: filter.emailStatus ?? null,
+        city: filter.city ?? null,
+      },
+    }),
+  );
 
   const encoder = new TextEncoder();
 

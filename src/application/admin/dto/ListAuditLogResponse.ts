@@ -9,7 +9,17 @@ export interface AuditLogView {
   entityId: string | null;
 }
 
+/** Input to `ListAuditLogUseCase` — pagination and free-text search (action/entity/entityId) for the "Auditoría" screen. */
+export interface ListAuditLogRequest {
+  page: number;
+  pageSize?: number;
+  query?: string;
+}
+
 /** Output of `ListAuditLogUseCase`. */
 export interface ListAuditLogResponse {
   items: AuditLogView[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

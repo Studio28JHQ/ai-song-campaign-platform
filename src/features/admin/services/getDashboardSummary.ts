@@ -18,6 +18,8 @@ export interface DashboardSummary {
   generationSuccessRate: number;
   campaignGoal: number;
   averageGenerationMinutes: AverageGenerationMinutes;
+  campaignMaximumSongs: number | null;
+  campaignSongsGenerated: number | null;
 }
 
 export class GetDashboardSummaryError extends Error {

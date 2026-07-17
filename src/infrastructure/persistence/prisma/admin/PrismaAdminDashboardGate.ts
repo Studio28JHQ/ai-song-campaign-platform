@@ -37,6 +37,7 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         today,
         last7Days,
         last30Days,
+        campaign,
       ] = await Promise.all([
         this.client.lead.count(),
         this.client.lyrics.count(),
@@ -51,6 +52,10 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         this.averageGenerationMinutesSince(startOfToday),
         this.averageGenerationMinutesSince(sevenDaysAgo),
         this.averageGenerationMinutesSince(thirtyDaysAgo),
+        this.client.campaign.findFirst({
+          orderBy: { createdAt: "asc" },
+          select: { maximumSongs: true, songsGenerated: true },
+        }),
       ]);
 
       return {
@@ -65,6 +70,8 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         emailsSent,
         emailsResent,
         averageGenerationMinutes: { today, last7Days, last30Days },
+        campaignMaximumSongs: campaign?.maximumSongs ?? null,
+        campaignSongsGenerated: campaign?.songsGenerated ?? null,
       };
     } catch (error) {
       throw new DatabaseError("Unexpected database error while loading the dashboard summary.", {

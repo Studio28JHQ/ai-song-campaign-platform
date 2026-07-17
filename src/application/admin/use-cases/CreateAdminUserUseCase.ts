@@ -5,6 +5,7 @@ import type { AuditLogRepository } from "@/domain/admin/repositories/AuditLogRep
 import { BusinessRuleError } from "@/shared/errors";
 import type { PasswordHasher } from "../contracts/PasswordHasher";
 import type { CreateAdminUserRequest, CreateAdminUserResponse } from "../dto/AdminUserDto";
+import { assertSuperAdmin } from "../services/adminAuthorization";
 
 /**
  * Creates a new campaign operator account (Sprint ADMIN-1 — Backoffice
@@ -19,6 +20,8 @@ export class CreateAdminUserUseCase {
   ) {}
 
   async execute(request: CreateAdminUserRequest): Promise<CreateAdminUserResponse> {
+    await assertSuperAdmin(this.adminUserRepository, request.actingAdminId);
+
     const normalizedEmail = request.email.trim().toLowerCase();
     const existing = await this.adminUserRepository.findByEmail(normalizedEmail);
 

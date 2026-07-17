@@ -37,6 +37,17 @@ class InMemoryLeadRepository implements LeadRepository {
     this.leads.set(lead.id, lead);
     return lead;
   }
+  async updateAttemptConsumption(
+    lead: Lead,
+    expectedRemainingAttempts: number,
+  ): Promise<Lead | null> {
+    const existing = this.leads.get(lead.id);
+    if (!existing || existing.remainingAttempts !== expectedRemainingAttempts) {
+      return null;
+    }
+    this.leads.set(lead.id, lead);
+    return lead;
+  }
 }
 
 class InMemoryLyricsRepository implements LyricsRepository {
@@ -69,11 +80,23 @@ class InMemoryLyricsRepository implements LyricsRepository {
 
 class InMemorySongRepository implements SongRepository {
   private readonly records = new Map<string, Song>();
+  /**
+   * `Song` is mutated in place before a repository write ever happens
+   * (e.g. `markGenerating()` runs before `claimQueued()` is called), so
+   * checking `records.get(id).status` inside `claimQueued` would see the
+   * caller's own not-yet-persisted mutation, not the last *persisted*
+   * status — defeating the whole point of the conditional claim. This
+   * tracks status as of the last successful write, independent of the
+   * live (shared-reference) `Song` object's current in-memory state.
+   */
+  private readonly persistedStatus = new Map<string, SongStatus>();
   seed(song: Song): void {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
   }
   async create(song: Song): Promise<Song> {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
     return song;
   }
   async findById(id: string): Promise<Song | null> {
@@ -94,6 +117,15 @@ class InMemorySongRepository implements SongRepository {
   }
   async update(song: Song): Promise<Song> {
     this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
+    return song;
+  }
+  async claimQueued(song: Song): Promise<Song | null> {
+    if (this.persistedStatus.get(song.id) !== SongStatus.QUEUED) {
+      return null;
+    }
+    this.records.set(song.id, song);
+    this.persistedStatus.set(song.id, song.status);
     return song;
   }
 }
@@ -251,6 +283,19 @@ describe("GenerationDispatcher", () => {
     const persisted = await songRepository.findById(song.id);
     expect(persisted?.status).toBe(SongStatus.GENERATING);
     expect(persisted?.providerTaskId).toBe("task-123");
+  });
+
+  it("does not submit when another run has already atomically claimed the song", async () => {
+    seedQueuedSong();
+    const claimSpy = vi.spyOn(songRepository, "claimQueued").mockResolvedValue(null);
+    const songGenerator = fakeSongGenerator();
+    const dispatcher = buildDispatcher({ songGenerator });
+
+    const result = await dispatcher.execute();
+
+    expect(result).toBeNull();
+    expect(claimSpy).toHaveBeenCalledTimes(1);
+    expect(songGenerator.submitGeneration).not.toHaveBeenCalled();
   });
 
   it("marks the song FAILED and re-throws on a submission failure", async () => {

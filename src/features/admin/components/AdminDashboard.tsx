@@ -22,11 +22,19 @@ function formatMinutes(value: number | null): string {
  * Sprint ADMIN-1 — Backoffice de Campaña. The campaign goal progress
  * bar — "3000 canciones" — driven by `summary.campaignGoal`
  * (`CAMPAIGN_MAX_SONGS`), never a hardcoded number.
+ *
+ * RC-final — Production Hardening: the numerator is
+ * `campaignSongsGenerated` (`Campaign.songsGenerated`), the same
+ * persisted counter the generation gate enforces against, falling back
+ * to the live `songsCompleted` count only if no campaign row exists —
+ * so this bar can never disagree with what the system is actually
+ * enforcing.
  */
 function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
+  const songsGenerated = summary.campaignSongsGenerated ?? summary.songsCompleted;
   const percentage =
     summary.campaignGoal > 0
-      ? Math.min(100, Math.round((summary.songsCompleted / summary.campaignGoal) * 100))
+      ? Math.min(100, Math.round((songsGenerated / summary.campaignGoal) * 100))
       : 0;
 
   return (
@@ -34,7 +42,7 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
       <div className="flex items-center justify-between">
         <span className="text-label text-muted-foreground">Meta de la campaña</span>
         <span className="text-sm font-semibold text-foreground">
-          {summary.songsCompleted} / {summary.campaignGoal} ({percentage}%)
+          {songsGenerated} / {summary.campaignGoal} ({percentage}%)
         </span>
       </div>
       <div

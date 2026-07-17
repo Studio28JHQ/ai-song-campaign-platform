@@ -68,6 +68,9 @@ export async function POST(request: Request, context: RouteContext): Promise<Nex
 
 function handleUseCaseError(error: unknown, adminId: string): NextResponse {
   if (error instanceof BusinessRuleError) {
+    if (error.code === "admin.forbidden") {
+      return errorResponse(403, "forbidden", error.message);
+    }
     if (error.code === "admin.user_not_found") {
       return errorResponse(404, "admin_not_found", error.message);
     }

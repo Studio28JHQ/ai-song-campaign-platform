@@ -41,7 +41,7 @@ class InMemoryAuditLogRepository implements AuditLogRepository {
     return [];
   }
   async findRecent() {
-    return [];
+    return { items: [], total: 0 };
   }
 }
 
