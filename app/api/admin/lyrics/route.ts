@@ -46,8 +46,19 @@ export async function GET(request: Request): Promise<NextResponse> {
       return errorResponse(400, "invalid_request", error.message);
     }
 
+    // `error.message` alone is the gate's own generic wrapper text — the
+    // real underlying database error is only ever visible via `.cause`
+    // (see `PrismaAdminLyricsListGate`). Logging only the former made an
+    // actual root cause invisible even server-side. The response to the
+    // client is unchanged either way.
     logger.error("Unexpected error while listing lyrics", {
       error: error instanceof Error ? error.message : String(error),
+      cause:
+        error instanceof Error && error.cause instanceof Error
+          ? error.cause.message
+          : error instanceof Error
+            ? error.cause
+            : undefined,
     });
 
     return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.1] - 2026-08-16
+
+### Fixed
+
+- **Admin → Lyrics page failing to load** ("Algo salió mal. Inténtalo de nuevo.", logged as "Unexpected error while listing lyrics"): `PrismaAdminLyricsListGate.list()` queried `lyrics.findMany()` with an `include` (relations only), which — unlike an explicit `select` — implicitly requests every scalar column Prisma's schema knows about for `Lyrics`, including `parentMessage`/`musicMood`/`musicDirection`/`voice` from a migration (`20260811090000_ai_musical_direction`, Sprint v1.1) not yet applied to this database. The query failed with `column lyrics.parentMessage does not exist`, wrapped into a generic `DatabaseError` before reaching the client. Replaced `include` with an explicit `select` listing exactly the columns this admin read model actually maps (`id`, `leadId`, `createdAt`, `version`, `approved`, `rejectionReason`, plus the related lead/mood fields), which no longer depends on that pending migration and is no longer coupled to future Lyrics columns this list doesn't use. Also logs the underlying database error's `cause` (previously only the generic wrapper message was logged, hiding the real error even server-side) — response shape and status code to the client are unchanged. Pagination, search, sorting, permissions, and response shape are all unchanged.
+
 ## [1.25.0] - 2026-08-15
 
 Sprint v1.4 — Professional Songwriting Quality. Deepens the songwriting instructions inside the Claude system prompt so every generated song reads as professionally handcrafted for one specific child, rather than templated. No change to architecture, security, moderation, persistence, APIs, the Mureka prompt, or the generation flow — only the Writing Instructions, Language Rules, and Music Direction sections of the Claude system prompt were touched.

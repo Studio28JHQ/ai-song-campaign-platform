@@ -29,7 +29,20 @@ export class PrismaAdminLyricsListGate implements AdminLyricsListGate {
           orderBy: { createdAt: "desc" },
           skip: (filter.page - 1) * filter.pageSize,
           take: filter.pageSize,
-          include: {
+          // Explicit `select`, not `include`: `include` adds relations on
+          // top of Prisma's default "every scalar column on Lyrics",
+          // which silently pulls in any column ever added to the model —
+          // including one from a migration that hasn't been deployed to
+          // this database yet. `select` requests exactly (and only) the
+          // columns `AdminLyricsRow` below actually maps, so this read
+          // model is never coupled to Lyrics columns it doesn't use.
+          select: {
+            id: true,
+            leadId: true,
+            createdAt: true,
+            version: true,
+            approved: true,
+            rejectionReason: true,
             lead: { select: { parentName: true, babyName: true } },
             mood: { select: { name: true } },
           },
