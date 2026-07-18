@@ -13,10 +13,15 @@ function fakeClient(counts: {
   songsFailed: number;
   emailsSent: number;
   emailsResent: number;
+  songsCompletedToday?: number;
+  songsCompletedLast7Days?: number;
+  songsCompletedLast30Days?: number;
   completedSongs?: Array<{ submittedAt: Date; completedAt: Date }>;
+  registrations?: Array<{ createdAt: Date }>;
   campaign?: { maximumSongs: number; songsGenerated: number } | null;
 }): PrismaClient {
   const leadCount = vi.fn().mockResolvedValue(counts.totalLeads);
+  const leadFindMany = vi.fn().mockResolvedValue(counts.registrations ?? []);
   const lyricsCount = vi
     .fn()
     .mockResolvedValueOnce(counts.lyricsGenerated)
@@ -28,13 +33,16 @@ function fakeClient(counts: {
     .mockResolvedValueOnce(counts.songsGenerating)
     .mockResolvedValueOnce(counts.songsCompleted)
     .mockResolvedValueOnce(counts.songsFailed)
-    .mockResolvedValueOnce(counts.emailsSent);
+    .mockResolvedValueOnce(counts.emailsSent)
+    .mockResolvedValueOnce(counts.songsCompletedToday ?? 0)
+    .mockResolvedValueOnce(counts.songsCompletedLast7Days ?? 0)
+    .mockResolvedValueOnce(counts.songsCompletedLast30Days ?? 0);
   const auditLogCount = vi.fn().mockResolvedValue(counts.emailsResent);
   const songFindMany = vi.fn().mockResolvedValue(counts.completedSongs ?? []);
   const campaignFindFirst = vi.fn().mockResolvedValue(counts.campaign ?? null);
 
   return {
-    lead: { count: leadCount },
+    lead: { count: leadCount, findMany: leadFindMany },
     lyrics: { count: lyricsCount },
     song: { count: songCount, findMany: songFindMany },
     auditLog: { count: auditLogCount },
@@ -74,6 +82,11 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
       campaignSongsGenerated: null,
+      songsCompletedToday: 0,
+      songsCompletedLast7Days: 0,
+      songsCompletedLast30Days: 0,
+      registrationsByDay: expect.any(Array),
+      completedSongsByDay: expect.any(Array),
     });
   });
 
@@ -151,9 +164,66 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     expect(summary.averageGenerationMinutes.last30Days).toBe(6);
   });
 
+  it("returns the per-window completed-song counts (hoy/7 días/30 días)", async () => {
+    const client = fakeClient({
+      totalLeads: 1,
+      lyricsGenerated: 1,
+      lyricsApproved: 1,
+      songsRequested: 5,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 5,
+      songsFailed: 0,
+      emailsSent: 5,
+      emailsResent: 0,
+      songsCompletedToday: 1,
+      songsCompletedLast7Days: 3,
+      songsCompletedLast30Days: 5,
+    });
+    const gate = new PrismaAdminDashboardGate(client);
+
+    const summary = await gate.getSummary();
+
+    expect(summary.songsCompletedToday).toBe(1);
+    expect(summary.songsCompletedLast7Days).toBe(3);
+    expect(summary.songsCompletedLast30Days).toBe(5);
+  });
+
+  it("buckets registrations and completed songs into one zero-filled entry per day for the last 30 days", async () => {
+    const today = new Date();
+    const client = fakeClient({
+      totalLeads: 2,
+      lyricsGenerated: 1,
+      lyricsApproved: 1,
+      songsRequested: 1,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 1,
+      songsFailed: 0,
+      emailsSent: 1,
+      emailsResent: 0,
+      registrations: [{ createdAt: today }, { createdAt: today }],
+      completedSongs: [{ submittedAt: today, completedAt: today }],
+    });
+    const gate = new PrismaAdminDashboardGate(client);
+
+    const summary = await gate.getSummary();
+
+    expect(summary.registrationsByDay).toHaveLength(31); // inclusive of today, 30 days back
+    expect(summary.registrationsByDay.at(-1)).toEqual({
+      date: today.toISOString().slice(0, 10),
+      count: 2,
+    });
+    expect(summary.completedSongsByDay).toHaveLength(31);
+    expect(summary.completedSongsByDay.at(-1)).toEqual({
+      date: today.toISOString().slice(0, 10),
+      count: 1,
+    });
+  });
+
   it("throws a shared DatabaseError on an unexpected failure", async () => {
     const client = {
-      lead: { count: vi.fn().mockRejectedValue(new Error("connection lost")) },
+      lead: { count: vi.fn().mockRejectedValue(new Error("connection lost")), findMany: vi.fn() },
       lyrics: { count: vi.fn() },
       song: { count: vi.fn(), findMany: vi.fn() },
       auditLog: { count: vi.fn() },

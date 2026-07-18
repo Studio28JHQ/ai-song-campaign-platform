@@ -4,6 +4,11 @@ export interface AverageGenerationMinutes {
   last30Days: number | null;
 }
 
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
 export interface DashboardSummary {
   totalLeads: number;
   lyricsGenerated: number;
@@ -16,10 +21,16 @@ export interface DashboardSummary {
   emailsSent: number;
   emailsResent: number;
   generationSuccessRate: number;
+  lyricsApprovalRate: number;
   campaignGoal: number;
   averageGenerationMinutes: AverageGenerationMinutes;
   campaignMaximumSongs: number | null;
   campaignSongsGenerated: number | null;
+  songsCompletedToday: number;
+  songsCompletedLast7Days: number;
+  songsCompletedLast30Days: number;
+  registrationsByDay: DailyCount[];
+  completedSongsByDay: DailyCount[];
 }
 
 export class GetDashboardSummaryError extends Error {

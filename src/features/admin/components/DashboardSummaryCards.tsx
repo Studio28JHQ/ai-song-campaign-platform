@@ -8,7 +8,8 @@ interface SummaryCardProps {
   icon: ComponentType<{ className?: string }>;
 }
 
-function SummaryCard({ label, value, icon: Icon }: SummaryCardProps) {
+/** Reused by `AdminDashboard`'s "Estadísticas" section (Sprint FINAL-2) — same card, no new component. */
+export function SummaryCard({ label, value, icon: Icon }: SummaryCardProps) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-border bg-background p-4">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">

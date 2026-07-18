@@ -20,6 +20,11 @@ function fakeGate(
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
       campaignSongsGenerated: null,
+      songsCompletedToday: 0,
+      songsCompletedLast7Days: 1,
+      songsCompletedLast30Days: 5,
+      registrationsByDay: [],
+      completedSongsByDay: [],
       ...counts,
     }),
   };
@@ -44,10 +49,16 @@ describe("GetDashboardSummaryUseCase", () => {
       emailsSent: 5,
       emailsResent: 2,
       generationSuccessRate: 63, // round(5/8 * 100)
+      lyricsApprovalRate: 67, // round(10/15 * 100)
       campaignGoal: 3000,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
       campaignSongsGenerated: null,
+      songsCompletedToday: 0,
+      songsCompletedLast7Days: 1,
+      songsCompletedLast30Days: 5,
+      registrationsByDay: [],
+      completedSongsByDay: [],
     });
     expect(gate.getSummary).toHaveBeenCalledTimes(1);
   });
@@ -68,6 +79,24 @@ describe("GetDashboardSummaryUseCase", () => {
     const result = await useCase.execute();
 
     expect(result.generationSuccessRate).toBe(100);
+  });
+
+  it("returns a 0% lyrics approval rate when no lyrics have been generated yet, without dividing by zero", async () => {
+    const gate = fakeGate({ lyricsGenerated: 0, lyricsApproved: 0 });
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
+
+    const result = await useCase.execute();
+
+    expect(result.lyricsApprovalRate).toBe(0);
+  });
+
+  it("returns a 100% lyrics approval rate when every generated lyrics version was approved", async () => {
+    const gate = fakeGate({ lyricsGenerated: 4, lyricsApproved: 4 });
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
+
+    const result = await useCase.execute();
+
+    expect(result.lyricsApprovalRate).toBe(100);
   });
 
   it("passes the campaign goal through unchanged when the gate has no campaign row", async () => {

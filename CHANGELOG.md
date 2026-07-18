@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-08-08
+
+Sprint FINAL-2 — Campaign Operations Dashboard. Improves the admin backoffice for day-to-day campaign operation. No backend business rules, AI providers, or queue logic touched; no schema changes, no new dependencies, no UI redesign, no color/typography changes — entirely additive, reusing the existing design system and existing data.
+
+### Added
+
+- **Dashboard — daily trends**: "Registros por día" and "Canciones completadas por día" over the last 30 days, as a minimal dependency-free bar chart (`DailyBarChart`, plain divs, existing `bg-primary` token only) — zero-filled days included, computed in-memory from bounded, already-windowed Lead/Song queries (`PrismaAdminDashboardGate`).
+- **Dashboard — Estadísticas**: six new KPI cards — canciones hoy/últimos 7 días/últimos 30 días, tiempo promedio de generación, aprobación de letras, éxito de canciones — reusing the exact same `SummaryCard` component and, where possible, already-computed values; only `lyricsApprovalRate` and the three per-window song-completion counts are new.
+- **Dashboard — funnel labels**: relabeled to the exact steps named in the brief (Familias registradas → Letras generadas → Letras aprobadas → Canciones completadas → Correos enviados); no structural change.
+- **Actividad reciente**: a new Dashboard panel showing the latest campaign-wide events — nueva familia, letra generada, letra aprobada, canción completada, correo enviado, reenvío de correo — merged from existing Lead/Lyrics/Song timestamps and existing `AuditLog` `resend_email` entries (`AdminRecentActivityGate` / `ListRecentActivityUseCase` / `GET /api/admin/activity`). No new table; six bounded queries plus one bounded follow-up lookup for resend entries, avoiding N+1.
+- **Canciones**: an HTML5 audio player and download link were already present; added a "Copiar URL" button (copies the already-resolved signed URL via `navigator.clipboard`, never re-resolves or persists it) and colored status badges (`bg-success`/`bg-warning`/`bg-destructive`/`bg-muted` — pre-existing, previously-unused theme tokens, not new colors).
+
+### Notes
+
+- Lead Detail's execution history already covered registration, every lyrics version, the approved version, song generation, completion, and both automatic and manual email events with timestamps (Sprint ADMIN-1) — verified against this sprint's brief, no changes needed.
+
 ## [1.19.0] - 2026-08-07
 
 Sprint FINAL-1 — Production Hardening. Closes the correctness, authorization, and scale gaps found in a pre-launch production-readiness review, ahead of the campaign's ~3,000-song run. No UI redesign, no copy changes, no new public routes, no database schema changes — every fix reuses the existing architecture.

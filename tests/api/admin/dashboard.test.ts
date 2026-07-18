@@ -47,6 +47,7 @@ describe("GET /api/admin/dashboard", () => {
       emailsSent: 4,
       emailsResent: 2,
       generationSuccessRate: 50,
+      lyricsApprovalRate: 67, // round(10/15 * 100)
       campaignGoal: 3000,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });

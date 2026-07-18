@@ -1,15 +1,19 @@
 "use client";
 
+import { CheckCircle2, FileText, Music, Percent } from "lucide-react";
 import { useDashboardSummary } from "../hooks/useDashboardSummary";
 import type { DashboardSummary } from "../services/getDashboardSummary";
-import { DashboardSummaryCards } from "./DashboardSummaryCards";
+import { DailyBarChart } from "./DailyBarChart";
+import { DashboardSummaryCards, SummaryCard } from "./DashboardSummaryCards";
+import { RecentActivityPanel } from "./RecentActivityPanel";
 
+/** Sprint FINAL-2 — Campaign Operations Dashboard. Exact funnel steps named in the brief. */
 const FUNNEL_STEPS: Array<{ label: string; value: (s: DashboardSummary) => number }> = [
-  { label: "Registro", value: (s) => s.totalLeads },
-  { label: "Letra generada", value: (s) => s.lyricsGenerated },
-  { label: "Letra aprobada", value: (s) => s.lyricsApproved },
-  { label: "Canción generada", value: (s) => s.songsCompleted },
-  { label: "Correo enviado", value: (s) => s.emailsSent },
+  { label: "Familias registradas", value: (s) => s.totalLeads },
+  { label: "Letras generadas", value: (s) => s.lyricsGenerated },
+  { label: "Letras aprobadas", value: (s) => s.lyricsApproved },
+  { label: "Canciones completadas", value: (s) => s.songsCompleted },
+  { label: "Correos enviados", value: (s) => s.emailsSent },
 ];
 
 function formatMinutes(value: number | null): string {
@@ -87,6 +91,47 @@ function GenerationTimeStats({ summary }: { summary: DashboardSummary }) {
   );
 }
 
+/**
+ * Sprint FINAL-2 — Campaign Operations Dashboard. The six KPI cards the
+ * brief names explicitly for "Estadísticas" — reuses the exact same
+ * `SummaryCard` `DashboardSummaryCards` already renders, and every
+ * value already exists on `DashboardSummary` (three window counts from
+ * `PrismaAdminDashboardGate`, the two rates computed in
+ * `GetDashboardSummaryUseCase`) — no new component, no new query shape.
+ */
+function StatisticsCards({ summary }: { summary: DashboardSummary }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <SummaryCard label="Canciones hoy" value={summary.songsCompletedToday} icon={Music} />
+      <SummaryCard
+        label="Canciones últimos 7 días"
+        value={summary.songsCompletedLast7Days}
+        icon={Music}
+      />
+      <SummaryCard
+        label="Canciones últimos 30 días"
+        value={summary.songsCompletedLast30Days}
+        icon={Music}
+      />
+      <SummaryCard
+        label="Tiempo promedio de generación"
+        value={formatMinutes(summary.averageGenerationMinutes.last30Days)}
+        icon={FileText}
+      />
+      <SummaryCard
+        label="Aprobación de letras"
+        value={`${summary.lyricsApprovalRate}%`}
+        icon={Percent}
+      />
+      <SummaryCard
+        label="Éxito de canciones"
+        value={`${summary.generationSuccessRate}%`}
+        icon={CheckCircle2}
+      />
+    </div>
+  );
+}
+
 function ConversionFunnel({ summary }: { summary: DashboardSummary }) {
   return (
     <ol className="flex flex-col gap-2">
@@ -107,7 +152,12 @@ function ConversionFunnel({ summary }: { summary: DashboardSummary }) {
   );
 }
 
-/** The Admin Dashboard: KPI cards, campaign goal progress, generation-time stats, and the conversion funnel (see docs/Product/User_Flow.md). */
+/**
+ * The Admin Dashboard: KPI cards, campaign goal progress, 30-day daily
+ * trends, generation-time stats, additional statistics, the conversion
+ * funnel, and recent activity (see docs/Product/User_Flow.md; Sprint
+ * FINAL-2 — Campaign Operations Dashboard).
+ */
 export function AdminDashboard() {
   const { summary, isLoading, errorMessage } = useDashboardSummary();
 
@@ -126,6 +176,22 @@ export function AdminDashboard() {
           <DashboardSummaryCards summary={summary} />
           <CampaignGoalProgress summary={summary} />
 
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <DailyBarChart
+              title="Registros por día (últimos 30 días)"
+              data={summary.registrationsByDay}
+            />
+            <DailyBarChart
+              title="Canciones completadas por día (últimos 30 días)"
+              data={summary.completedSongsByDay}
+            />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-title font-semibold text-foreground">Estadísticas</h2>
+            <StatisticsCards summary={summary} />
+          </section>
+
           <section className="flex flex-col gap-3">
             <h2 className="text-title font-semibold text-foreground">
               Tiempo promedio de generación
@@ -136,6 +202,11 @@ export function AdminDashboard() {
           <section className="flex flex-col gap-3">
             <h2 className="text-title font-semibold text-foreground">Embudo de conversión</h2>
             <ConversionFunnel summary={summary} />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-title font-semibold text-foreground">Actividad reciente</h2>
+            <RecentActivityPanel />
           </section>
         </>
       ) : null}

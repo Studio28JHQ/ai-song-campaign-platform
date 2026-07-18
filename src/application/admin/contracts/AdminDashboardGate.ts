@@ -20,6 +20,12 @@ export interface AverageGenerationMinutes {
   last30Days: number | null;
 }
 
+/** Sprint FINAL-2 — Campaign Operations Dashboard. One day's count for a 30-day trend chart — `date` as `YYYY-MM-DD`. */
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
 export interface DashboardSummaryCounts {
   totalLeads: number;
   lyricsGenerated: number;
@@ -36,6 +42,16 @@ export interface DashboardSummaryCounts {
   campaignMaximumSongs: number | null;
   /** The campaign's `songsGenerated` counter — the same field the generation gate enforces against — `null` if no campaign row exists. */
   campaignSongsGenerated: number | null;
+  /** New leads registered per day, oldest first, over the last 30 days (including days with zero). */
+  registrationsByDay: DailyCount[];
+  /** Songs completed per day, oldest first, over the last 30 days (including days with zero). */
+  completedSongsByDay: DailyCount[];
+  /** Songs completed since the start of today. */
+  songsCompletedToday: number;
+  /** Songs completed in the last 7 days. */
+  songsCompletedLast7Days: number;
+  /** Songs completed in the last 30 days. */
+  songsCompletedLast30Days: number;
 }
 
 export interface AdminDashboardGate {

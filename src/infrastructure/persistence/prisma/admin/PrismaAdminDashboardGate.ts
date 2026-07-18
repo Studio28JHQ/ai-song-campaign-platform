@@ -1,6 +1,7 @@
 import { SongStatus as PrismaSongStatus, type PrismaClient } from "@/generated/prisma/client";
 import type {
   AdminDashboardGate,
+  DailyCount,
   DashboardSummaryCounts,
 } from "@/application/admin/contracts/AdminDashboardGate";
 import { DatabaseError } from "@/shared/errors";
@@ -9,9 +10,12 @@ import { prisma as defaultPrismaClient } from "../client";
 /**
  * Thin, single-purpose Prisma adapter satisfying the `AdminDashboardGate`
  * port. There is no reporting/analytics domain module (out of scope —
- * see PROJECT_MANIFEST.md), so this is a handful of `count` queries, not
- * a full repository — the same pattern as `PrismaCampaignGate`. No
- * charts, no BI — every figure here is a single, cheap aggregate count.
+ * see PROJECT_MANIFEST.md), so this is a handful of `count`/`findMany`
+ * queries, not a full repository — the same pattern as `PrismaCampaignGate`.
+ * No BI engine, no raw SQL aggregation — every figure here is either a
+ * single cheap aggregate or an in-memory bucketing over a bounded,
+ * already-windowed row set (this campaign is capped at a few thousand
+ * leads/songs total — see PROJECT_MANIFEST.md).
  */
 export class PrismaAdminDashboardGate implements AdminDashboardGate {
   constructor(private readonly client: PrismaClient = defaultPrismaClient) {}
@@ -38,6 +42,11 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         last7Days,
         last30Days,
         campaign,
+        songsCompletedToday,
+        songsCompletedLast7Days,
+        songsCompletedLast30Days,
+        recentLeadTimestamps,
+        recentCompletedSongTimestamps,
       ] = await Promise.all([
         this.client.lead.count(),
         this.client.lyrics.count(),
@@ -56,6 +65,23 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
           orderBy: { createdAt: "asc" },
           select: { maximumSongs: true, songsGenerated: true },
         }),
+        this.client.song.count({
+          where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: startOfToday } },
+        }),
+        this.client.song.count({
+          where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: sevenDaysAgo } },
+        }),
+        this.client.song.count({
+          where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: thirtyDaysAgo } },
+        }),
+        this.client.lead.findMany({
+          where: { createdAt: { gte: thirtyDaysAgo } },
+          select: { createdAt: true },
+        }),
+        this.client.song.findMany({
+          where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: thirtyDaysAgo } },
+          select: { completedAt: true },
+        }),
       ]);
 
       return {
@@ -72,6 +98,17 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
         averageGenerationMinutes: { today, last7Days, last30Days },
         campaignMaximumSongs: campaign?.maximumSongs ?? null,
         campaignSongsGenerated: campaign?.songsGenerated ?? null,
+        songsCompletedToday,
+        songsCompletedLast7Days,
+        songsCompletedLast30Days,
+        registrationsByDay: this.bucketByDay(
+          recentLeadTimestamps.map((row) => row.createdAt),
+          thirtyDaysAgo,
+        ),
+        completedSongsByDay: this.bucketByDay(
+          recentCompletedSongTimestamps.map((row) => row.completedAt!),
+          thirtyDaysAgo,
+        ),
       };
     } catch (error) {
       throw new DatabaseError("Unexpected database error while loading the dashboard summary.", {
@@ -110,5 +147,41 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
     }, 0);
 
     return Math.round((totalMinutes / songs.length) * 10) / 10;
+  }
+
+  /**
+   * Sprint FINAL-2 — Campaign Operations Dashboard. Buckets already-
+   * fetched timestamps into one count per calendar day from `since`
+   * through today (inclusive), zero-filling days with no events — a
+   * `Map` preserves insertion order, so the result comes out oldest
+   * first with no separate sort needed. Day boundaries and the `date`
+   * key are both computed in UTC (not local time) so the bucketing is
+   * self-consistent regardless of the server's timezone.
+   */
+  private bucketByDay(timestamps: Date[], since: Date): DailyCount[] {
+    const toUtcDateKey = (date: Date): string => date.toISOString().slice(0, 10);
+    const startOfDayUtc = (date: Date): Date =>
+      new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+    const startOfSince = startOfDayUtc(since);
+    const startOfToday = startOfDayUtc(new Date());
+
+    const counts = new Map<string, number>();
+    for (
+      const cursor = new Date(startOfSince);
+      cursor <= startOfToday;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    ) {
+      counts.set(toUtcDateKey(cursor), 0);
+    }
+
+    for (const timestamp of timestamps) {
+      const key = toUtcDateKey(timestamp);
+      if (counts.has(key)) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+
+    return [...counts.entries()].map(([date, count]) => ({ date, count }));
   }
 }

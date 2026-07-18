@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSongsList } from "../hooks/useSongsList";
@@ -13,6 +15,52 @@ const STATUS_LABEL_ES: Record<string, string> = {
   COMPLETED: "Completada",
   FAILED: "Fallida",
 };
+
+/**
+ * Sprint FINAL-2 — Campaign Operations Dashboard. Reuses only existing
+ * design tokens (`--color-success`/`--color-warning`/`--color-destructive`
+ * are already part of the theme, just not previously applied to this
+ * screen) — no new colors.
+ */
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  QUEUED: "bg-muted text-muted-foreground",
+  GENERATING: "bg-warning/15 text-warning",
+  COMPLETED: "bg-success/15 text-success",
+  FAILED: "bg-destructive/15 text-destructive",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        STATUS_BADGE_CLASS[status] ?? "bg-muted text-muted-foreground"
+      }`}
+    >
+      {STATUS_LABEL_ES[status] ?? status}
+    </span>
+  );
+}
+
+/** Copies the already-resolved signed URL to the clipboard — never re-resolves or persists it. */
+function CopyUrlButton({ audioUrl }: { audioUrl: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(audioUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be denied by the browser — silently no-op, same as any other best-effort UI affordance.
+    }
+  }
+
+  return (
+    <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
+      {copied ? "¡Copiado!" : "Copiar URL"}
+    </Button>
+  );
+}
 
 const STATUS_OPTIONS = [
   { value: "", label: "Cualquier estado" },
@@ -118,6 +166,9 @@ export function SongsList() {
                 Descargar
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
+                URL firmada
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
                 Correo
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
@@ -131,13 +182,13 @@ export function SongsList() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">
                   Cargando...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">
                   No se encontraron canciones.
                 </td>
               </tr>
@@ -149,7 +200,9 @@ export function SongsList() {
                       {song.parentName} · {song.babyName}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">{STATUS_LABEL_ES[song.status] ?? song.status}</td>
+                  <td className="px-3 py-2">
+                    <StatusBadge status={song.status} />
+                  </td>
                   <td className="px-3 py-2">{song.provider}</td>
                   <td className="px-3 py-2">{formatDate(song.createdAt)}</td>
                   <td className="px-3 py-2">
@@ -167,6 +220,9 @@ export function SongsList() {
                     ) : (
                       "—"
                     )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {song.audioUrl ? <CopyUrlButton audioUrl={song.audioUrl} /> : "—"}
                   </td>
                   <td className="px-3 py-2">
                     {song.status === "COMPLETED" && song.emailedAt ? (
