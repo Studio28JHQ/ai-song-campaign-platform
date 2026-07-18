@@ -20,16 +20,21 @@ import type { Voice } from "@/domain/lyrics/types";
 /**
  * Sprint v1.1 — AI Musical Direction: replaces the fixed `moodName`/
  * `sunoPrompt` pair with the approved Lyrics version's own AI-generated
- * musical direction — see `Lyrics.musicMood`/`musicDirection`/
- * `parentMessage`/`voice`, sourced by `GenerationDispatcher` and shaped
- * into Mureka's prompt by `mureka/PromptBuilder`. `Mood.sunoPrompt`
- * itself is unchanged and still exists, just no longer read for this.
+ * musical direction — see `Lyrics.musicMood`/`musicDirection`/`voice`,
+ * sourced by `GenerationDispatcher` and shaped into Mureka's prompt by
+ * `mureka/PromptBuilder`. `Mood.sunoPrompt` itself is unchanged and
+ * still exists, just no longer read for this.
+ *
+ * Sprint v1.2 — AI Safety Hardening: deliberately has no `parentMessage`
+ * field. The parent's raw message must never reach Mureka — only
+ * Claude's own moderated, transformed creative output (`musicMood`,
+ * `musicDirection`, `lyrics`) and the fixed `voice` selection do. See
+ * `mureka/PromptBuilder` and `GenerationDispatcher`.
  */
 export interface SongGenerationInput {
   lyrics: string;
   musicMood: string;
   musicDirection: string;
-  parentMessage: string;
   voice: Voice;
 }
 

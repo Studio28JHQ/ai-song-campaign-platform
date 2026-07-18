@@ -304,6 +304,16 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
     expect(dispatchResult?.song.status).toBe(SongStatus.GENERATING);
     expect(dispatchResult?.song.providerTaskId).toBe("mureka-task-789");
 
+    // Sprint v1.2 — AI Safety Hardening: the parent's raw message must
+    // never reach Mureka. This is the real request body sent over the
+    // real (mocked-`fetch`) `MurekaClient`/`mureka/PromptBuilder` chain
+    // — not a unit test of `PromptBuilder` in isolation — so this is
+    // the strongest available proof the isolation actually holds
+    // end-to-end.
+    const submitCallBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(submitCallBody.prompt).not.toContain("A gentle song about bedtime.");
+    expect(submitCallBody.prompt).not.toContain("Baby Context");
+
     const pollResult = await poller.execute();
     expect(pollResult?.outcome).toBe("ready");
     expect(pollResult?.song.status).toBe(SongStatus.COMPLETED);

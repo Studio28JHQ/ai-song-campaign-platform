@@ -110,7 +110,11 @@ export class GenerationDispatcher {
       // Sprint v1.1 — AI Musical Direction. Only `null` for a Lyrics row
       // created before this sprint (see `Lyrics.musicMood`'s doc
       // comment) — every row created going forward always has them.
-      if (!lyrics.musicMood || !lyrics.musicDirection || !lyrics.parentMessage) {
+      // Sprint v1.2 — AI Safety Hardening: `parentMessage` is
+      // deliberately not checked here — it is no longer part of what
+      // is sent to Mureka (see `SongGenerationInput`), so its presence
+      // is irrelevant to whether this Song can be dispatched.
+      if (!lyrics.musicMood || !lyrics.musicDirection) {
         throw new BusinessRuleError(
           "This song's approved lyrics have no musical direction to generate from.",
           {
@@ -120,11 +124,13 @@ export class GenerationDispatcher {
         );
       }
 
+      // Sprint v1.2 — AI Safety Hardening: `lyrics.parentMessage` is
+      // deliberately never passed here — the parent's raw message must
+      // never reach Mureka (see `SongGenerationInput`).
       const submission = await this.songGenerator.submitGeneration({
         lyrics: lyrics.content,
         musicMood: lyrics.musicMood,
         musicDirection: lyrics.musicDirection,
-        parentMessage: lyrics.parentMessage,
         voice: lyrics.voice,
       });
 

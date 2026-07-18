@@ -31,7 +31,6 @@ describe("MurekaSongService.submitGeneration", () => {
       lyrics: "Title\n...",
       musicMood: "Warm, joyful and playful.",
       musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
-      parentMessage: "A gentle song about bedtime.",
       voice: "FEMALE",
     });
 
@@ -59,7 +58,6 @@ describe("MurekaSongService.submitGeneration", () => {
         lyrics: "Title\n...",
         musicMood: "Warm, joyful and playful.",
         musicDirection: "Warm acoustic arrangement.",
-        parentMessage: "A gentle song about bedtime.",
         voice: "FEMALE",
       }),
     ).rejects.toThrow();
@@ -76,7 +74,6 @@ describe("MurekaSongService.submitGeneration", () => {
         lyrics: "Title\n...",
         musicMood: "Warm, joyful and playful.",
         musicDirection: "Warm acoustic arrangement.",
-        parentMessage: "A gentle song about bedtime.",
         voice: "FEMALE",
       }),
     ).rejects.toThrow("Mureka API rejected the request.");

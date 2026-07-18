@@ -30,6 +30,13 @@ const VOICE_LABEL: Record<Voice, string> = {
  * approved, never regenerated or otherwise altered — both as its own
  * top-level field (Mureka's actual structural field) and, unchanged,
  * inside the composed `prompt` text.
+ *
+ * Sprint v1.2 — AI Safety Hardening: the parent's raw message never
+ * reaches this class — `SongGenerationInput` has no `parentMessage`
+ * field at all (see its own doc comment). Mureka receives only
+ * Claude's already-moderated creative output (`musicMood`,
+ * `musicDirection`, `lyrics`) and the fixed `voice` selection; it is
+ * never responsible for moderation itself.
  */
 export class PromptBuilder {
   static build(input: SongGenerationInput): MurekaGenerateRequest {
@@ -38,9 +45,6 @@ export class PromptBuilder {
       "",
       "Mood:",
       input.musicMood,
-      "",
-      "Baby Context:",
-      input.parentMessage,
       "",
       "Musical Direction:",
       input.musicDirection,

@@ -138,3 +138,52 @@ describe("ResponseParser.parse", () => {
     expect(() => ResponseParser.parse(response)).toThrow();
   });
 });
+
+describe("ResponseParser.parse — Sprint v1.2 (AI Safety Hardening): musicMood/musicDirection length bounds", () => {
+  function approvedResponse(overrides: Record<string, unknown> = {}) {
+    return textResponse(
+      JSON.stringify({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+        ...overrides,
+      }),
+    );
+  }
+
+  it("accepts a musicMood/musicDirection within bounds", () => {
+    const result = ResponseParser.parse(approvedResponse());
+    expect(result.musicMood).toBe("Warm, joyful and playful.");
+    expect(result.musicDirection).toBe("Warm acoustic arrangement with gentle piano and ukulele.");
+  });
+
+  it("rejects a musicMood shorter than the configured minimum", () => {
+    expect(() => ResponseParser.parse(approvedResponse({ musicMood: "Hi" }))).toThrow();
+  });
+
+  it("rejects a musicMood longer than the configured maximum", () => {
+    expect(() => ResponseParser.parse(approvedResponse({ musicMood: "a".repeat(151) }))).toThrow();
+  });
+
+  it("rejects a musicDirection shorter than the configured minimum", () => {
+    expect(() => ResponseParser.parse(approvedResponse({ musicDirection: "Too short" }))).toThrow();
+  });
+
+  it("rejects a musicDirection longer than the configured maximum", () => {
+    expect(() =>
+      ResponseParser.parse(approvedResponse({ musicDirection: "a".repeat(401) })),
+    ).toThrow();
+  });
+
+  it("rejects a malformed response before it could ever be persisted (thrown, never returned)", () => {
+    let thrown = false;
+    try {
+      ResponseParser.parse(approvedResponse({ musicMood: "" }));
+    } catch {
+      thrown = true;
+    }
+    expect(thrown).toBe(true);
+  });
+});
