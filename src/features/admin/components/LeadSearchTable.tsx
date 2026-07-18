@@ -37,7 +37,7 @@ const EMAIL_STATUS_OPTIONS = [
 ] as const;
 
 function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString();
+  return new Date(value).toLocaleDateString("es-MX");
 }
 
 /**

@@ -8,9 +8,7 @@ describe("GlobalErrorBoundary (app/error.tsx)", () => {
     const error = Object.assign(new Error("raw provider secret detail"), { digest: "abc123" });
     render(<GlobalErrorBoundary error={error} reset={vi.fn()} />);
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: /something went wrong/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /algo salió mal/i })).toBeInTheDocument();
     expect(screen.queryByText(/raw provider secret detail/i)).not.toBeInTheDocument();
   });
 
@@ -19,7 +17,7 @@ describe("GlobalErrorBoundary (app/error.tsx)", () => {
     const user = userEvent.setup();
     render(<GlobalErrorBoundary error={new Error("boom")} reset={reset} />);
 
-    await user.click(screen.getByRole("button", { name: /try again/i }));
+    await user.click(screen.getByRole("button", { name: /intentar de nuevo/i }));
 
     expect(reset).toHaveBeenCalledOnce();
   });

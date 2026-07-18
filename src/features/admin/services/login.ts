@@ -35,10 +35,10 @@ const KNOWN_ERROR_CODES: readonly LoginErrorCode[] = [
 ];
 
 const DEFAULT_MESSAGES: Record<LoginErrorCode, string> = {
-  invalid_request: "Please check your email and password and try again.",
-  invalid_credentials: "Invalid email or password.",
-  account_inactive: "This admin account is inactive.",
-  business_rule_violation: "This request could not be completed.",
+  invalid_request: "Revisa tu correo y contraseña e inténtalo de nuevo.",
+  invalid_credentials: "Correo o contraseña incorrectos.",
+  account_inactive: "Esta cuenta de administrador está inactiva.",
+  business_rule_violation: "No pudimos completar esta solicitud.",
   internal_error: "Algo salió mal. Inténtalo de nuevo.",
 };
 

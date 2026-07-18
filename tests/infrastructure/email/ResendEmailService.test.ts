@@ -26,7 +26,7 @@ describe("ResendEmailService.sendSongReadyEmail", () => {
     const payload = (client.send as ReturnType<typeof vi.fn>).mock.calls[0][0];
 
     expect(payload.to).toBe("jane@example.com");
-    expect(payload.subject).toBe("Your personalized song is ready!");
+    expect(payload.subject).toBe("¡Tu canción personalizada ya está lista!");
     expect(payload.html).toContain("Baby Doe");
     expect(payload.html).toContain("https://cdn.example.com/song.mp3");
   });

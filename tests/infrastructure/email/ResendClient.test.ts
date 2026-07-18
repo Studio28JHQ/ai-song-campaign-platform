@@ -9,7 +9,7 @@ describe("ResendClient.send", () => {
   const payload = {
     from: "AI Song Campaign <no-reply@campaign.example.com>",
     to: "jane@example.com",
-    subject: "Your personalized song is ready!",
+    subject: "¡Tu canción personalizada ya está lista!",
     html: "<html></html>",
   };
 

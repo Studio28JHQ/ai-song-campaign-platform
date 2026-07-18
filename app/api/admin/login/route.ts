@@ -56,12 +56,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     payload = await request.json();
   } catch {
-    return errorResponse(400, "invalid_request", "The request body must be valid JSON.");
+    return errorResponse(
+      400,
+      "invalid_request",
+      "Revisa tu correo y contraseña e inténtalo de nuevo.",
+    );
   }
 
   const parsed = loginRequestSchema.safeParse(payload);
   if (!parsed.success) {
-    return errorResponse(400, "invalid_request", "The request payload is invalid.");
+    return errorResponse(
+      400,
+      "invalid_request",
+      "Revisa tu correo y contraseña e inténtalo de nuevo.",
+    );
   }
 
   const ip = getClientIp(request);
@@ -80,7 +88,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(
       429,
       "too_many_requests",
-      "Too many requests. Please wait a few minutes before trying again.",
+      "Demasiados intentos. Espera unos minutos antes de volver a intentarlo.",
     );
   }
 
@@ -111,11 +119,11 @@ async function handleUseCaseError(
         entity: "AdminUser",
         metadata: { ip, email: attemptedEmail },
       });
-      return errorResponse(401, "invalid_credentials", "Invalid email or password.");
+      return errorResponse(401, "invalid_credentials", "Correo o contraseña incorrectos.");
     }
 
     if (error.code === "admin.account_inactive") {
-      return errorResponse(403, "account_inactive", "This admin account is inactive.");
+      return errorResponse(403, "account_inactive", "Esta cuenta de administrador está inactiva.");
     }
 
     return errorResponse(422, "business_rule_violation", error.message);

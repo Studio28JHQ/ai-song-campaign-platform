@@ -114,7 +114,7 @@ describe("POST /api/admin/login", () => {
 
     expect(response.status).toBe(401);
     expect(body.error).toBe("invalid_credentials");
-    expect(body.message).toBe("Invalid email or password.");
+    expect(body.message).toBe("Correo o contraseña incorrectos.");
   });
 
   it("returns 401 for a wrong password", async () => {

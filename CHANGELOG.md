@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1] - 2026-08-10
+
+Sprint RC-1 — Release Candidate Audit. A full pre-launch audit of the codebase (UX, copy, accessibility, SEO, security headers, dead code, etc.); fixes only the issues that were objectively incorrect, production-relevant, low-risk, and backward-compatible. No new features, no redesign, no business-rule changes.
+
+### Fixed
+
+- **Song-ready email in English**: the only customer-facing email of the whole campaign (`SongReadyEmailTemplate`) was written entirely in English (subject, greeting, body, buttons, footer) despite the campaign being Spanish end-to-end — translated the subject and body copy to Spanish and added `lang="es"` to the email's `<html>` tag.
+- **Root error/404 pages in English**: `app/error.tsx` and `app/not-found.tsx` were the only two pages in the app still rendering English copy ("Something went wrong", "Page not found", "Try again", "Back to home") — translated to Spanish to match every other page.
+- **Admin login errors in English**: `app/api/admin/login/route.ts` returned hardcoded English messages for invalid credentials, an inactive account, a malformed request, and rate-limiting — shown verbatim on the login screen (the frontend prefers the server's own `message` field here, unlike other admin/public flows) — translated to Spanish. Aligned `src/features/admin/services/login.ts`'s fallback `DEFAULT_MESSAGES` the same way, since it duplicated the same English text.
+- **Stale English 401 from `middleware.ts`**: every `/api/admin/*` route was translated to Spanish in Sprint FINAL-3, but the shared `middleware.ts` session guard — which returns the same JSON shape for an expired/missing session — was missed and still returned `"Authentication required."`; an admin's session expiring mid-use would have surfaced this raw English text in an otherwise fully Spanish UI. Translated to `"Se requiere autenticación."`.
+- **Inconsistent date locale in Familias table**: `LeadSearchTable.tsx`'s `formatDate` called `toLocaleDateString()` with no locale argument, unlike every other admin table's `formatDate`, which explicitly forces `"es-MX"`. Added the missing locale argument so registration dates render consistently with the rest of the admin panel regardless of server/browser default locale.
+
+### Notes
+
+- Audited SEO/metadata, Open Graph, sitemap, robots, favicon, security headers, console logs, TODO/FIXME comments, dead code, and duplicate components/utilities — all already correct; no changes made.
+- Confirmed the public registration/lyrics/song flow's backend API messages are intentionally left in English by design (the frontend never displays the server's raw `message` for those flows, only a locally Spanish, error-code-keyed message — see the code comment in `registerLead.ts`) — left untouched as already-correct, working code.
+
 ## [1.21.0] - 2026-08-09
 
 Sprint FINAL-3 — Dashboard Stabilization & UI Polish. Fixes the Dashboard's "Unexpected database error" failure and aligns the admin panel with the campaign design system. No business logic beyond the dashboard fix, no schema changes, no new dependencies, no API contract changes, no invented colors — every visual change reuses existing tokens/components.

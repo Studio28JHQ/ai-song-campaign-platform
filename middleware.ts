@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   if (pathname.startsWith("/api/admin")) {
     return NextResponse.json(
-      { error: "unauthorized", message: "Authentication required." },
+      { error: "unauthorized", message: "Se requiere autenticación." },
       { status: 401 },
     );
   }

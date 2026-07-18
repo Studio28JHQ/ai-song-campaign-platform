@@ -4,7 +4,7 @@ import { SongReadyEmailTemplate } from "@/infrastructure/email/SongReadyEmailTem
 
 describe("SongReadyEmailTemplate", () => {
   it("has a fixed, non-internal subject", () => {
-    expect(SongReadyEmailTemplate.subject()).toBe("Your personalized song is ready!");
+    expect(SongReadyEmailTemplate.subject()).toBe("¡Tu canción personalizada ya está lista!");
   });
 
   it("renders a responsive HTML body with greeting, playback, download, support, and footer", () => {
@@ -16,16 +16,16 @@ describe("SongReadyEmailTemplate", () => {
     });
 
     expect(html).toContain("<!doctype html>");
-    expect(html).toContain("Hi Jane Doe,");
+    expect(html).toContain("Hola Jane Doe,");
     expect(html).toContain("Baby Doe");
-    expect(html).toContain("Thank you");
+    expect(html).toContain("Gracias");
     // Direct playback and download both point straight at the stored file —
     // never a link back into the application (see the Download section of
     // docs/Product/User_Flow.md).
     expect(html).toContain('href="https://cdn.example.com/song.mp3"');
-    expect(html).toContain("Play the song");
+    expect(html).toContain("Escuchar la canción");
     expect(html).toContain("download");
-    expect(html).toContain("Download the song");
+    expect(html).toContain("Descargar la canción");
     expect(html).toContain("mailto:");
     expect(html).toContain("2:05");
   });
@@ -38,6 +38,6 @@ describe("SongReadyEmailTemplate", () => {
       duration: null,
     });
 
-    expect(html).not.toContain("Duration:");
+    expect(html).not.toContain("Duración:");
   });
 });

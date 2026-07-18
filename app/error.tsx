@@ -28,11 +28,11 @@ export default function GlobalErrorBoundary({
         <Section spacing="xl">
           <ContentWrapper>
             <div className="flex flex-col items-center gap-4 text-center">
-              <h1 className="text-heading font-bold text-foreground">Something went wrong</h1>
+              <h1 className="text-heading font-bold text-foreground">Algo salió mal</h1>
               <p className="max-w-prose text-body text-muted-foreground">
-                We hit an unexpected error. Please try again.
+                Ocurrió un error inesperado. Inténtalo de nuevo.
               </p>
-              <Button onClick={reset}>Try again</Button>
+              <Button onClick={reset}>Intentar de nuevo</Button>
             </div>
           </ContentWrapper>
         </Section>

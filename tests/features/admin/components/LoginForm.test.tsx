@@ -46,7 +46,7 @@ describe("LoginForm", () => {
     mockFetchOnce({
       ok: false,
       status: 401,
-      body: { error: "invalid_credentials", message: "Invalid email or password." },
+      body: { error: "invalid_credentials", message: "Correo o contraseña incorrectos." },
     });
 
     render(<LoginForm />);
@@ -54,7 +54,7 @@ describe("LoginForm", () => {
     await user.type(screen.getByLabelText("Contraseña"), "wrong-password");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Correo o contraseña incorrectos.");
     expect(pushMock).not.toHaveBeenCalled();
   });
 
