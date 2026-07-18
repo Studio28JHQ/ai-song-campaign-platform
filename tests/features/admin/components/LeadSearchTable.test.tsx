@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadSearchTable } from "@/features/admin/components/LeadSearchTable";
@@ -49,7 +49,8 @@ describe("LeadSearchTable", () => {
     expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
     expect(screen.getByText("Baby Doe")).toBeInTheDocument();
     expect(screen.getByText("jane@example.com")).toBeInTheDocument();
-    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Completada")).toBeInTheDocument();
     const row = screen.getByText("jane@example.com").closest("tr");
     expect(row).toHaveTextContent("Enviado");
 
@@ -108,6 +109,6 @@ describe("LeadSearchTable", () => {
 
     render(<LeadSearchTable />);
 
-    expect(await screen.findByText("No se encontraron familias.")).toBeInTheDocument();
+    expect(await screen.findByText("No se encontraron familias")).toBeInTheDocument();
   });
 });

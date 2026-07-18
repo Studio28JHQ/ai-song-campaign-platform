@@ -1,45 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { Music } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSongsList } from "../hooks/useSongsList";
+import { EmptyState } from "./EmptyState";
+import { ErrorMessage } from "./ErrorMessage";
 import { ResendEmailAction } from "./ResendEmailAction";
 import { RetrySongAction } from "./RetrySongAction";
-
-const STATUS_LABEL_ES: Record<string, string> = {
-  QUEUED: "En cola",
-  GENERATING: "Generando",
-  COMPLETED: "Completada",
-  FAILED: "Fallida",
-};
-
-/**
- * Sprint FINAL-2 — Campaign Operations Dashboard. Reuses only existing
- * design tokens (`--color-success`/`--color-warning`/`--color-destructive`
- * are already part of the theme, just not previously applied to this
- * screen) — no new colors.
- */
-const STATUS_BADGE_CLASS: Record<string, string> = {
-  QUEUED: "bg-muted text-muted-foreground",
-  GENERATING: "bg-warning/15 text-warning",
-  COMPLETED: "bg-success/15 text-success",
-  FAILED: "bg-destructive/15 text-destructive",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        STATUS_BADGE_CLASS[status] ?? "bg-muted text-muted-foreground"
-      }`}
-    >
-      {STATUS_LABEL_ES[status] ?? status}
-    </span>
-  );
-}
+import { SongStatusBadge } from "./StatusBadge";
 
 /** Copies the already-resolved signed URL to the clipboard — never re-resolves or persists it. */
 function CopyUrlButton({ audioUrl }: { audioUrl: string }) {
@@ -89,6 +62,11 @@ function formatDate(value: string): string {
  * the exact same `RetrySongAction` the Lead Detail screen already uses
  * — an operator no longer has to find the specific lead to retry a
  * failed song.
+ *
+ * Sprint FINAL-3 — Dashboard Stabilization: status badges now go
+ * through the shared `SongStatusBadge` (standardized variant mapping),
+ * and the table gained a sticky header, taller rows, hover states, a
+ * skeleton loading state, and a branded empty state.
  */
 export function SongsList() {
   const {
@@ -110,7 +88,7 @@ export function SongsList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
         <Input
           type="search"
           placeholder="Buscar por familia o bebé..."
@@ -137,82 +115,81 @@ export function SongsList() {
         </div>
       </div>
 
-      {errorMessage ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : null}
+      {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-max text-left text-sm">
-          <thead className="border-b border-border bg-muted/30">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Familia
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Estado
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Proveedor
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Fecha
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Escuchar
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Descargar
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                URL firmada
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Correo
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Error
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
+      {isLoading ? (
+        <div className="flex flex-col gap-2" aria-busy="true" aria-label="Cargando canciones">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 rounded-lg" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Music}
+          title="No se encontraron canciones"
+          description="Ajusta la búsqueda o el filtro de estado e inténtalo de nuevo."
+        />
+      ) : (
+        <div className="max-h-[36rem] overflow-auto rounded-xl border border-border shadow-sm">
+          <table className="w-full min-w-max text-left text-sm">
+            <thead className="sticky top-0 z-10 border-b border-border bg-muted">
               <tr>
-                <td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">
-                  Cargando...
-                </td>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Familia
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Estado
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Proveedor
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Fecha
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Escuchar
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Descargar
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  URL firmada
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Correo
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Error
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Acciones
+                </th>
               </tr>
-            ) : items.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">
-                  No se encontraron canciones.
-                </td>
-              </tr>
-            ) : (
-              items.map((song) => (
-                <tr key={song.id} className="border-b border-border last:border-0 align-top">
-                  <td className="px-3 py-2">
+            </thead>
+            <tbody>
+              {items.map((song) => (
+                <tr
+                  key={song.id}
+                  className="border-b border-border align-top transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-4 py-3">
                     <Link href={`/admin/leads/${song.leadId}`} className="text-primary underline">
                       {song.parentName} · {song.babyName}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={song.status} />
+                  <td className="px-4 py-3">
+                    <SongStatusBadge status={song.status} />
                   </td>
-                  <td className="px-3 py-2">{song.provider}</td>
-                  <td className="px-3 py-2">{formatDate(song.createdAt)}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">{song.provider}</td>
+                  <td className="px-4 py-3">{formatDate(song.createdAt)}</td>
+                  <td className="px-4 py-3">
                     {song.audioUrl ? (
                       <audio controls src={song.audioUrl} className="h-8 max-w-[180px]" />
                     ) : (
                       "—"
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     {song.audioUrl ? (
                       <a href={song.audioUrl} download className="text-primary underline">
                         Descargar
@@ -221,20 +198,20 @@ export function SongsList() {
                       "—"
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     {song.audioUrl ? <CopyUrlButton audioUrl={song.audioUrl} /> : "—"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     {song.status === "COMPLETED" && song.emailedAt ? (
                       <ResendEmailAction songId={song.id} onSuccess={refetch} />
                     ) : (
                       "—"
                     )}
                   </td>
-                  <td className="max-w-[220px] px-3 py-2 text-destructive">
+                  <td className="max-w-[220px] px-4 py-3 text-destructive">
                     {song.providerError ?? "—"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     {song.status === "FAILED" ? (
                       <RetrySongAction songId={song.id} onSuccess={refetch} />
                     ) : (
@@ -242,33 +219,35 @@ export function SongsList() {
                     )}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Página {page} de {totalPages} ({total} en total)
         </span>
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
             Anterior
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
-            className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
             Siguiente
-          </button>
+          </Button>
         </div>
       </div>
     </div>

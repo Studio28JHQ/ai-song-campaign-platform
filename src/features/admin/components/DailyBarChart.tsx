@@ -23,9 +23,9 @@ export function DailyBarChart({ title, data }: DailyBarChartProps) {
   const total = data.reduce((sum, day) => sum + day.count, 0);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-label text-muted-foreground">{title}</h3>
+        <h3 className="text-label font-medium text-muted-foreground">{title}</h3>
         <span className="text-sm font-semibold text-foreground">Total: {total}</span>
       </div>
 

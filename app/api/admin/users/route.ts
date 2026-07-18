@@ -40,7 +40,7 @@ const createAdminUserSchema = z
 export async function GET(): Promise<NextResponse> {
   const session = await getAdminSession();
   if (!session) {
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   const result = await listAdminUsersUseCase.execute();
@@ -50,7 +50,7 @@ export async function GET(): Promise<NextResponse> {
 export async function POST(request: Request): Promise<NextResponse> {
   const session = await getAdminSession();
   if (!session) {
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   let payload: unknown;
@@ -95,7 +95,7 @@ function handleUseCaseError(error: unknown): NextResponse {
     error: error instanceof Error ? error.message : String(error),
   });
 
-  return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+  return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");
 }
 
 function errorResponse(status: number, error: string, message: string): NextResponse {

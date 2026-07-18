@@ -37,7 +37,7 @@ export function useLeadDetail(leadId: string): LeadDetailState {
       .catch((error: unknown) => {
         if (cancelled) return;
         const notFound = error instanceof GetLeadDetailError && error.notFound;
-        const message = error instanceof Error ? error.message : "Something went wrong.";
+        const message = error instanceof Error ? error.message : "Algo salió mal.";
         setState({ detail: null, isLoading: false, notFound, errorMessage: message });
       });
 

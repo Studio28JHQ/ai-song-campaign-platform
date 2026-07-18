@@ -24,7 +24,7 @@ export async function GET(): Promise<NextResponse> {
     });
 
     return NextResponse.json(
-      { error: "internal_error", message: "Something went wrong. Please try again." },
+      { error: "internal_error", message: "Algo salió mal. Inténtalo de nuevo." },
       { status: 500 },
     );
   }

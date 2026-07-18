@@ -1,4 +1,8 @@
-import type { AverageGenerationMinutes, DailyCount } from "../contracts/AdminDashboardGate";
+import type {
+  AverageGenerationMinutes,
+  DailyCount,
+  DashboardSection,
+} from "../contracts/AdminDashboardGate";
 
 /** Output of `GetDashboardSummaryUseCase`. Plain indicators plus two 30-day daily trend series — no BI engine, no stored aggregates. */
 export interface DashboardSummaryResponse {
@@ -28,4 +32,6 @@ export interface DashboardSummaryResponse {
   songsCompletedLast30Days: number;
   registrationsByDay: DailyCount[];
   completedSongsByDay: DailyCount[];
+  /** Sprint FINAL-3 — Dashboard Stabilization. Sections that failed to load and are showing safe fallback values — empty when everything loaded normally. */
+  unavailableSections: DashboardSection[];
 }

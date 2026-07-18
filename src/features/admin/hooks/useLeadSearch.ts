@@ -94,7 +94,7 @@ export function useLeadSearch(): LeadSearchState & LeadSearchActions {
         if (cancelled) return;
         setItems([]);
         setTotal(0);
-        setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+        setErrorMessage(error instanceof Error ? error.message : "Algo salió mal.");
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

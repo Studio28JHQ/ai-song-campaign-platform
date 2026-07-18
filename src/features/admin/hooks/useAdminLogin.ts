@@ -21,7 +21,7 @@ export function useAdminLogin() {
         return { success: true };
       } catch (error) {
         const message =
-          error instanceof LoginError ? error.message : "Something went wrong. Please try again.";
+          error instanceof LoginError ? error.message : "Algo salió mal. Inténtalo de nuevo.";
         return { success: false, message };
       } finally {
         setIsSubmitting(false);

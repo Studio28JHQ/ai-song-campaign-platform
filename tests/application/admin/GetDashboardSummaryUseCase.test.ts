@@ -25,6 +25,7 @@ function fakeGate(
       songsCompletedLast30Days: 5,
       registrationsByDay: [],
       completedSongsByDay: [],
+      unavailableSections: [],
       ...counts,
     }),
   };
@@ -59,6 +60,7 @@ describe("GetDashboardSummaryUseCase", () => {
       songsCompletedLast30Days: 5,
       registrationsByDay: [],
       completedSongsByDay: [],
+      unavailableSections: [],
     });
     expect(gate.getSummary).toHaveBeenCalledTimes(1);
   });
@@ -116,5 +118,14 @@ describe("GetDashboardSummaryUseCase", () => {
 
     expect(result.campaignGoal).toBe(3000);
     expect(result.campaignSongsGenerated).toBe(42);
+  });
+
+  it("passes unavailableSections through unchanged (Sprint FINAL-3 — Dashboard Stabilization)", async () => {
+    const gate = fakeGate({ unavailableSections: ["campaign", "dailyTrends"] });
+    const useCase = new GetDashboardSummaryUseCase(gate, 3000);
+
+    const result = await useCase.execute();
+
+    expect(result.unavailableSections).toEqual(["campaign", "dailyTrends"]);
   });
 });

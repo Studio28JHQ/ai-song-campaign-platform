@@ -32,6 +32,7 @@ const summaryBody = {
     { date: "2026-01-01", count: 1 },
     { date: "2026-01-02", count: 4 },
   ],
+  unavailableSections: [],
 };
 
 const activityBody = {
@@ -74,7 +75,7 @@ describe("AdminDashboard", () => {
 
     render(<AdminDashboard />);
 
-    expect(screen.getByText("Cargando resumen...")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cargando el panel")).toBeInTheDocument();
 
     // Several KPI-card labels are now also used, verbatim, as funnel step
     // labels (per the brief) — the KPI card is always the first DOM match.
@@ -144,7 +145,7 @@ describe("AdminDashboard", () => {
     render(<AdminDashboard />);
 
     const funnelHeading = await screen.findByText("Embudo de conversión");
-    const funnelList = funnelHeading.parentElement?.querySelector("ol");
+    const funnelList = funnelHeading.closest("section")?.querySelector("ol");
     expect(funnelList).toHaveTextContent("Familias registradas");
     expect(funnelList).toHaveTextContent("Letras generadas");
     expect(funnelList).toHaveTextContent("Letras aprobadas");
@@ -193,6 +194,31 @@ describe("AdminDashboard", () => {
 
     render(<AdminDashboard />);
 
-    expect(await screen.findByText("Aún no hay actividad registrada.")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no hay actividad registrada")).toBeInTheDocument();
+  });
+
+  it("renders the rest of the Dashboard and shows a localized error only on the affected widget when one section failed (Sprint FINAL-3)", async () => {
+    global.fetch = mockFetch({ ...summaryBody, unavailableSections: ["campaign"] });
+
+    render(<AdminDashboard />);
+
+    // The failed widget shows a localized error...
+    await screen.findByText("Meta de la campaña");
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((alert) => alert.textContent?.includes("No fue posible cargar"))).toBe(true);
+    // ...while every other widget still renders normally.
+    expect(screen.getByText("Estadísticas")).toBeInTheDocument();
+    expect(screen.getByText("Embudo de conversión")).toBeInTheDocument();
+    const [totalLeadsLabel] = screen.getAllByText("Familias registradas");
+    expect(totalLeadsLabel).toBeInTheDocument();
+  });
+
+  it("never shows a section error when unavailableSections is empty", async () => {
+    global.fetch = mockFetch(summaryBody);
+
+    render(<AdminDashboard />);
+
+    await screen.findByText("Meta de la campaña");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

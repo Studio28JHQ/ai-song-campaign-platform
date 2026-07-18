@@ -30,7 +30,7 @@ export function useAdminUsersList(): AdminUsersListState {
       .catch((error: unknown) => {
         if (cancelled) return;
         setItems([]);
-        setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+        setErrorMessage(error instanceof Error ? error.message : "Algo salió mal.");
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

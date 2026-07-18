@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, FileText, Mail, Music, Send, UserPlus } from "lucide-react";
+import { Activity, CheckCircle2, FileText, Mail, Music, Send, UserPlus } from "lucide-react";
 import type { ComponentType } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRecentActivity } from "../hooks/useRecentActivity";
 import type { RecentActivityEventType } from "../services/listRecentActivity";
+import { EmptyState } from "./EmptyState";
+import { ErrorMessage } from "./ErrorMessage";
 
 const EVENT_LABEL_ES: Record<RecentActivityEventType, string> = {
   lead_registered: "Nueva familia",
@@ -40,19 +43,31 @@ export function RecentActivityPanel() {
   const { items, isLoading, errorMessage } = useRecentActivity();
 
   if (isLoading) {
-    return <p className="text-body text-muted-foreground">Cargando...</p>;
-  }
-
-  if (errorMessage) {
     return (
-      <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {errorMessage}
-      </p>
+      <div
+        className="flex flex-col gap-1"
+        aria-busy="true"
+        aria-label="Cargando actividad reciente"
+      >
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-12 rounded-xl" />
+        ))}
+      </div>
     );
   }
 
+  if (errorMessage) {
+    return <ErrorMessage message={errorMessage} />;
+  }
+
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground">Aún no hay actividad registrada.</p>;
+    return (
+      <EmptyState
+        icon={Activity}
+        title="Aún no hay actividad registrada"
+        description="Los eventos de la campaña aparecerán aquí a medida que ocurran."
+      />
+    );
   }
 
   return (
@@ -62,7 +77,7 @@ export function RecentActivityPanel() {
         return (
           <li
             key={`${item.type}-${item.leadId}-${item.timestamp}-${index}`}
-            className="flex items-center gap-3 rounded-lg border border-border bg-background px-4 py-2.5"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm transition-colors hover:bg-muted/50"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
               <Icon className="size-4" />

@@ -9,6 +9,9 @@ export interface DailyCount {
   count: number;
 }
 
+export type DashboardSection =
+  "core" | "generationTime" | "campaign" | "windowCounts" | "dailyTrends";
+
 export interface DashboardSummary {
   totalLeads: number;
   lyricsGenerated: number;
@@ -31,6 +34,7 @@ export interface DashboardSummary {
   songsCompletedLast30Days: number;
   registrationsByDay: DailyCount[];
   completedSongsByDay: DailyCount[];
+  unavailableSections: DashboardSection[];
 }
 
 export class GetDashboardSummaryError extends Error {
@@ -48,7 +52,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     response = await fetch("/api/admin/dashboard");
   } catch {
     throw new GetDashboardSummaryError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.",
     );
   }
 
@@ -56,7 +60,10 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 
   if (!response.ok) {
     const record = (body ?? {}) as { message?: unknown };
-    const message = typeof record.message === "string" ? record.message : "Something went wrong.";
+    const message =
+      typeof record.message === "string"
+        ? record.message
+        : "No fue posible cargar el panel. Inténtalo nuevamente.";
     throw new GetDashboardSummaryError(message);
   }
 

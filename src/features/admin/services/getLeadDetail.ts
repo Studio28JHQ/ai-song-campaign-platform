@@ -87,7 +87,7 @@ export async function getLeadDetail(leadId: string): Promise<LeadDetailResult> {
     response = await fetch(`/api/admin/leads/${leadId}`);
   } catch {
     throw new GetLeadDetailError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.",
     );
   }
 
@@ -95,7 +95,7 @@ export async function getLeadDetail(leadId: string): Promise<LeadDetailResult> {
 
   if (!response.ok) {
     const record = (body ?? {}) as { error?: unknown; message?: unknown };
-    const message = typeof record.message === "string" ? record.message : "Something went wrong.";
+    const message = typeof record.message === "string" ? record.message : "Algo salió mal.";
     throw new GetLeadDetailError(message, record.error === "lead_not_found");
   }
 

@@ -19,7 +19,7 @@ export function useResendEmail() {
       const message =
         error instanceof ResendSongEmailError
           ? error.message
-          : "Something went wrong. Please try again.";
+          : "Algo salió mal. Inténtalo de nuevo.";
       return { success: false, message };
     } finally {
       setIsSubmitting(false);

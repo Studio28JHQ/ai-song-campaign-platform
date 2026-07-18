@@ -76,7 +76,7 @@ export async function POST(_request: Request, context: RouteContext): Promise<Ne
 
   const session = await getAdminSession();
   if (!session) {
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   try {
@@ -121,7 +121,7 @@ function handleUseCaseError(error: unknown, songId: string): NextResponse {
     error: error instanceof Error ? error.message : String(error),
   });
 
-  return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+  return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");
 }
 
 function errorResponse(status: number, error: string, message: string): NextResponse {

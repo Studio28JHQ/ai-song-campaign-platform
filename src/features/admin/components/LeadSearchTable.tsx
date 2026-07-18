@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useLeadSearch } from "../hooks/useLeadSearch";
 import { buildLeadsExportUrl } from "../services/exportLeadsCsv";
 import type { LeadSortField } from "../services/searchLeads";
+import { EmptyState } from "./EmptyState";
+import { ErrorMessage } from "./ErrorMessage";
+import { SongStatusBadge } from "./StatusBadge";
 
 const COLUMNS: Array<{ field: LeadSortField; label: string }> = [
   { field: "createdAt", label: "Registro" },
@@ -73,7 +78,7 @@ export function LeadSearchTable() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
         <Input
           type="search"
           placeholder="Buscar por nombre, correo o teléfono..."
@@ -155,97 +160,94 @@ export function LeadSearchTable() {
         </a>
       </div>
 
-      {errorMessage ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : null}
+      {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-max text-left text-sm">
-          <thead className="border-b border-border bg-muted/30">
-            <tr>
-              {COLUMNS.map((column) => (
-                <th key={column.field} scope="col" className="px-3 py-2 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(column.field)}
-                    className="flex items-center gap-1"
-                  >
-                    {column.label}
-                    {sortBy === column.field ? (sortDirection === "asc" ? "↑" : "↓") : null}
-                  </button>
+      {isLoading ? (
+        <div className="flex flex-col gap-2" aria-busy="true" aria-label="Cargando familias">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-11 rounded-lg" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No se encontraron familias"
+          description="Ajusta la búsqueda o los filtros e inténtalo de nuevo."
+        />
+      ) : (
+        <div className="max-h-[32rem] overflow-auto rounded-xl border border-border shadow-sm">
+          <table className="w-full min-w-max text-left text-sm">
+            <thead className="sticky top-0 z-10 border-b border-border bg-muted">
+              <tr>
+                {COLUMNS.map((column) => (
+                  <th key={column.field} scope="col" className="px-4 py-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column.field)}
+                      className="flex items-center gap-1"
+                    >
+                      {column.label}
+                      {sortBy === column.field ? (sortDirection === "asc" ? "↑" : "↓") : null}
+                    </button>
+                  </th>
+                ))}
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Estado del correo
                 </th>
-              ))}
-              <th scope="col" className="px-3 py-2 font-medium">
-                Estado del correo
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td
-                  colSpan={COLUMNS.length + 2}
-                  className="px-3 py-4 text-center text-muted-foreground"
-                >
-                  Cargando...
-                </td>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Acciones
+                </th>
               </tr>
-            ) : items.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={COLUMNS.length + 2}
-                  className="px-3 py-4 text-center text-muted-foreground"
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr
+                  key={item.id}
+                  className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  No se encontraron familias.
-                </td>
-              </tr>
-            ) : (
-              items.map((item) => (
-                <tr key={item.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2">{formatDate(item.createdAt)}</td>
-                  <td className="px-3 py-2">{item.parentName}</td>
-                  <td className="px-3 py-2">{item.babyName}</td>
-                  <td className="px-3 py-2">{item.email}</td>
-                  <td className="px-3 py-2">{item.songStatus ?? "—"}</td>
-                  <td className="px-3 py-2">{item.emailSent ? "Enviado" : "No enviado"}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">{formatDate(item.createdAt)}</td>
+                  <td className="px-4 py-3">{item.parentName}</td>
+                  <td className="px-4 py-3">{item.babyName}</td>
+                  <td className="px-4 py-3">{item.email}</td>
+                  <td className="px-4 py-3">
+                    <SongStatusBadge status={item.songStatus ?? "NONE"} />
+                  </td>
+                  <td className="px-4 py-3">{item.emailSent ? "Enviado" : "No enviado"}</td>
+                  <td className="px-4 py-3">
                     <Link href={`/admin/leads/${item.id}`} className="text-primary underline">
                       Ver
                     </Link>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Página {page} de {totalPages} ({total} en total)
         </span>
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
             Anterior
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
-            className="rounded-md border border-border px-2 py-1 disabled:opacity-50"
           >
             Siguiente
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -26,7 +26,7 @@ export function useRecentActivity(): RecentActivityState {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
+        setErrorMessage(error instanceof Error ? error.message : "Algo salió mal.");
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

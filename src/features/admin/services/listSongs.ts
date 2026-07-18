@@ -48,7 +48,7 @@ export async function listSongs(input: ListSongsInput): Promise<ListSongsResult>
     response = await fetch(`/api/admin/songs?${params.toString()}`);
   } catch {
     throw new ListSongsError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.",
     );
   }
 
@@ -56,7 +56,7 @@ export async function listSongs(input: ListSongsInput): Promise<ListSongsResult>
 
   if (!response.ok) {
     const record = (body ?? {}) as { message?: unknown };
-    const message = typeof record.message === "string" ? record.message : "Something went wrong.";
+    const message = typeof record.message === "string" ? record.message : "Algo salió mal.";
     throw new ListSongsError(message);
   }
 

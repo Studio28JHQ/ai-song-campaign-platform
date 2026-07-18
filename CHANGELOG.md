@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-08-09
+
+Sprint FINAL-3 — Dashboard Stabilization & UI Polish. Fixes the Dashboard's "Unexpected database error" failure and aligns the admin panel with the campaign design system. No business logic beyond the dashboard fix, no schema changes, no new dependencies, no API contract changes, no invented colors — every visual change reuses existing tokens/components.
+
+### Fixed
+
+- **Dashboard root cause**: `PrismaAdminDashboardGate.getSummary()` ran 19 independent queries inside one `Promise.all`/one try-catch — any single transient failure (a connection hiccup, pool contention under concurrent admin traffic) rejected the whole batch, and the route handler's catch logged only `error.message` (the generic wrapper text), never `error.cause`, so the real failure was invisible even in server logs — effectively suppressed. Each query is now isolated behind a `settle()` helper: failures are logged in full (never swallowed) with a safe per-section fallback, and which sections (if any) failed is reported via a new `unavailableSections` field so the Dashboard renders everything that succeeded and shows a small, localized Spanish error only on the affected widget — it can no longer go fully blank because one query failed.
+
+### Changed
+
+- **Visual consistency**: the admin panel now uses a new `.theme-admin` CSS scope (`app/admin/layout.tsx`) that reuses the exact same color palette, `--radius`, and fonts `.theme-campaign` already defines for the public site — zero new colors. Deliberately excludes the public-only H2 hotfix and hero-specific type-scale bump (both explicitly page-specific, not general design-system tokens).
+- **Dashboard layout**: KPI cards, goal progress, and daily trend charts are immediately visible without scrolling; every widget now shares a consistent card header (icon + title) and card shell (`rounded-xl`/`bg-card`/`shadow-sm`).
+- **Status badges standardized**: a new shared `StatusBadge`/`SongStatusBadge`/`LeadStatusBadge` (`src/features/admin/components/StatusBadge.tsx`) replaces the ad hoc badge SongsList had — Completed→success, Generating→primary, Queued→warning, Failed→destructive, Pending→muted — reused across Canciones, Familias, and Lead Detail.
+- **Tables**: Familias, Canciones, Letras, and Auditoría gained a sticky header, taller rows, hover states, and a shared skeleton loading state and branded empty state (new `Skeleton`/`EmptyState` components) — pagination unchanged.
+- **Lead Detail**: every section is now its own card; the approved lyrics and a completed song get a tinted highlight (existing `success` token); the timeline reads more clearly. Same information as before, presentation only.
+- **Error messages**: generic English fallback copy ("Something went wrong...", "We couldn't reach the server...") replaced with Spanish across every admin service/hook and the corresponding API routes' generic 500/401 messages — technical detail stays in server logs only.
+
 ## [1.20.0] - 2026-08-08
 
 Sprint FINAL-2 — Campaign Operations Dashboard. Improves the admin backoffice for day-to-day campaign operation. No backend business rules, AI providers, or queue logic touched; no schema changes, no new dependencies, no UI redesign, no color/typography changes — entirely additive, reusing the existing design system and existing data.

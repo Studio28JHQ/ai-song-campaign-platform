@@ -91,7 +91,7 @@ describe("LeadDetailView", () => {
 
     expect(await screen.findByText("jane@example.com")).toBeInTheDocument();
     expect(screen.getByText("+1 555 123 4567")).toBeInTheDocument();
-    expect(screen.getAllByText("COMPLETED").length).toBe(2);
+    expect(screen.getAllByText("Completada").length).toBe(2);
     expect(screen.getByText(/Duración: 2:05/)).toBeInTheDocument();
     expect(screen.getByText(/Enviado el/)).toBeInTheDocument();
     expect(screen.getByText("Reintento ejecutado")).toBeInTheDocument();
@@ -124,9 +124,9 @@ describe("LeadDetailView", () => {
 
     render(<LeadDetailView leadId="lead-1" />);
 
-    expect(await screen.findByText("Aún no se ha generado ninguna canción.")).toBeInTheDocument();
-    expect(screen.getByText("Aún no hay una letra aprobada.")).toBeInTheDocument();
-    expect(screen.getByText("Aún no hay historial.")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no se ha generado ninguna canción")).toBeInTheDocument();
+    expect(screen.getByText("Aún no hay una letra aprobada")).toBeInTheDocument();
+    expect(screen.getByText("Aún no hay historial")).toBeInTheDocument();
   });
 
   it("shows Retry Generation only for a FAILED song, and confirms before retrying", async () => {

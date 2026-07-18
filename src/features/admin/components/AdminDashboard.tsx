@@ -1,11 +1,14 @@
 "use client";
 
-import { CheckCircle2, FileText, Music, Percent } from "lucide-react";
+import { CheckCircle2, FileText, Music, Percent, TrendingUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardSummary } from "../hooks/useDashboardSummary";
-import type { DashboardSummary } from "../services/getDashboardSummary";
+import type { DashboardSection, DashboardSummary } from "../services/getDashboardSummary";
 import { DailyBarChart } from "./DailyBarChart";
 import { DashboardSummaryCards, SummaryCard } from "./DashboardSummaryCards";
+import { ErrorMessage } from "./ErrorMessage";
 import { RecentActivityPanel } from "./RecentActivityPanel";
+import { SectionHeader } from "./SectionHeader";
 
 /** Sprint FINAL-2 — Campaign Operations Dashboard. Exact funnel steps named in the brief. */
 const FUNNEL_STEPS: Array<{ label: string; value: (s: DashboardSummary) => number }> = [
@@ -15,6 +18,9 @@ const FUNNEL_STEPS: Array<{ label: string; value: (s: DashboardSummary) => numbe
   { label: "Canciones completadas", value: (s) => s.songsCompleted },
   { label: "Correos enviados", value: (s) => s.emailsSent },
 ];
+
+/** Sprint FINAL-3 — Dashboard Stabilization. Spanish copy for a widget whose backing query failed — the rest of the Dashboard keeps working. */
+const SECTION_ERROR_ES = "No fue posible cargar esta sección. Inténtalo nuevamente.";
 
 function formatMinutes(value: number | null): string {
   if (value === null) return "No disponible";
@@ -40,9 +46,10 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
     summary.campaignGoal > 0
       ? Math.min(100, Math.round((songsGenerated / summary.campaignGoal) * 100))
       : 0;
+  const failed = (summary.unavailableSections ?? []).includes("campaign");
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-4">
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-label text-muted-foreground">Meta de la campaña</span>
         <span className="text-sm font-semibold text-foreground">
@@ -62,6 +69,7 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
           style={{ width: `${percentage}%` }}
         />
       </div>
+      {failed ? <ErrorMessage size="sm" message={SECTION_ERROR_ES} /> : null}
     </div>
   );
 }
@@ -69,19 +77,19 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
 function GenerationTimeStats({ summary }: { summary: DashboardSummary }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-4">
+      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
         <span className="text-label text-muted-foreground">Hoy</span>
         <span className="text-title font-semibold text-foreground">
           {formatMinutes(summary.averageGenerationMinutes.today)}
         </span>
       </div>
-      <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-4">
+      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
         <span className="text-label text-muted-foreground">Últimos 7 días</span>
         <span className="text-title font-semibold text-foreground">
           {formatMinutes(summary.averageGenerationMinutes.last7Days)}
         </span>
       </div>
-      <div className="flex flex-col gap-1 rounded-lg border border-border bg-background p-4">
+      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
         <span className="text-label text-muted-foreground">Últimos 30 días</span>
         <span className="text-title font-semibold text-foreground">
           {formatMinutes(summary.averageGenerationMinutes.last30Days)}
@@ -137,7 +145,7 @@ function ConversionFunnel({ summary }: { summary: DashboardSummary }) {
     <ol className="flex flex-col gap-2">
       {FUNNEL_STEPS.map((step, index) => (
         <li key={step.label} className="flex flex-col gap-1">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-2.5">
+          <div className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm">
             <span className="text-sm text-foreground">{step.label}</span>
             <span className="text-sm font-semibold text-foreground">{step.value(summary)}</span>
           </div>
@@ -152,31 +160,70 @@ function ConversionFunnel({ summary }: { summary: DashboardSummary }) {
   );
 }
 
+/** Sprint FINAL-3 — Dashboard Stabilization. Skeleton shell matching the loaded layout's shape — avoids layout shift once real data arrives. */
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Cargando el panel">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <Skeleton key={index} className="h-20 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-16 rounded-xl" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Skeleton className="h-48 rounded-xl" />
+        <Skeleton className="h-48 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} className="h-20 rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The Admin Dashboard: KPI cards, campaign goal progress, 30-day daily
  * trends, generation-time stats, additional statistics, the conversion
  * funnel, and recent activity (see docs/Product/User_Flow.md; Sprint
  * FINAL-2 — Campaign Operations Dashboard).
+ *
+ * Sprint FINAL-3 — Dashboard Stabilization: each widget now reads
+ * `summary.unavailableSections` and shows its own small, localized
+ * error instead of the whole page failing — see
+ * `PrismaAdminDashboardGate` for why a single failing query can no
+ * longer take the entire Dashboard down.
  */
 export function AdminDashboard() {
   const { summary, isLoading, errorMessage } = useDashboardSummary();
+
+  const isUnavailable = (section: DashboardSection): boolean =>
+    (summary?.unavailableSections ?? []).includes(section);
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-heading font-bold text-foreground">Dashboard</h1>
 
       {isLoading ? (
-        <p className="text-body text-muted-foreground">Cargando resumen...</p>
+        <DashboardSkeleton />
       ) : errorMessage ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {errorMessage}
-        </p>
+        <ErrorMessage message={errorMessage} />
       ) : summary ? (
         <>
-          <DashboardSummaryCards summary={summary} />
+          <section className="flex flex-col gap-3">
+            {isUnavailable("core") ? <ErrorMessage size="sm" message={SECTION_ERROR_ES} /> : null}
+            <DashboardSummaryCards summary={summary} />
+          </section>
+
           <CampaignGoalProgress summary={summary} />
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {isUnavailable("dailyTrends") ? (
+              <div className="lg:col-span-2">
+                <ErrorMessage size="sm" message={SECTION_ERROR_ES} />
+              </div>
+            ) : null}
             <DailyBarChart
               title="Registros por día (últimos 30 días)"
               data={summary.registrationsByDay}
@@ -188,24 +235,29 @@ export function AdminDashboard() {
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-title font-semibold text-foreground">Estadísticas</h2>
+            <SectionHeader icon={TrendingUp} title="Estadísticas" />
+            {isUnavailable("windowCounts") || isUnavailable("generationTime") ? (
+              <ErrorMessage size="sm" message={SECTION_ERROR_ES} />
+            ) : null}
             <StatisticsCards summary={summary} />
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-title font-semibold text-foreground">
-              Tiempo promedio de generación
-            </h2>
+            <SectionHeader icon={FileText} title="Tiempo promedio de generación" />
+            {isUnavailable("generationTime") ? (
+              <ErrorMessage size="sm" message={SECTION_ERROR_ES} />
+            ) : null}
             <GenerationTimeStats summary={summary} />
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-title font-semibold text-foreground">Embudo de conversión</h2>
+            <SectionHeader icon={CheckCircle2} title="Embudo de conversión" />
+            {isUnavailable("core") ? <ErrorMessage size="sm" message={SECTION_ERROR_ES} /> : null}
             <ConversionFunnel summary={summary} />
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-title font-semibold text-foreground">Actividad reciente</h2>
+            <SectionHeader icon={Music} title="Actividad reciente" />
             <RecentActivityPanel />
           </section>
         </>

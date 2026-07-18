@@ -53,7 +53,7 @@ describe("GET /api/admin/dashboard", () => {
     });
   });
 
-  it("returns 500 on an unexpected failure, without leaking internal detail", async () => {
+  it("returns 500 with a Spanish message on an unexpected failure, without leaking internal detail", async () => {
     mockGetSummary.mockRejectedValue(new Error("connection lost"));
 
     const response = await GET();
@@ -61,5 +61,29 @@ describe("GET /api/admin/dashboard", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(body)).not.toContain("connection lost");
+    expect(body.message).toBe("No fue posible cargar el panel. Inténtalo nuevamente.");
+  });
+
+  it("passes unavailableSections through when the gate reports a partial failure (Sprint FINAL-3)", async () => {
+    mockGetSummary.mockResolvedValue({
+      totalLeads: 1,
+      lyricsGenerated: 1,
+      lyricsApproved: 1,
+      songsRequested: 1,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 1,
+      songsFailed: 0,
+      emailsSent: 1,
+      emailsResent: 0,
+      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
+      unavailableSections: ["dailyTrends"],
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.unavailableSections).toEqual(["dailyTrends"]);
   });
 });

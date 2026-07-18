@@ -11,13 +11,13 @@ interface SummaryCardProps {
 /** Reused by `AdminDashboard`'s "Estadísticas" section (Sprint FINAL-2) — same card, no new component. */
 export function SummaryCard({ label, value, icon: Icon }: SummaryCardProps) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-background p-4">
+    <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
         <Icon className="size-5" />
       </span>
       <div className="flex flex-col gap-1">
         <span className="text-label text-muted-foreground">{label}</span>
-        <span className="text-heading font-bold text-foreground">{value}</span>
+        <span className="text-title font-bold text-foreground">{value}</span>
       </div>
     </div>
   );

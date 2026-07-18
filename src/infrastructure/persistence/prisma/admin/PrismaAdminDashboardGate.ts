@@ -2,9 +2,10 @@ import { SongStatus as PrismaSongStatus, type PrismaClient } from "@/generated/p
 import type {
   AdminDashboardGate,
   DailyCount,
+  DashboardSection,
   DashboardSummaryCounts,
 } from "@/application/admin/contracts/AdminDashboardGate";
-import { DatabaseError } from "@/shared/errors";
+import { logger } from "@/shared/logger/logger";
 import { prisma as defaultPrismaClient } from "../client";
 
 /**
@@ -16,107 +17,187 @@ import { prisma as defaultPrismaClient } from "../client";
  * single cheap aggregate or an in-memory bucketing over a bounded,
  * already-windowed row set (this campaign is capped at a few thousand
  * leads/songs total — see PROJECT_MANIFEST.md).
+ *
+ * Sprint FINAL-3 — Dashboard Stabilization. Root cause of "Unexpected
+ * database error while loading the dashboard summary": every query this
+ * method needs used to run inside one `Promise.all`, wrapped by a single
+ * try/catch — a transient failure in any one of them (a connection
+ * hiccup, pool contention under concurrent admin traffic, a lock — and
+ * this list has only grown, sprint over sprint) rejected the whole
+ * batch and took the entire Dashboard down with one generic message,
+ * even though the other queries had already succeeded. Worse, the
+ * route handler logged only `error.message` (the generic wrapper text)
+ * and never `error.cause`, so the real failure was invisible even in
+ * server logs — effectively suppressed.
+ *
+ * Fixed by isolating every query behind `settle()`: each one is caught
+ * independently, its real error is always logged in full (never
+ * suppressed), and a safe fallback lets the rest of the summary — and
+ * therefore the rest of the Dashboard — keep rendering normally. Which
+ * sections (if any) actually failed is reported via
+ * `unavailableSections` so the UI can show a small, localized error on
+ * just the affected widget instead of blanking the whole page.
  */
 export class PrismaAdminDashboardGate implements AdminDashboardGate {
   constructor(private readonly client: PrismaClient = defaultPrismaClient) {}
 
   async getSummary(): Promise<DashboardSummaryCounts> {
-    try {
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-      const [
-        totalLeads,
-        lyricsGenerated,
-        lyricsApproved,
-        songsRequested,
-        songsQueued,
-        songsGenerating,
-        songsCompleted,
-        songsFailed,
-        emailsSent,
-        emailsResent,
-        today,
-        last7Days,
-        last30Days,
-        campaign,
-        songsCompletedToday,
-        songsCompletedLast7Days,
-        songsCompletedLast30Days,
-        recentLeadTimestamps,
-        recentCompletedSongTimestamps,
-      ] = await Promise.all([
-        this.client.lead.count(),
-        this.client.lyrics.count(),
+    const failedSections = new Set<DashboardSection>();
+
+    const settle = async <T>(
+      section: DashboardSection,
+      label: string,
+      fallback: T,
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await run();
+      } catch (error) {
+        failedSections.add(section);
+        logger.error("Dashboard widget query failed — using a safe fallback for this section", {
+          section,
+          query: label,
+          error: error instanceof Error ? error.message : String(error),
+          cause:
+            error instanceof Error && error.cause instanceof Error
+              ? error.cause.message
+              : undefined,
+        });
+        return fallback;
+      }
+    };
+
+    const [
+      totalLeads,
+      lyricsGenerated,
+      lyricsApproved,
+      songsRequested,
+      songsQueued,
+      songsGenerating,
+      songsCompleted,
+      songsFailed,
+      emailsSent,
+      emailsResent,
+      today,
+      last7Days,
+      last30Days,
+      campaign,
+      songsCompletedToday,
+      songsCompletedLast7Days,
+      songsCompletedLast30Days,
+      recentLeadTimestamps,
+      recentCompletedSongTimestamps,
+    ] = await Promise.all([
+      settle("core", "lead.count", 0, () => this.client.lead.count()),
+      settle("core", "lyrics.count", 0, () => this.client.lyrics.count()),
+      settle("core", "lyrics.count(approved)", 0, () =>
         this.client.lyrics.count({ where: { approved: true } }),
-        this.client.song.count(),
+      ),
+      settle("core", "song.count", 0, () => this.client.song.count()),
+      settle("core", "song.count(QUEUED)", 0, () =>
         this.client.song.count({ where: { status: PrismaSongStatus.QUEUED } }),
+      ),
+      settle("core", "song.count(GENERATING)", 0, () =>
         this.client.song.count({ where: { status: PrismaSongStatus.GENERATING } }),
+      ),
+      settle("core", "song.count(COMPLETED)", 0, () =>
         this.client.song.count({ where: { status: PrismaSongStatus.COMPLETED } }),
+      ),
+      settle("core", "song.count(FAILED)", 0, () =>
         this.client.song.count({ where: { status: PrismaSongStatus.FAILED } }),
+      ),
+      settle("core", "song.count(emailed)", 0, () =>
         this.client.song.count({ where: { emailedAt: { not: null } } }),
+      ),
+      settle("core", "auditLog.count(resend_email)", 0, () =>
         this.client.auditLog.count({ where: { action: "resend_email" } }),
+      ),
+      settle("generationTime", "avgGenerationMinutes(today)", null, () =>
         this.averageGenerationMinutesSince(startOfToday),
+      ),
+      settle("generationTime", "avgGenerationMinutes(7d)", null, () =>
         this.averageGenerationMinutesSince(sevenDaysAgo),
+      ),
+      settle("generationTime", "avgGenerationMinutes(30d)", null, () =>
         this.averageGenerationMinutesSince(thirtyDaysAgo),
-        this.client.campaign.findFirst({
-          orderBy: { createdAt: "asc" },
-          select: { maximumSongs: true, songsGenerated: true },
-        }),
+      ),
+      settle(
+        "campaign",
+        "campaign.findFirst",
+        null as { maximumSongs: number; songsGenerated: number } | null,
+        () =>
+          this.client.campaign.findFirst({
+            orderBy: { createdAt: "asc" },
+            select: { maximumSongs: true, songsGenerated: true },
+          }),
+      ),
+      settle("windowCounts", "song.count(completedToday)", 0, () =>
         this.client.song.count({
           where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: startOfToday } },
         }),
+      ),
+      settle("windowCounts", "song.count(completed7d)", 0, () =>
         this.client.song.count({
           where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: sevenDaysAgo } },
         }),
+      ),
+      settle("windowCounts", "song.count(completed30d)", 0, () =>
         this.client.song.count({
           where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: thirtyDaysAgo } },
         }),
+      ),
+      settle("dailyTrends", "lead.findMany(recent)", [] as Array<{ createdAt: Date }>, () =>
         this.client.lead.findMany({
           where: { createdAt: { gte: thirtyDaysAgo } },
           select: { createdAt: true },
         }),
-        this.client.song.findMany({
-          where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: thirtyDaysAgo } },
-          select: { completedAt: true },
-        }),
-      ]);
+      ),
+      settle(
+        "dailyTrends",
+        "song.findMany(recentCompleted)",
+        [] as Array<{ completedAt: Date | null }>,
+        () =>
+          this.client.song.findMany({
+            where: { status: PrismaSongStatus.COMPLETED, completedAt: { gte: thirtyDaysAgo } },
+            select: { completedAt: true },
+          }),
+      ),
+    ]);
 
-      return {
-        totalLeads,
-        lyricsGenerated,
-        lyricsApproved,
-        songsRequested,
-        songsQueued,
-        songsGenerating,
-        songsCompleted,
-        songsFailed,
-        emailsSent,
-        emailsResent,
-        averageGenerationMinutes: { today, last7Days, last30Days },
-        campaignMaximumSongs: campaign?.maximumSongs ?? null,
-        campaignSongsGenerated: campaign?.songsGenerated ?? null,
-        songsCompletedToday,
-        songsCompletedLast7Days,
-        songsCompletedLast30Days,
-        registrationsByDay: this.bucketByDay(
-          recentLeadTimestamps.map((row) => row.createdAt),
-          thirtyDaysAgo,
-        ),
-        completedSongsByDay: this.bucketByDay(
-          recentCompletedSongTimestamps.map((row) => row.completedAt!),
-          thirtyDaysAgo,
-        ),
-      };
-    } catch (error) {
-      throw new DatabaseError("Unexpected database error while loading the dashboard summary.", {
-        code: "admin.unexpected_database_error",
-        cause: error,
-        context: { operation: "getSummary" },
-      });
-    }
+    return {
+      totalLeads,
+      lyricsGenerated,
+      lyricsApproved,
+      songsRequested,
+      songsQueued,
+      songsGenerating,
+      songsCompleted,
+      songsFailed,
+      emailsSent,
+      emailsResent,
+      averageGenerationMinutes: { today, last7Days, last30Days },
+      campaignMaximumSongs: campaign?.maximumSongs ?? null,
+      campaignSongsGenerated: campaign?.songsGenerated ?? null,
+      songsCompletedToday,
+      songsCompletedLast7Days,
+      songsCompletedLast30Days,
+      registrationsByDay: this.bucketByDay(
+        recentLeadTimestamps.map((row) => row.createdAt),
+        thirtyDaysAgo,
+      ),
+      completedSongsByDay: this.bucketByDay(
+        recentCompletedSongTimestamps
+          .map((row) => row.completedAt)
+          .filter((date): date is Date => date !== null),
+        thirtyDaysAgo,
+      ),
+      unavailableSections: [...failedSections],
+    };
   }
 
   /**

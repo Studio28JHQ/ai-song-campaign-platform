@@ -26,6 +26,16 @@ export interface DailyCount {
   count: number;
 }
 
+/**
+ * Sprint FINAL-3 — Dashboard Stabilization. The Dashboard's independently-
+ * loadable widgets. `PrismaAdminDashboardGate` loads each of the queries
+ * feeding these sections in isolation (never one giant all-or-nothing
+ * batch), so a single failing query degrades only its own widget —
+ * see `unavailableSections` on `DashboardSummaryCounts`.
+ */
+export type DashboardSection =
+  "core" | "generationTime" | "campaign" | "windowCounts" | "dailyTrends";
+
 export interface DashboardSummaryCounts {
   totalLeads: number;
   lyricsGenerated: number;
@@ -38,9 +48,9 @@ export interface DashboardSummaryCounts {
   emailsSent: number;
   emailsResent: number;
   averageGenerationMinutes: AverageGenerationMinutes;
-  /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists. */
+  /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists (or that section failed to load). */
   campaignMaximumSongs: number | null;
-  /** The campaign's `songsGenerated` counter — the same field the generation gate enforces against — `null` if no campaign row exists. */
+  /** The campaign's `songsGenerated` counter — the same field the generation gate enforces against — `null` if no campaign row exists (or that section failed to load). */
   campaignSongsGenerated: number | null;
   /** New leads registered per day, oldest first, over the last 30 days (including days with zero). */
   registrationsByDay: DailyCount[];
@@ -52,6 +62,14 @@ export interface DashboardSummaryCounts {
   songsCompletedLast7Days: number;
   /** Songs completed in the last 30 days. */
   songsCompletedLast30Days: number;
+  /**
+   * Sprint FINAL-3 — Dashboard Stabilization. Which sections, if any,
+   * failed to load — that section's fields above are safe zero/null
+   * defaults, not real data. Empty when everything loaded normally.
+   * The real cause of each failure is always logged server-side (see
+   * `PrismaAdminDashboardGate`), never only swallowed here.
+   */
+  unavailableSections: DashboardSection[];
 }
 
 export interface AdminDashboardGate {

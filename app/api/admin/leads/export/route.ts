@@ -88,7 +88,7 @@ function toCsvRow(row: AdminLeadExportRow): string {
 export async function GET(request: Request): Promise<Response> {
   const session = await getAdminSession();
   if (!session) {
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   const { searchParams } = new URL(request.url);

@@ -41,7 +41,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Nex
     // Defense in depth: `middleware.ts` already gates this route, but a
     // missing/expired session by the time this line runs must never be
     // attributed to a phantom admin in the audit trail.
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   try {
@@ -57,7 +57,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Nex
       error: error instanceof Error ? error.message : String(error),
     });
 
-    return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+    return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");
   }
 }
 

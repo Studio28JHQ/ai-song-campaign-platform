@@ -28,7 +28,7 @@ const searchParamsSchema = z.object({
 export async function GET(request: Request): Promise<NextResponse> {
   const session = await getAdminSession();
   if (!session) {
-    return errorResponse(401, "unauthorized", "Authentication required.");
+    return errorResponse(401, "unauthorized", "Se requiere autenticación.");
   }
 
   const { searchParams } = new URL(request.url);
@@ -60,7 +60,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       error: error instanceof Error ? error.message : String(error),
     });
 
-    return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+    return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");
   }
 }
 

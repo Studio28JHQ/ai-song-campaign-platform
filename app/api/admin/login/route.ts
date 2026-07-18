@@ -125,7 +125,7 @@ async function handleUseCaseError(
     error: error instanceof Error ? error.message : String(error),
   });
 
-  return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+  return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");
 }
 
 function errorResponse(status: number, error: string, message: string): NextResponse {

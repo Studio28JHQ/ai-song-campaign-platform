@@ -1,9 +1,16 @@
 "use client";
 
+import { CheckCircle2, Clock3, FileText, Mic2, Music, User } from "lucide-react";
+import type { ReactNode } from "react";
 import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLeadDetail } from "../hooks/useLeadDetail";
+import { EmptyState } from "./EmptyState";
+import { ErrorMessage } from "./ErrorMessage";
 import { ResendEmailAction } from "./ResendEmailAction";
 import { RetrySongAction } from "./RetrySongAction";
+import { SectionHeader } from "./SectionHeader";
+import { LeadStatusBadge, SongStatusBadge } from "./StatusBadge";
 
 interface LeadDetailViewProps {
   leadId: string;
@@ -20,6 +27,25 @@ function formatTimestamp(value: string | null): string {
   return value ? new Date(value).toLocaleString("es-MX") : "—";
 }
 
+/** Sprint FINAL-3 — Dashboard Stabilization. The card shell every Lead Detail section shares — consistent spacing, radius, and shadow. */
+function DetailCard({ children }: { children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6">
+      {children}
+    </section>
+  );
+}
+
+function LeadDetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Cargando ficha de familia">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <Skeleton key={index} className="h-32 rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
 /**
  * The read-only Lead Detail screen (see docs/Product/User_Flow.md):
  * lead information, lyrics history, the approved version, song
@@ -30,72 +56,69 @@ function formatTimestamp(value: string | null): string {
  * Resend Email (only for a `COMPLETED` song whose automatic email has
  * already gone out) — everything else on this screen is strictly
  * read-only.
+ *
+ * Sprint FINAL-3 — Dashboard Stabilization: every section is now its
+ * own card, the approved lyrics and the generated song are visually
+ * highlighted (a tinted border/background, not new colors — the same
+ * `success`/`primary` tokens used elsewhere), and the timeline reads
+ * more clearly. All the same information as before, presentation only.
  */
 export function LeadDetailView({ leadId }: LeadDetailViewProps) {
   const { detail, isLoading, notFound, errorMessage, refetch } = useLeadDetail(leadId);
 
   if (isLoading) {
-    return <p className="text-body text-muted-foreground">Cargando...</p>;
+    return <LeadDetailSkeleton />;
   }
 
   if (notFound) {
-    return (
-      <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        No se encontró esta familia.
-      </p>
-    );
+    return <ErrorMessage message="No se encontró esta familia." />;
   }
 
   if (errorMessage || !detail) {
-    return (
-      <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {errorMessage ?? "Algo salió mal."}
-      </p>
-    );
+    return <ErrorMessage message={errorMessage ?? "Algo salió mal. Inténtalo de nuevo."} />;
   }
 
   const { lead, lyricsHistory, approvedLyrics, song, executionHistory } = detail;
 
   return (
-    <div className="flex flex-col gap-8">
-      <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Información de la familia</h2>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+    <div className="flex flex-col gap-6">
+      <DetailCard>
+        <div className="flex items-center justify-between">
+          <SectionHeader icon={User} title="Información de la familia" />
+          <LeadStatusBadge status={lead.status} />
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-muted-foreground">Nombre</dt>
-            <dd>{lead.parentName}</dd>
+            <dt className="text-label text-muted-foreground">Nombre</dt>
+            <dd className="text-foreground">{lead.parentName}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Bebé</dt>
-            <dd>{lead.babyName}</dd>
+            <dt className="text-label text-muted-foreground">Bebé</dt>
+            <dd className="text-foreground">{lead.babyName}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Correo</dt>
-            <dd>{lead.email}</dd>
+            <dt className="text-label text-muted-foreground">Correo</dt>
+            <dd className="text-foreground">{lead.email}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Teléfono</dt>
-            <dd>{lead.phone ?? "—"}</dd>
+            <dt className="text-label text-muted-foreground">Teléfono</dt>
+            <dd className="text-foreground">{lead.phone ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Ciudad</dt>
-            <dd>{lead.city ?? "—"}</dd>
+            <dt className="text-label text-muted-foreground">Ciudad</dt>
+            <dd className="text-foreground">{lead.city ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Estado</dt>
-            <dd>{lead.status}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Registrado</dt>
-            <dd>{formatTimestamp(lead.createdAt)}</dd>
+            <dt className="text-label text-muted-foreground">Registrado</dt>
+            <dd className="text-foreground">{formatTimestamp(lead.createdAt)}</dd>
           </div>
         </dl>
-      </section>
+      </DetailCard>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Historial de letras</h2>
+      <DetailCard>
+        <SectionHeader icon={FileText} title="Historial de letras" />
         {lyricsHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aún no se ha generado ninguna letra.</p>
+          <EmptyState icon={FileText} title="Aún no se ha generado ninguna letra" />
         ) : (
           <ul className="flex flex-col gap-3">
             {lyricsHistory.map((version) => (
@@ -111,31 +134,36 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
             ))}
           </ul>
         )}
-      </section>
+      </DetailCard>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Letra aprobada</h2>
+      <DetailCard>
+        <SectionHeader icon={Mic2} title="Letra aprobada" />
         {approvedLyrics ? (
-          <pre className="whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground">
+          <pre className="whitespace-pre-wrap rounded-lg border border-success/30 bg-success/5 p-4 text-sm text-foreground">
             {approvedLyrics.content}
           </pre>
         ) : (
-          <p className="text-sm text-muted-foreground">Aún no hay una letra aprobada.</p>
+          <EmptyState icon={Mic2} title="Aún no hay una letra aprobada" />
         )}
-      </section>
+      </DetailCard>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Canción</h2>
+      <DetailCard>
+        <SectionHeader icon={Music} title="Canción" />
         {song ? (
-          <div className="flex flex-col gap-2 text-sm">
-            <p>
-              <span className="text-muted-foreground">Estado: </span>
-              {song.status}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Generada el: </span>
-              {formatTimestamp(song.generatedAt)}
-            </p>
+          <div
+            className={`flex flex-col gap-3 rounded-lg border p-4 text-sm ${
+              song.status === "COMPLETED"
+                ? "border-success/30 bg-success/5"
+                : "border-border bg-muted/30"
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <SongStatusBadge status={song.status} />
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <Clock3 className="size-3.5" />
+                Generada el {formatTimestamp(song.generatedAt)}
+              </span>
+            </div>
             <p>
               <span className="text-muted-foreground">Entrega por correo: </span>
               {song.emailedAt ? `Enviado el ${formatTimestamp(song.emailedAt)}` : "No enviado"}
@@ -166,14 +194,14 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Aún no se ha generado ninguna canción.</p>
+          <EmptyState icon={Music} title="Aún no se ha generado ninguna canción" />
         )}
-      </section>
+      </DetailCard>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-title font-semibold text-foreground">Línea de tiempo</h2>
+      <DetailCard>
+        <SectionHeader icon={CheckCircle2} title="Línea de tiempo" />
         {executionHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aún no hay historial.</p>
+          <EmptyState icon={Clock3} title="Aún no hay historial" />
         ) : (
           <ol className="flex flex-col gap-0">
             {executionHistory.map((item, index) => (
@@ -187,7 +215,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
                     <span className="w-px flex-1 bg-border" />
                   ) : null}
                 </span>
-                <div className="flex flex-1 flex-col gap-0.5 text-sm">
+                <div className="flex flex-1 flex-col gap-0.5 rounded-lg px-2 py-1 text-sm transition-colors hover:bg-muted/50">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                     <span className="font-medium text-foreground">
                       {item.label}
@@ -198,7 +226,9 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-muted-foreground">{formatTimestamp(item.timestamp)}</span>
+                    <span className="text-label text-muted-foreground">
+                      {formatTimestamp(item.timestamp)}
+                    </span>
                   </div>
                   {item.detail ? (
                     <span className="text-muted-foreground">{item.detail}</span>
@@ -208,7 +238,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
             ))}
           </ol>
         )}
-      </section>
+      </DetailCard>
     </div>
   );
 }

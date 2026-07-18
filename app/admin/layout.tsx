@@ -17,11 +17,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const session = await getAdminSession();
 
   if (!session) {
-    return <>{children}</>;
+    return <div className="theme-admin min-h-dvh">{children}</div>;
   }
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="theme-admin flex min-h-dvh">
       <AdminSidebar />
       <div className="min-w-0 flex-1 overflow-x-auto">{children}</div>
     </div>

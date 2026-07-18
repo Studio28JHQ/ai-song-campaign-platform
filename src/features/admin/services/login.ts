@@ -39,7 +39,7 @@ const DEFAULT_MESSAGES: Record<LoginErrorCode, string> = {
   invalid_credentials: "Invalid email or password.",
   account_inactive: "This admin account is inactive.",
   business_rule_violation: "This request could not be completed.",
-  internal_error: "Something went wrong. Please try again.",
+  internal_error: "Algo salió mal. Inténtalo de nuevo.",
 };
 
 export class LoginError extends Error {
@@ -74,7 +74,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     });
   } catch {
     throw new LoginError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.",
       "internal_error",
     );
   }

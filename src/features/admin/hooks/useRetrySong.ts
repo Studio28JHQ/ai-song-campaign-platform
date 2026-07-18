@@ -17,7 +17,7 @@ export function useRetrySong() {
       return { success: true };
     } catch (error) {
       const message =
-        error instanceof RetrySongError ? error.message : "Something went wrong. Please try again.";
+        error instanceof RetrySongError ? error.message : "Algo salió mal. Inténtalo de nuevo.";
       return { success: false, message };
     } finally {
       setIsSubmitting(false);

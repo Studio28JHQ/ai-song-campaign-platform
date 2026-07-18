@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { PrismaAdminDashboardGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminDashboardGate";
+import { logger } from "@/shared/logger/logger";
 
 function fakeClient(counts: {
   totalLeads: number;
@@ -87,6 +88,7 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       songsCompletedLast30Days: 0,
       registrationsByDay: expect.any(Array),
       completedSongsByDay: expect.any(Array),
+      unavailableSections: [],
     });
   });
 
@@ -221,16 +223,92 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     });
   });
 
-  it("throws a shared DatabaseError on an unexpected failure", async () => {
-    const client = {
-      lead: { count: vi.fn().mockRejectedValue(new Error("connection lost")), findMany: vi.fn() },
-      lyrics: { count: vi.fn() },
-      song: { count: vi.fn(), findMany: vi.fn() },
-      auditLog: { count: vi.fn() },
-      campaign: { findFirst: vi.fn() },
-    } as unknown as PrismaClient;
-    const gate = new PrismaAdminDashboardGate(client);
+  describe("partial-failure resilience (Sprint FINAL-3 — Dashboard Stabilization)", () => {
+    it("keeps every other section working, and reports 'core' as unavailable, when one core count query fails", async () => {
+      const client = fakeClient({
+        totalLeads: 10,
+        lyricsGenerated: 12,
+        lyricsApproved: 8,
+        songsRequested: 7,
+        songsQueued: 1,
+        songsGenerating: 1,
+        songsCompleted: 4,
+        songsFailed: 2,
+        emailsSent: 4,
+        emailsResent: 1,
+        campaign: { maximumSongs: 3000, songsGenerated: 42 },
+      });
+      // The very first `lead.count()` call fails; every other query keeps its normal mock.
+      vi.mocked(client.lead.count).mockReset().mockRejectedValueOnce(new Error("connection lost"));
 
-    await expect(gate.getSummary()).rejects.toThrow();
+      const gate = new PrismaAdminDashboardGate(client);
+      const summary = await gate.getSummary();
+
+      expect(summary.unavailableSections).toEqual(["core"]);
+      expect(summary.totalLeads).toBe(0); // safe fallback, not a thrown error
+      // Everything outside "core" still loaded normally.
+      expect(summary.campaignMaximumSongs).toBe(3000);
+      expect(summary.campaignSongsGenerated).toBe(42);
+    });
+
+    it("logs the real underlying error for the failed query — never silently swallowed", async () => {
+      const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+      const client = fakeClient({
+        totalLeads: 1,
+        lyricsGenerated: 1,
+        lyricsApproved: 1,
+        songsRequested: 1,
+        songsQueued: 0,
+        songsGenerating: 0,
+        songsCompleted: 1,
+        songsFailed: 0,
+        emailsSent: 1,
+        emailsResent: 0,
+      });
+      vi.mocked(client.campaign.findFirst).mockRejectedValueOnce(
+        new Error('relation "campaign" does not exist'),
+      );
+
+      const gate = new PrismaAdminDashboardGate(client);
+      await gate.getSummary();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Dashboard widget query failed — using a safe fallback for this section",
+        expect.objectContaining({
+          section: "campaign",
+          query: "campaign.findFirst",
+          error: 'relation "campaign" does not exist',
+        }),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it("reports each independently-failing section, and still returns a usable summary when several fail at once", async () => {
+      const client = fakeClient({
+        totalLeads: 1,
+        lyricsGenerated: 1,
+        lyricsApproved: 1,
+        songsRequested: 1,
+        songsQueued: 0,
+        songsGenerating: 0,
+        songsCompleted: 1,
+        songsFailed: 0,
+        emailsSent: 1,
+        emailsResent: 0,
+      });
+      vi.mocked(client.campaign.findFirst).mockRejectedValueOnce(new Error("timeout"));
+      vi.mocked(client.lead.findMany).mockRejectedValueOnce(new Error("timeout"));
+
+      const gate = new PrismaAdminDashboardGate(client);
+      const summary = await gate.getSummary();
+
+      expect(summary.unavailableSections).toContain("campaign");
+      expect(summary.unavailableSections).toContain("dailyTrends");
+      expect(summary.campaignMaximumSongs).toBeNull();
+      // Falls back to an all-zero 30-day series, not a thrown error.
+      expect(summary.registrationsByDay.every((day) => day.count === 0)).toBe(true);
+      // The rest of the summary is unaffected.
+      expect(summary.totalLeads).toBe(1);
+    });
   });
 });

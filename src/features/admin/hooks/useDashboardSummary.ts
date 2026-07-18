@@ -26,7 +26,7 @@ export function useDashboardSummary(): DashboardSummaryState {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : "Something went wrong.";
+        const message = error instanceof Error ? error.message : "Algo salió mal.";
         setState({ summary: null, isLoading: false, errorMessage: message });
       });
 

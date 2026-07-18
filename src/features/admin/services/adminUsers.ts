@@ -37,7 +37,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const record = (body ?? {}) as { message?: unknown };
-    const message = typeof record.message === "string" ? record.message : "Something went wrong.";
+    const message = typeof record.message === "string" ? record.message : "Algo salió mal.";
     throw new AdminUsersError(message);
   }
 
@@ -49,7 +49,7 @@ async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
     return await fetch(input, init);
   } catch {
     throw new AdminUsersError(
-      "We couldn't reach the server. Please check your connection and try again.",
+      "No pudimos conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.",
     );
   }
 }
