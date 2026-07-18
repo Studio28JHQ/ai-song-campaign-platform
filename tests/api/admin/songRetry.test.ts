@@ -200,7 +200,14 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
 
   it("reuses the existing lyrics/mood and never regenerates lyrics when the background job runs", async () => {
     mockSongFindById.mockResolvedValue(fakeFailedSong());
-    mockLyricsFindById.mockResolvedValue({ content: "Title\nVerse 1", moodId: "mood-1" });
+    mockLyricsFindById.mockResolvedValue({
+      content: "Title\nVerse 1",
+      moodId: "mood-1",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      parentMessage: "A gentle song about bedtime.",
+      voice: "FEMALE",
+    });
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
     mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
     mockPollGenerationStatus.mockResolvedValue({

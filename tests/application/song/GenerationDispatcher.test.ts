@@ -161,6 +161,10 @@ function createApprovedLyrics(): Lyrics {
     prompt: "prompt",
     content: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
     version: 1,
+    parentMessage: "A gentle song about bedtime.",
+    musicMood: "Warm, joyful and playful.",
+    musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    voice: "FEMALE",
   });
   lyrics.approve();
   return lyrics;
@@ -313,6 +317,32 @@ describe("GenerationDispatcher", () => {
 
   it("marks the song FAILED when the approved lyrics can no longer be found", async () => {
     const song = Song.create({ leadId: lead.id, lyricsId: "missing-lyrics", moodId: "mood-1" });
+    songRepository.seed(song);
+
+    const dispatcher = buildDispatcher();
+
+    await expect(dispatcher.execute()).rejects.toThrow();
+    expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+  });
+
+  it("marks the song FAILED when the approved lyrics has no musical direction (Sprint v1.1 — a pre-migration row)", async () => {
+    const legacyLyrics = Lyrics.fromPersistence({
+      id: "lyrics-legacy",
+      leadId: lead.id,
+      moodId: "mood-1",
+      prompt: "prompt",
+      content: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+      parentMessage: null,
+      musicMood: null,
+      musicDirection: null,
+      voice: "FEMALE",
+      approved: true,
+      rejectionReason: null,
+      version: 1,
+      createdAt: new Date(),
+    });
+    lyricsRepository.seed(legacyLyrics);
+    const song = Song.create({ leadId: lead.id, lyricsId: legacyLyrics.id, moodId: "mood-1" });
     songRepository.seed(song);
 
     const dispatcher = buildDispatcher();

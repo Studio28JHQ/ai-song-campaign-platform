@@ -1,3 +1,5 @@
+import type { Voice } from "@/domain/lyrics/types";
+
 /**
  * Boundary-facing input for `GenerateLyricsForLeadUseCase`. Unlike
  * `GenerateLyricsRequest`, this does not carry already-generated content —
@@ -10,4 +12,11 @@ export interface GenerateLyricsForLeadRequest {
   moodName: string;
   moodDescription?: string;
   parentMessage: string;
+  /**
+   * Sprint v1.1 — AI Musical Direction. The parent's requested narrator
+   * voice — persisted alongside the resulting Lyrics version when
+   * approved, but never passed to `LyricsGenerator` (Claude never sees
+   * it; see `PromptBuilder` — Mureka).
+   */
+  voice: Voice;
 }

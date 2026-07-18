@@ -4,6 +4,8 @@ export interface GenerateLyricsInput {
   moodDescription?: string;
   parentMessage: string;
   turnstileToken: string;
+  /** Sprint v1.1 — AI Musical Direction. */
+  voice: "FEMALE" | "MALE";
 }
 
 export interface GeneratedLyricsSnapshot {

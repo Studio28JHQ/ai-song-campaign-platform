@@ -124,6 +124,7 @@ const baseRequest: Omit<GenerateLyricsForLeadRequest, "leadId"> = {
   moodName: "Joyful",
   moodDescription: "upbeat and cheerful",
   parentMessage: "A gentle song about bedtime.",
+  voice: "FEMALE",
 };
 
 describe("GenerateLyricsForLeadUseCase", () => {
@@ -139,7 +140,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." }),
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
     );
 
     await expect(useCase.execute({ leadId: "missing", ...baseRequest })).rejects.toThrow();
@@ -153,7 +160,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." }),
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
     );
 
     await expect(useCase.execute({ leadId: lead.id, ...baseRequest })).rejects.toThrow();
@@ -166,6 +179,8 @@ describe("GenerateLyricsForLeadUseCase", () => {
       approved: true,
       reason: null,
       lyrics: "Title\nVerse 1\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
     });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
@@ -185,6 +200,8 @@ describe("GenerateLyricsForLeadUseCase", () => {
       approved: false,
       reason: "Contains offensive language.",
       lyrics: null,
+      musicMood: null,
+      musicDirection: null,
     });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
@@ -203,7 +220,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: true, reason: null, lyrics: "Title\nVerse 1\n..." }),
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
     );
 
     const first = await useCase.execute({ leadId: lead.id, ...baseRequest });
@@ -223,7 +246,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: true, reason: null, lyrics: "Title\nVerse 1\n..." }),
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
     );
 
     await useCase.execute({ leadId: lead.id, ...baseRequest });
@@ -241,7 +270,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: false, reason: "not appropriate", lyrics: null }),
+      fakeGenerator({
+        approved: false,
+        reason: "not appropriate",
+        lyrics: null,
+        musicMood: null,
+        musicDirection: null,
+      }),
     );
 
     const response = await useCase.execute({ leadId: lead.id, ...baseRequest });
@@ -260,7 +295,13 @@ describe("GenerateLyricsForLeadUseCase", () => {
     const useCase = new GenerateLyricsForLeadUseCase(
       leadRepository,
       lyricsRepository,
-      fakeGenerator({ approved: true, reason: null, lyrics: "Title\nVerse 1\n..." }),
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
     );
 
     // Regeneration path always consumes an attempt — force it via a prior version.
@@ -270,6 +311,10 @@ describe("GenerateLyricsForLeadUseCase", () => {
       prompt: "prompt",
       content: "Title\n...",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     await lyricsRepository.create(existing);
 
@@ -290,11 +335,21 @@ describe("GenerateLyricsForLeadUseCase", () => {
       prompt: "prompt",
       content: "Title\n...",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     approved.approve();
     await lyricsRepository.create(approved);
 
-    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\nNew\n..." });
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\nNew\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
     await expect(useCase.execute({ leadId: lead.id, ...baseRequest })).rejects.toThrow();
@@ -320,7 +375,13 @@ describe("GenerateLyricsForLeadUseCase — parentMessage hardening (Sprint 8.1)"
   it("rejects an HTML/script payload before calling the generator", async () => {
     const lead = createLead(5);
     leadRepository.seed(lead);
-    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
     await expect(
@@ -337,7 +398,13 @@ describe("GenerateLyricsForLeadUseCase — parentMessage hardening (Sprint 8.1)"
   it("rejects a message longer than 600 characters", async () => {
     const lead = createLead(5);
     leadRepository.seed(lead);
-    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
     await expect(
@@ -350,7 +417,13 @@ describe("GenerateLyricsForLeadUseCase — parentMessage hardening (Sprint 8.1)"
   it("trims and collapses whitespace before passing the message to the generator", async () => {
     const lead = createLead(5);
     leadRepository.seed(lead);
-    const generator = fakeGenerator({ approved: true, reason: null, lyrics: "Title\n..." });
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
     const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
 
     await useCase.execute({

@@ -11,6 +11,13 @@ export class LyricsMapper {
       moodId: record.moodId,
       prompt: record.prompt,
       content: record.content,
+      parentMessage: record.parentMessage,
+      musicMood: record.musicMood,
+      musicDirection: record.musicDirection,
+      // Prisma's generated `Voice` enum is a plain `"FEMALE" | "MALE"`
+      // union — structurally identical to the domain `Voice` type, so
+      // no translation map is needed (unlike `SongMapper`'s status maps).
+      voice: record.voice,
       approved: record.approved,
       rejectionReason: record.rejectionReason,
       version: record.version,
@@ -27,6 +34,10 @@ export class LyricsMapper {
       moodId: lyrics.moodId,
       prompt: lyrics.prompt,
       content: lyrics.content,
+      parentMessage: lyrics.parentMessage,
+      musicMood: lyrics.musicMood,
+      musicDirection: lyrics.musicDirection,
+      voice: lyrics.voice,
       approved: lyrics.approved,
       rejectionReason: lyrics.rejectionReason,
       version: lyrics.version,

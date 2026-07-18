@@ -4,6 +4,7 @@ import { GenerateLyricsForLeadUseCase } from "@/application/lyrics/use-cases/Gen
 import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { appConfig } from "@/config/app";
+import { VOICE_OPTIONS } from "@/domain/lyrics/types";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
@@ -52,6 +53,9 @@ const generateLyricsRequestSchema = z
     moodDescription: z.string().min(1).optional(),
     parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
     turnstileToken: z.string().min(1, "Human verification is required."),
+    // Sprint v1.1 — AI Musical Direction. Optional with a default so an
+    // older client that doesn't send it yet still works unchanged.
+    voice: z.enum(VOICE_OPTIONS).default("FEMALE"),
   })
   .strict();
 

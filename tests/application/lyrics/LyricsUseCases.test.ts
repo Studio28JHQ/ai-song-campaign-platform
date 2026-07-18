@@ -44,6 +44,10 @@ const baseRequest: GenerateLyricsRequest = {
   moodId: "mood-1",
   prompt: "a joyful lullaby prompt",
   content: "generated lyrics content",
+  parentMessage: "A gentle song about bedtime.",
+  musicMood: "Warm, joyful and playful.",
+  musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+  voice: "FEMALE",
 };
 
 describe("GenerateLyricsUseCase", () => {

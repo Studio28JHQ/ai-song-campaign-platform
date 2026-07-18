@@ -8,6 +8,10 @@ const validInput: CreateLyricsInput = {
   prompt: "a joyful lullaby prompt",
   content: "generated lyrics content",
   version: 1,
+  parentMessage: "A gentle song about bedtime.",
+  musicMood: "Warm, joyful and playful.",
+  musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+  voice: "FEMALE",
 };
 
 describe("Lyrics.create", () => {
@@ -27,6 +31,14 @@ describe("Lyrics.create", () => {
 
   it("rejects a missing content", () => {
     expect(() => Lyrics.create({ ...validInput, content: "" })).toThrow();
+  });
+
+  it("rejects a missing musicMood (Sprint v1.1 — AI Musical Direction)", () => {
+    expect(() => Lyrics.create({ ...validInput, musicMood: "" })).toThrow();
+  });
+
+  it("rejects a missing musicDirection (Sprint v1.1 — AI Musical Direction)", () => {
+    expect(() => Lyrics.create({ ...validInput, musicDirection: "" })).toThrow();
   });
 
   it.each([0, -1, 1.5])("rejects an invalid version %s", (version) => {
@@ -83,6 +95,10 @@ describe("Lyrics.fromPersistence / toSnapshot", () => {
       moodId: lyrics.moodId,
       prompt: lyrics.prompt,
       content: lyrics.content,
+      parentMessage: lyrics.parentMessage,
+      musicMood: lyrics.musicMood,
+      musicDirection: lyrics.musicDirection,
+      voice: lyrics.voice,
       approved: lyrics.approved,
       rejectionReason: lyrics.rejectionReason,
       version: lyrics.version,

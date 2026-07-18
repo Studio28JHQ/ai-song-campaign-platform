@@ -7,15 +7,23 @@ const claudeLyricsResponseSchema = z
     approved: z.boolean(),
     reason: z.string().nullable(),
     lyrics: z.string().nullable(),
+    // Sprint v1.1 — AI Musical Direction.
+    musicMood: z.string().nullable(),
+    musicDirection: z.string().nullable(),
   })
   .refine(
     (value) =>
       value.approved
-        ? typeof value.lyrics === "string" && value.lyrics.trim().length > 0
+        ? typeof value.lyrics === "string" &&
+          value.lyrics.trim().length > 0 &&
+          typeof value.musicMood === "string" &&
+          value.musicMood.trim().length > 0 &&
+          typeof value.musicDirection === "string" &&
+          value.musicDirection.trim().length > 0
         : typeof value.reason === "string" && value.reason.trim().length > 0,
     {
       message:
-        "an approved response requires non-empty lyrics; a rejected response requires a non-empty reason.",
+        "an approved response requires non-empty lyrics, musicMood, and musicDirection; a rejected response requires a non-empty reason.",
     },
   );
 

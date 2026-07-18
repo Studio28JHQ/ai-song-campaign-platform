@@ -1,5 +1,5 @@
 import { BusinessRuleError, ValidationError } from "@/shared/errors";
-import type { CreateLyricsInput, LyricsProps, LyricsSnapshot } from "../types";
+import type { CreateLyricsInput, LyricsProps, LyricsSnapshot, Voice } from "../types";
 
 /**
  * A single generated lyrics version for a Lead (see
@@ -17,6 +17,9 @@ export class Lyrics {
     const moodId = Lyrics.requireNonEmpty(input.moodId, "moodId");
     const prompt = Lyrics.requireNonEmpty(input.prompt, "prompt");
     const content = Lyrics.requireNonEmpty(input.content, "content");
+    const parentMessage = Lyrics.requireNonEmpty(input.parentMessage, "parentMessage");
+    const musicMood = Lyrics.requireNonEmpty(input.musicMood, "musicMood");
+    const musicDirection = Lyrics.requireNonEmpty(input.musicDirection, "musicDirection");
 
     if (!Number.isInteger(input.version) || input.version <= 0) {
       throw new ValidationError("version must be a positive integer.", {
@@ -31,6 +34,10 @@ export class Lyrics {
       moodId,
       prompt,
       content,
+      parentMessage,
+      musicMood,
+      musicDirection,
+      voice: input.voice,
       approved: false,
       rejectionReason: null,
       version: input.version,
@@ -113,6 +120,22 @@ export class Lyrics {
     return this.props.content;
   }
 
+  get parentMessage(): string | null {
+    return this.props.parentMessage;
+  }
+
+  get musicMood(): string | null {
+    return this.props.musicMood;
+  }
+
+  get musicDirection(): string | null {
+    return this.props.musicDirection;
+  }
+
+  get voice(): Voice {
+    return this.props.voice;
+  }
+
   get approved(): boolean {
     return this.props.approved;
   }
@@ -136,6 +159,10 @@ export class Lyrics {
       moodId: this.props.moodId,
       prompt: this.props.prompt,
       content: this.props.content,
+      parentMessage: this.props.parentMessage,
+      musicMood: this.props.musicMood,
+      musicDirection: this.props.musicDirection,
+      voice: this.props.voice,
       approved: this.props.approved,
       rejectionReason: this.props.rejectionReason,
       version: this.props.version,

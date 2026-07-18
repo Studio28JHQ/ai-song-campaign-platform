@@ -60,6 +60,17 @@ enum SongStatus {
   @@map("song_status")
 }
 
+// Sprint v1.1 — AI Musical Direction. The parent's requested narrator
+// voice for the song, selected on the lyrics generation form and
+// carried through to the Mureka prompt only (see `Lyrics.voice`) —
+// never sent to Claude, never affects lyrics generation.
+enum Voice {
+  FEMALE
+  MALE
+
+  @@map("voice")
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -150,6 +161,19 @@ model Lyrics {
   moodId          String   @db.Uuid
   prompt          String
   content         String
+  // Sprint v1.1 — AI Musical Direction. `parentMessage` is the parent's
+  // own song description (the "Baby Context" the Mureka prompt is built
+  // from at song-generation time); `musicMood`/`musicDirection` are
+  // Claude's own creative interpretation, generated alongside the lyrics
+  // in the same call — see `PromptBuilder`/`ResponseParser` (Claude).
+  // Nullable so pre-existing Lyrics rows (created before this migration)
+  // remain valid; every row created going forward always sets all three,
+  // enforced by `Lyrics.create`. `voice` has a safe default for the same
+  // backward-compatibility reason.
+  parentMessage   String?
+  musicMood       String?
+  musicDirection  String?
+  voice           Voice    @default(FEMALE)
   approved        Boolean  @default(false)
   rejectionReason String?
   version         Int

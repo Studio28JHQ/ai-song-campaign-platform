@@ -62,12 +62,31 @@ Use a warm, tender, childlike tone suitable for a family audience.
 Use neutral Latin American Spanish — avoid regional slang, "vosotros" forms, or wording tied to a single country.
 `.trim();
 
+// Sprint v1.1 — AI Musical Direction. Claude is now responsible for all
+// creative direction, not just the lyrics: alongside the lyrics text,
+// the same call also produces a short emotional profile (`musicMood`)
+// and a short musical-arrangement direction (`musicDirection`), both
+// inferred from the parent's message, the selected mood, and the
+// lyrics just written — never a copy of the parent's own words, and
+// never mentioning implementation details, AI, or any music generation
+// provider by name. Mureka (see `mureka/PromptBuilder`) only composes
+// the music from these — it never invents musical direction itself.
+const MUSIC_DIRECTION_INSTRUCTIONS = `
+When approved, also generate two short, creative music-direction fields — both inferred from the parent's message, the selected mood, and the lyrics you just wrote, never copied verbatim from the parent's own words:
+
+"musicMood": a concise emotional profile (a few words), a creative interpretation of the song's feeling — not a restatement of the mood name. Example style: "Warm, joyful and playful." / "Calm, peaceful and intimate." / "Hopeful, emotional and uplifting."
+
+"musicDirection": a concise musical direction (one short sentence) describing only the intended musical arrangement and instrumentation. Never mention implementation details, AI, or any music generation tool or provider by name. Example style: "Warm acoustic arrangement with gentle piano, ukulele, light percussion and an easy-to-sing melody." / "Soft lullaby with music box textures, delicate strings and intimate piano." / "Playful acoustic children's arrangement with bright rhythm and memorable chorus."
+
+Write both fields in English, regardless of the lyrics' language. Both must be null when "approved" is false.
+`.trim();
+
 const RESPONSE_FORMAT_INSTRUCTIONS = `
 Respond with a single JSON object and nothing else — no free text, no markdown code fences, no commentary before or after it.
 The JSON object must match exactly one of these two shapes:
 
-{"approved": true, "reason": null, "lyrics": "...generated lyrics..."}
-{"approved": false, "reason": "...moderation reason...", "lyrics": null}
+{"approved": true, "reason": null, "lyrics": "...generated lyrics...", "musicMood": "...", "musicDirection": "..."}
+{"approved": false, "reason": "...moderation reason...", "lyrics": null, "musicMood": null, "musicDirection": null}
 `.trim();
 
 /**
@@ -96,6 +115,9 @@ export class PromptBuilder {
       "",
       "Language rules:",
       LANGUAGE_RULES,
+      "",
+      "Music direction:",
+      MUSIC_DIRECTION_INSTRUCTIONS,
       "",
       RESPONSE_FORMAT_INSTRUCTIONS,
     ].join("\n");

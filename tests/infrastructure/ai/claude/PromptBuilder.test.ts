@@ -64,6 +64,19 @@ describe("PromptBuilder.build", () => {
     expect(prompt.system).toMatch(/no free text/i);
   });
 
+  it("requests musicMood and musicDirection in both response shapes (Sprint v1.1 — AI Musical Direction)", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toContain('"musicMood"');
+    expect(prompt.system).toContain('"musicDirection"');
+    expect(prompt.system).toMatch(/"musicMood": null, "musicDirection": null/);
+  });
+
+  it("instructs Claude to infer musicMood/musicDirection creatively, never copying the parent's message, and never mentioning AI or the provider", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/never copied verbatim from the parent's own words/i);
+    expect(prompt.system).toMatch(/never mention implementation details, ai/i);
+  });
+
   it("always requires the lyrics in Spanish, regardless of the parent message's language", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toMatch(/entirely in spanish/i);

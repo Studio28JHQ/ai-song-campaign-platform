@@ -140,9 +140,38 @@ describe("LyricsWorkflow", () => {
     expect(screen.getByRole("button", { name: /otra versión/i })).toBeInTheDocument();
 
     const generateCall = fetchMock.mock.calls.find(([url]) => url === "/api/lyrics/generate");
-    expect(JSON.parse((generateCall?.[1] as RequestInit).body as string)).not.toHaveProperty(
-      "leadId",
-    );
+    const requestBody = JSON.parse((generateCall?.[1] as RequestInit).body as string);
+    expect(requestBody).not.toHaveProperty("leadId");
+    // Sprint v1.1 — AI Musical Direction: "Voz femenina" is the form's default.
+    expect(requestBody.voice).toBe("FEMALE");
+  });
+
+  it("sends the selected MALE voice when 'Voz masculina' is chosen (Sprint v1.1 — AI Musical Direction)", async () => {
+    const user = userEvent.setup();
+    const fetchMock = routedFetch({
+      session: baseSession(),
+      generateResponses: [
+        {
+          lyrics: { id: "lyrics-1", content: "Title\nVerse 1\n...", version: 1, approved: true },
+          approved: true,
+          reason: null,
+          remainingAttempts: 5,
+          leadStatus: "GENERATING",
+        },
+      ],
+    });
+    install(fetchMock);
+
+    renderWorkflow();
+    await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
+    await user.click(screen.getByLabelText("Voz masculina"));
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
+
+    await screen.findByText("Title");
+
+    const generateCall = fetchMock.mock.calls.find(([url]) => url === "/api/lyrics/generate");
+    const requestBody = JSON.parse((generateCall?.[1] as RequestInit).body as string);
+    expect(requestBody.voice).toBe("MALE");
   });
 
   it("shows Attempt X / MAX using the configured maximum, not a hardcoded value", async () => {

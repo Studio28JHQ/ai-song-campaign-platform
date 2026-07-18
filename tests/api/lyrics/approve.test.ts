@@ -179,6 +179,10 @@ function buildLyrics(): Lyrics {
     prompt: "Mood: Joyful. Parent message: A gentle bedtime song.",
     content: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
     version: 1,
+    parentMessage: "A gentle bedtime song.",
+    musicMood: "Warm, joyful and playful.",
+    musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    voice: "FEMALE",
   });
 }
 
@@ -336,6 +340,10 @@ describe("POST /api/lyrics/approve", () => {
       prompt: "prompt",
       content: "Title\n...",
       version: 2,
+      parentMessage: "A gentle bedtime song.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     otherApproved.approve();
 

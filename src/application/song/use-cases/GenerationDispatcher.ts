@@ -93,6 +93,11 @@ export class GenerationDispatcher {
         });
       }
 
+      // Referential-integrity check only as of Sprint v1.1 (AI Musical
+      // Direction) — `mood.name`/`mood.sunoPrompt` are no longer read
+      // for the Mureka prompt (see `SongGenerationInput`), but a Song
+      // whose `moodId` no longer resolves is still worth failing
+      // loudly on, the same as a missing Lyrics row above.
       const mood = await this.moodProvider.getMoodDetails(song.moodId);
 
       if (!mood) {
@@ -102,10 +107,25 @@ export class GenerationDispatcher {
         });
       }
 
+      // Sprint v1.1 — AI Musical Direction. Only `null` for a Lyrics row
+      // created before this sprint (see `Lyrics.musicMood`'s doc
+      // comment) — every row created going forward always has them.
+      if (!lyrics.musicMood || !lyrics.musicDirection || !lyrics.parentMessage) {
+        throw new BusinessRuleError(
+          "This song's approved lyrics have no musical direction to generate from.",
+          {
+            code: "song.music_direction_missing",
+            context: { songId: song.id, lyricsId: lyrics.id },
+          },
+        );
+      }
+
       const submission = await this.songGenerator.submitGeneration({
         lyrics: lyrics.content,
-        moodName: mood.name,
-        sunoPrompt: mood.sunoPrompt,
+        musicMood: lyrics.musicMood,
+        musicDirection: lyrics.musicDirection,
+        parentMessage: lyrics.parentMessage,
+        voice: lyrics.voice,
       });
 
       song.recordSubmission(submission);

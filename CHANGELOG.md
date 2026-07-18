@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - 2026-08-12
+
+Sprint v1.1 — AI Musical Direction. Claude is now responsible for the song's full creative direction, not just the lyrics; Mureka only composes the music from it. No change to the existing user flow, navigation, queue processing, or approval flow.
+
+### Added
+
+- **AI-generated musical direction**: the same Claude call that writes the lyrics now also returns `musicMood` (a short creative emotional profile) and `musicDirection` (a short musical-arrangement direction) — both inferred from the parent's message, the selected tone, and the lyrics just written, never a copy of the parent's own words, and never mentioning implementation details, AI, or Mureka by name (`PromptBuilder`/`ResponseParser` — Claude).
+- **Voice selection**: a new field on the lyrics generation form — "¿Quién te gustaría que interpretara la canción?" (Voz femenina / Voz masculina, defaulting to Voz femenina). Stored alongside the Lyrics version; travels through the existing flow to song generation untouched; never sent to Claude, never affects lyrics generation.
+- **Persistence**: `Lyrics` gained `parentMessage`, `musicMood`, `musicDirection`, and `voice` columns (new `voice` enum, migration `20260811090000_ai_musical_direction`) — one set per generation attempt, so every regenerated version has its own musical direction. When a version is approved, its musical direction and voice become what song generation uses automatically — no additional approval step. The three text columns are nullable for backward compatibility with Lyrics rows created before this migration.
+
+### Changed
+
+- **Mureka prompt construction**: replaced the fixed `Mood.sunoPrompt` with a composed prompt built from the approved Lyrics version's own AI-generated direction — `Create an original children's song.` followed by Mood, Baby Context, Musical Direction, Lyrics, and Voice sections (`mureka/PromptBuilder`). The lyrics text itself is still passed through exactly as approved, both as Mureka's own `lyrics` field and inside the composed prompt.
+- **`SongGenerationInput`**: now carries `musicMood`/`musicDirection`/`parentMessage`/`voice` instead of `moodName`/`sunoPrompt`. `GenerationDispatcher` sources these from the Song's approved Lyrics version (already loaded) rather than a Mood lookup; it fails the Song clearly (existing FAILED/retry path) if an older, pre-migration Lyrics row has no musical direction to generate from.
+
 ## [1.21.1] - 2026-08-10
 
 Sprint RC-1 — Release Candidate Audit. A full pre-launch audit of the codebase (UX, copy, accessibility, SEO, security headers, dead code, etc.); fixes only the issues that were objectively incorrect, production-relevant, low-risk, and backward-compatible. No new features, no redesign, no business-rule changes.

@@ -197,6 +197,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     const v2 = Lyrics.create({
       leadId: lead.id,
@@ -204,6 +208,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "New Title\nVerse 1",
       version: 2,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     v2.approve();
     lyricsRepository.seed(v1);
@@ -293,6 +301,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     const v2 = Lyrics.create({
       leadId: lead.id,
@@ -300,6 +312,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "New Title\nVerse 1",
       version: 2,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     v2.approve();
     lyricsRepository.seed(v1);
@@ -333,6 +349,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     lyrics.approve();
     lyricsRepository.seed(lyrics);
@@ -371,6 +391,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     lyrics.approve();
     lyricsRepository.seed(lyrics);
@@ -404,6 +428,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     lyrics.approve();
     lyricsRepository.seed(lyrics);
@@ -437,6 +465,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     lyrics.approve();
     lyricsRepository.seed(lyrics);
@@ -491,6 +523,10 @@ describe("GetLeadDetailUseCase", () => {
       prompt: "prompt",
       content: "Title\nVerse 1",
       version: 1,
+      parentMessage: "A gentle song about bedtime.",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      voice: "FEMALE",
     });
     lyrics.approve();
     lyricsRepository.seed(lyrics);

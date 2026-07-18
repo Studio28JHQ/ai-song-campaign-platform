@@ -15,10 +15,22 @@
  * `submitGeneration`; `GenerationPoller` only ever calls
  * `pollGenerationStatus`. Neither call blocks waiting for the other.
  */
+import type { Voice } from "@/domain/lyrics/types";
+
+/**
+ * Sprint v1.1 — AI Musical Direction: replaces the fixed `moodName`/
+ * `sunoPrompt` pair with the approved Lyrics version's own AI-generated
+ * musical direction — see `Lyrics.musicMood`/`musicDirection`/
+ * `parentMessage`/`voice`, sourced by `GenerationDispatcher` and shaped
+ * into Mureka's prompt by `mureka/PromptBuilder`. `Mood.sunoPrompt`
+ * itself is unchanged and still exists, just no longer read for this.
+ */
 export interface SongGenerationInput {
   lyrics: string;
-  moodName: string;
-  sunoPrompt: string;
+  musicMood: string;
+  musicDirection: string;
+  parentMessage: string;
+  voice: Voice;
 }
 
 /** What a provider returns once it has accepted a generation job — before it has finished. */

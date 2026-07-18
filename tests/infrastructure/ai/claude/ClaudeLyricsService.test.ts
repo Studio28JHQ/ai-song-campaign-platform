@@ -19,7 +19,13 @@ function fakeClient(responseJson: unknown): ClaudeClient {
 
 describe("ClaudeLyricsService.generateAndModerate", () => {
   it("makes exactly one Claude request and returns an approved result", async () => {
-    const client = fakeClient({ approved: true, reason: null, lyrics: "Title\nVerse 1\n..." });
+    const client = fakeClient({
+      approved: true,
+      reason: null,
+      lyrics: "Title\nVerse 1\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
     const service = new ClaudeLyricsService(client);
 
     const result = await service.generateAndModerate(baseInput);
@@ -27,6 +33,8 @@ describe("ClaudeLyricsService.generateAndModerate", () => {
     expect(client.sendMessage).toHaveBeenCalledTimes(1);
     expect(result.approved).toBe(true);
     expect(result.lyrics).toContain("Title");
+    expect(result.musicMood).toBe("Warm, joyful and playful.");
+    expect(result.musicDirection).toBe("Warm acoustic arrangement with gentle piano and ukulele.");
   });
 
   it("returns a rejected result without throwing, from the same single request", async () => {
@@ -34,6 +42,8 @@ describe("ClaudeLyricsService.generateAndModerate", () => {
       approved: false,
       reason: "Contains offensive language.",
       lyrics: null,
+      musicMood: null,
+      musicDirection: null,
     });
     const service = new ClaudeLyricsService(client);
 

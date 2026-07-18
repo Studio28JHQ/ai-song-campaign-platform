@@ -29,15 +29,17 @@ describe("MurekaSongService.submitGeneration", () => {
 
     const result = await service.submitGeneration({
       lyrics: "Title\n...",
-      moodName: "Joyful",
-      sunoPrompt: "upbeat joyful lullaby",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      parentMessage: "A gentle song about bedtime.",
+      voice: "FEMALE",
     });
 
     expect(client.submitGeneration).toHaveBeenCalledTimes(1);
     expect(client.submitGeneration).toHaveBeenCalledWith({
       lyrics: "Title\n...",
       model: "auto",
-      prompt: "upbeat joyful lullaby",
+      prompt: expect.stringContaining("Warm acoustic arrangement with gentle piano and ukulele."),
       n: 1,
     });
     expect(result).toEqual({
@@ -53,7 +55,13 @@ describe("MurekaSongService.submitGeneration", () => {
     const service = new MurekaSongService(client);
 
     await expect(
-      service.submitGeneration({ lyrics: "Title\n...", moodName: "Joyful", sunoPrompt: "..." }),
+      service.submitGeneration({
+        lyrics: "Title\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement.",
+        parentMessage: "A gentle song about bedtime.",
+        voice: "FEMALE",
+      }),
     ).rejects.toThrow();
   });
 
@@ -64,7 +72,13 @@ describe("MurekaSongService.submitGeneration", () => {
     const service = new MurekaSongService(client);
 
     await expect(
-      service.submitGeneration({ lyrics: "Title\n...", moodName: "Joyful", sunoPrompt: "..." }),
+      service.submitGeneration({
+        lyrics: "Title\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement.",
+        parentMessage: "A gentle song about bedtime.",
+        voice: "FEMALE",
+      }),
     ).rejects.toThrow("Mureka API rejected the request.");
   });
 });

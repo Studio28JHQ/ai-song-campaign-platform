@@ -161,6 +161,10 @@ function buildApprovedLyrics(leadId: string): Lyrics {
     prompt: "prompt",
     content: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
     version: 1,
+    parentMessage: "A gentle song about bedtime.",
+    musicMood: "Warm, joyful and playful.",
+    musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    voice: "FEMALE",
   });
   lyrics.approve();
   return lyrics;

@@ -14,4 +14,7 @@ export interface ClaudeLyricsResult {
   approved: boolean;
   reason: string | null;
   lyrics: string | null;
+  /** Sprint v1.1 — AI Musical Direction. `null` whenever `lyrics` is. */
+  musicMood: string | null;
+  musicDirection: string | null;
 }

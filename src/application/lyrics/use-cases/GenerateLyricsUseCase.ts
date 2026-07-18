@@ -24,6 +24,10 @@ export class GenerateLyricsUseCase {
       prompt: request.prompt,
       content: request.content,
       version: nextVersion,
+      parentMessage: request.parentMessage,
+      musicMood: request.musicMood,
+      musicDirection: request.musicDirection,
+      voice: request.voice,
     });
 
     const persisted = await this.lyricsRepository.create(lyrics);

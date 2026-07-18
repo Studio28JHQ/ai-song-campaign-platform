@@ -136,6 +136,8 @@ describe("POST /api/lyrics/generate", () => {
       approved: true,
       reason: null,
       lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
     });
 
     const response = await POST(postRequest(validPayload));
@@ -146,6 +148,42 @@ describe("POST /api/lyrics/generate", () => {
     expect(body.lyrics.content).toContain("Title");
     expect(body.remainingAttempts).toBe(5);
     expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
+  });
+
+  it("defaults voice to FEMALE when the client omits it, and persists it on the Lyrics version (Sprint v1.1 — AI Musical Direction)", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockGetLeadSession.mockResolvedValue(lead.id);
+    mockGenerateAndModerate.mockResolvedValue({
+      approved: true,
+      reason: null,
+      lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
+
+    await POST(postRequest(validPayload));
+
+    const createdLyrics = mockLyricsRepository.create.mock.calls[0][0] as Lyrics;
+    expect(createdLyrics.voice).toBe("FEMALE");
+  });
+
+  it("persists an explicitly selected MALE voice on the Lyrics version", async () => {
+    const lead = buildLead();
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockGetLeadSession.mockResolvedValue(lead.id);
+    mockGenerateAndModerate.mockResolvedValue({
+      approved: true,
+      reason: null,
+      lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
+
+    await POST(postRequest({ ...validPayload, voice: "MALE" }));
+
+    const createdLyrics = mockLyricsRepository.create.mock.calls[0][0] as Lyrics;
+    expect(createdLyrics.voice).toBe("MALE");
   });
 
   it("returns 200 with approved:false on moderation rejection, without an error status", async () => {

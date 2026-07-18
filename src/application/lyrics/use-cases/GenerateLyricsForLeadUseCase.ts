@@ -116,6 +116,16 @@ export class GenerateLyricsForLeadUseCase {
       moodId: request.moodId,
       prompt: `Mood: ${request.moodName}. Parent message: ${parentMessage}`,
       content: result.lyrics as string,
+      // Sprint v1.1 — AI Musical Direction. `musicMood`/`musicDirection`
+      // are Claude's own output, generated in the same call as `lyrics`
+      // (never null here — guaranteed by `result.approved`, mirroring
+      // how `result.lyrics` is cast just above). `voice` never reaches
+      // Claude at all — it only travels through to persistence, and
+      // from there to the Mureka prompt at song-generation time.
+      parentMessage,
+      musicMood: result.musicMood as string,
+      musicDirection: result.musicDirection as string,
+      voice: request.voice,
     });
 
     return {

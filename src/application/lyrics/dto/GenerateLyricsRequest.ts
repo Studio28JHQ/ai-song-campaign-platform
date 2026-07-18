@@ -1,3 +1,5 @@
+import type { Voice } from "@/domain/lyrics/types";
+
 /**
  * Boundary-facing input for `GenerateLyricsUseCase`. `content` is the
  * already-generated lyrics text — this use case manages lyrics versions,
@@ -8,4 +10,9 @@ export interface GenerateLyricsRequest {
   moodId: string;
   prompt: string;
   content: string;
+  /** Sprint v1.1 — AI Musical Direction. See `CreateLyricsInput`. */
+  parentMessage: string;
+  musicMood: string;
+  musicDirection: string;
+  voice: Voice;
 }

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { VOICE_OPTIONS, type Voice } from "@/domain/lyrics/types";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import { plainTextField } from "@/shared/validation/zodFields";
 
@@ -57,6 +58,8 @@ const formSchema = z.object({
   moodId: z.string().min(1, "Elige un estilo."),
   parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
   turnstileToken: z.string().min(1, "Completa la verificación de seguridad."),
+  // Sprint v1.1 — AI Musical Direction.
+  voice: z.enum(VOICE_OPTIONS),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -67,6 +70,8 @@ export interface LyricsGenerationSubmitValues {
   moodDescription?: string;
   parentMessage: string;
   turnstileToken: string;
+  /** Sprint v1.1 — AI Musical Direction. Only ever used to build the Mureka prompt — never sent to Claude. */
+  voice: Voice;
 }
 
 interface LyricsGenerationFormProps {
@@ -114,7 +119,12 @@ export function LyricsGenerationForm({
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { moodId: MOODS[0].id, parentMessage: "", turnstileToken: "" },
+    defaultValues: {
+      moodId: MOODS[0].id,
+      parentMessage: "",
+      turnstileToken: "",
+      voice: "FEMALE",
+    },
   });
 
   function submit(values: FormValues) {
@@ -125,6 +135,7 @@ export function LyricsGenerationForm({
       moodDescription: mood.description,
       parentMessage: values.parentMessage,
       turnstileToken: values.turnstileToken,
+      voice: values.voice,
     });
   }
 
@@ -190,6 +201,22 @@ export function LyricsGenerationForm({
       </div>
 
       <p className="text-caption text-muted-foreground">Intentos restantes: {remainingAttempts}</p>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          ¿Quién te gustaría que interpretara la canción?
+        </span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+          <Label className="flex items-center gap-2 text-sm font-normal">
+            <input type="radio" value="FEMALE" className="size-4" {...register("voice")} />
+            Voz femenina
+          </Label>
+          <Label className="flex items-center gap-2 text-sm font-normal">
+            <input type="radio" value="MALE" className="size-4" {...register("voice")} />
+            Voz masculina
+          </Label>
+        </div>
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <TurnstileWidget
