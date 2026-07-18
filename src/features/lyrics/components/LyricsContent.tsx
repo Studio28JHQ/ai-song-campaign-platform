@@ -2,9 +2,23 @@ interface LyricsContentProps {
   content: string;
 }
 
-function extractTitle(content: string): string {
-  const [firstLine] = content.split("\n");
-  return firstLine?.trim() || "Tu canción";
+// Sprint v1.3 — AI Songwriting Quality. Claude's official structure now
+// starts every lyrics version with a `[Intro]` section label, not a
+// title line — a bracketed label like `[Intro]` or `[Verse 1]` is never
+// a title, so it must fall back to the generic label below rather than
+// being displayed as one. Lyrics versions created before this sprint
+// still start with an actual title line and continue to display it
+// exactly as before — this check doesn't require knowing which sprint a
+// given version was generated under.
+const SECTION_LABEL_PATTERN = /^\[.+\]$/;
+
+function hasTitleLine(firstLine: string | undefined): boolean {
+  const trimmed = firstLine?.trim() ?? "";
+  return trimmed.length > 0 && !SECTION_LABEL_PATTERN.test(trimmed);
+}
+
+function extractTitle(firstLine: string | undefined): string {
+  return hasTitleLine(firstLine) ? (firstLine as string).trim() : "Tu canción";
 }
 
 /**
@@ -16,9 +30,9 @@ function extractTitle(content: string): string {
  * present lyrics identically.
  */
 export function LyricsContent({ content }: LyricsContentProps) {
-  const [, ...bodyLines] = content.split("\n");
-  const title = extractTitle(content);
-  const body = bodyLines.join("\n").trim();
+  const [firstLine, ...bodyLines] = content.split("\n");
+  const title = extractTitle(firstLine);
+  const body = (hasTitleLine(firstLine) ? bodyLines.join("\n") : content).trim();
 
   return (
     <article className="flex flex-col gap-4 rounded-2xl border border-border bg-gradient-to-b from-secondary/50 to-secondary/20 p-6">

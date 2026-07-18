@@ -86,16 +86,55 @@ Otherwise, set "approved" to true.
 When rejecting, "reason" must be a short, neutral, non-judgmental explanation suitable for showing directly to the parent, and must never repeat, quote, or describe the unsafe content itself.
 `.trim();
 
+// Sprint v1.3 — AI Songwriting Quality. Replaces the old five-section
+// structure and the vague "2-3 minutes" duration with the company's one
+// official songwriting structure and a specific 2:00–2:30 minute target.
+// The structure is mandatory and fixed — Claude must never invent,
+// rename, merge, or omit a section — and the ten bracketed labels below
+// are the only section labels that may ever appear in the output; they
+// travel through to Mureka unchanged (see `mureka/PromptBuilder`,
+// untouched this sprint), so the label text itself is part of the
+// contract, not just formatting.
 const WRITING_INSTRUCTIONS = `
-When approved, write the lyrics with this structure, in this order:
-Title
-Verse 1
-Chorus
-Verse 2
-Final Chorus
+Target a performance length of approximately 2:00–2:30 minutes. Write an amount of lyrics that would naturally take that long to sing at a gentle, normal tempo — not more, not less; the total word count across every section should stay proportionate to that specific target, not a vague range.
 
-Keep the total length suitable for approximately 2-3 minutes of music.
-Return the lyrics as plain text only — no markdown, no explanations, no section labels beyond the five listed above.
+Always write the lyrics using exactly this structure, in exactly this order, with every section present and none invented, renamed, merged, or omitted:
+
+[Intro]
+[Verse 1]
+[Pre-Chorus]
+[Chorus]
+[Verse 2]
+[Pre-Chorus]
+[Chorus]
+[Bridge]
+[Final Chorus]
+[Outro]
+
+Output only the section labels shown above, written exactly as shown (including the square brackets), each followed by that section's lyrics. Never include explanations, notes, comments, or instructions inside the lyrics — only the section label and the lines to be sung. For example, write:
+
+[Verse 1]
+...
+
+Never write:
+
+[Verse 1]
+(This verse talks about...)
+...
+
+Follow these rules for each section:
+- Intro: a short emotional opening — it may be a very short phrase or a gentle vocalization.
+- Verse 1: introduce the baby's story, using the parent's description.
+- Pre-Chorus: build emotional anticipation.
+- Chorus: the emotional center of the song — memorable, easy to sing, and naturally including the baby's name whenever appropriate.
+- Verse 2: develop memories, personality, family moments, or other meaningful details from the parent's description.
+- Bridge: look toward the future — express hope, promises, and unconditional love.
+- Final Chorus: the highest emotional intensity of the song.
+- Outro: a gentle emotional ending — it may end with a short blessing or a loving final phrase.
+
+Write the lyrics to be sung, not read as poetry. Prioritize natural rhythm, singable phrases, smooth syllable flow, emotional progression, purposeful repetition, and a memorable chorus. Avoid long sentences, excessive narration, repetitive filler, awkward wording, and phrases that are difficult to sing.
+
+Return the lyrics as plain text only — no markdown, no explanations, no additional section labels beyond the ten listed above.
 `.trim();
 
 // Sprint UI-3C — UX Polish. The lyrics must always come back in Spanish,
@@ -125,6 +164,8 @@ When approved, also generate two short, creative music-direction fields — both
 "musicMood": a concise emotional profile (a few words), a creative interpretation of the song's feeling — not a restatement of the mood name. Example style: "Warm, joyful and playful." / "Calm, peaceful and intimate." / "Hopeful, emotional and uplifting."
 
 "musicDirection": a concise musical direction (one short sentence) describing only the intended musical arrangement and instrumentation. Never mention implementation details, AI, or any music generation tool or provider by name. Example style: "Warm acoustic arrangement with gentle piano, ukulele, light percussion and an easy-to-sing melody." / "Soft lullaby with music box textures, delicate strings and intimate piano." / "Playful acoustic children's arrangement with bright rhythm and memorable chorus."
+
+Both fields must stay consistent with and accurately reflect the lyrics you actually wrote — the mood and arrangement they describe must match the song's real emotional progression and content, never a generic or mismatched interpretation.
 
 Write both fields in English, regardless of the lyrics' language. Both must be null when "approved" is false.
 `.trim();

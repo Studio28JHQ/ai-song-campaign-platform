@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - 2026-08-14
+
+Sprint v1.3 — AI Songwriting Quality. Improves the musical/lyrical quality of generated songs by replacing the old five-section structure and vague duration guidance with the company's one official ten-section songwriting structure and a specific duration target. No change to the user flow, the AI pipeline shape, or the Mureka prompt; no additional AI calls; the Immutable AI Safety Policy remains the first, unaffected section of the Claude system prompt.
+
+### Changed
+
+- **Official songwriting structure** (`infrastructure/ai/claude/PromptBuilder.ts`): Claude's writing instructions now mandate exactly `[Intro] → [Verse 1] → [Pre-Chorus] → [Chorus] → [Verse 2] → [Pre-Chorus] → [Chorus] → [Bridge] → [Final Chorus] → [Outro]`, in that order, every section always present, none invented, renamed, merged, or omitted — replacing the old, shorter `Title/Verse 1/Chorus/Verse 2/Final Chorus` structure. Each section has its own explicit creative rule (e.g. the chorus must be the memorable, easy-to-sing emotional center and naturally include the baby's name; the bridge looks toward the future). Section labels must appear literally as shown, with nothing else — no explanations, notes, comments, or instructions inside the lyrics.
+- **Specific duration target**: replaced the vague "approximately 2-3 minutes" with a concrete 2:00–2:30 minute target, with lyrics length expected to stay proportionate to it.
+- **Singability guidance**: the prompt now explicitly asks for lyrics written to be sung, not read as poetry — prioritizing natural rhythm, singable phrases, smooth syllable flow, emotional progression, purposeful repetition, and a memorable chorus, while avoiding long sentences, excessive narration, repetitive filler, awkward wording, and hard-to-sing phrases.
+- **Music consistency**: the music-direction instructions now explicitly require `musicMood`/`musicDirection` to stay consistent with and accurately reflect the lyrics actually generated, not a generic or mismatched interpretation.
+- **Mureka**: entirely unchanged this sprint — still receives only Mood, Musical Direction, Lyrics, and Voice, and the lyrics field (including its section labels) is passed through exactly as approved.
+
+### Fixed
+
+- **Lyrics title display** (`features/lyrics/components/LyricsContent.tsx`): the review/approved-lyrics view took the first line of the lyrics text as the displayed title. Since the new structure always starts with `[Intro]` rather than a title line, this would have shown the literal text "[Intro]" as the song's title. It now falls back to the existing generic label ("Tu canción") whenever the first line is a bracketed section label, and keeps that first section inside the visible body instead of stripping it. Lyrics versions generated before this sprint (which still start with an actual title line) continue to display exactly as before.
+
 ## [1.23.0] - 2026-08-13
 
 Sprint v1.2 — AI Safety Hardening. Hardens the AI generation pipeline against prompt injection, jailbreak attempts, and abusive content, and completes Mureka's isolation from the parent's raw message. No change to the existing user flow, navigation, approval flow, or queue processing; no additional AI calls; Claude remains the single AI responsible for all creative decisions, Mureka remains responsible only for composing music.

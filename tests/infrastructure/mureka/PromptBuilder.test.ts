@@ -93,4 +93,79 @@ describe("PromptBuilder.build", () => {
       expect(voiceIndex).toBeGreaterThan(lyricsIndex);
     });
   });
+
+  describe("Sprint v1.3 (AI Songwriting Quality): structured lyrics preservation", () => {
+    it("passes every official section label through to Mureka unchanged, both as the top-level lyrics field and inside the prompt", () => {
+      const structuredLyrics = [
+        "[Intro]",
+        "La la la",
+        "",
+        "[Verse 1]",
+        "Sofía llegó con luz de sol",
+        "",
+        "[Pre-Chorus]",
+        "Y el corazón se llena de emoción",
+        "",
+        "[Chorus]",
+        "Sofía, Sofía, mi pequeño sol",
+        "",
+        "[Verse 2]",
+        "Cada risa tuya es un tesoro",
+        "",
+        "[Pre-Chorus]",
+        "Y el corazón se llena de emoción",
+        "",
+        "[Chorus]",
+        "Sofía, Sofía, mi pequeño sol",
+        "",
+        "[Bridge]",
+        "Siempre estaré junto a ti",
+        "",
+        "[Final Chorus]",
+        "Sofía, Sofía, mi pequeño sol",
+        "",
+        "[Outro]",
+        "Duerme bien, mi amor",
+      ].join("\n");
+
+      const payload = PromptBuilder.build({ ...baseInput, lyrics: structuredLyrics });
+
+      expect(payload.lyrics).toBe(structuredLyrics);
+      expect(payload.prompt).toContain(structuredLyrics);
+
+      for (const label of [
+        "[Intro]",
+        "[Verse 1]",
+        "[Pre-Chorus]",
+        "[Chorus]",
+        "[Verse 2]",
+        "[Bridge]",
+        "[Final Chorus]",
+        "[Outro]",
+      ]) {
+        expect(payload.lyrics).toContain(label);
+      }
+    });
+
+    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction/Lyrics/Voice", () => {
+      const payload = PromptBuilder.build(baseInput);
+      expect(payload.prompt).toBe(
+        [
+          "Create an original children's song.",
+          "",
+          "Mood:",
+          baseInput.musicMood,
+          "",
+          "Musical Direction:",
+          baseInput.musicDirection,
+          "",
+          "Lyrics:",
+          baseInput.lyrics,
+          "",
+          "Voice:",
+          "Female voice",
+        ].join("\n"),
+      );
+    });
+  });
 });
