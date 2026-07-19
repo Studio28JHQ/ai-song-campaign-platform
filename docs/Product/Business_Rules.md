@@ -13,12 +13,12 @@
 
 ## Attempts Rules
 
-- Each user has five lyric attempts.
+- Each user has three lyric attempts.
 - Attempts are consumed only by:
   - moderation rejection
   - lyric regeneration (user requests new lyrics)
 - Attempts are never consumed during audio generation.
-- Once all five attempts are exhausted without an accepted set of lyrics, the user cannot obtain a song.
+- Once all three attempts are exhausted without an accepted set of lyrics, the user cannot obtain a song.
 
 ## Moderation Rules
 

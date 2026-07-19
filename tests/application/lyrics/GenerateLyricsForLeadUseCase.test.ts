@@ -288,6 +288,41 @@ describe("GenerateLyricsForLeadUseCase", () => {
     expect(persistedLead?.status).toBe(LeadStatus.BLOCKED);
   });
 
+  it("with the production limit of 3 attempts: allows the free initial generation plus three regenerations, then blocks the fifth request (see docs/Product/Business_Rules.md)", async () => {
+    const lead = createLead(3);
+    leadRepository.seed(lead);
+    const useCase = new GenerateLyricsForLeadUseCase(
+      leadRepository,
+      lyricsRepository,
+      fakeGenerator({
+        approved: true,
+        reason: null,
+        lyrics: "Title\n...",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      }),
+    );
+
+    // Request 1 — initial, approved: free (see the use case's own doc comment).
+    const first = await useCase.execute({ leadId: lead.id, ...baseRequest });
+    expect(first.remainingAttempts).toBe(3);
+
+    // Requests 2-4 — regenerations: each consumes one of the 3 attempts.
+    const second = await useCase.execute({ leadId: lead.id, ...baseRequest });
+    expect(second.remainingAttempts).toBe(2);
+
+    const third = await useCase.execute({ leadId: lead.id, ...baseRequest });
+    expect(third.remainingAttempts).toBe(1);
+
+    const fourth = await useCase.execute({ leadId: lead.id, ...baseRequest });
+    expect(fourth.remainingAttempts).toBe(0);
+
+    // Request 5 — no attempts left: rejected before ever calling the generator again.
+    await expect(useCase.execute({ leadId: lead.id, ...baseRequest })).rejects.toThrow(
+      "No remaining attempts left to generate lyrics.",
+    );
+  });
+
   it("rejects a regeneration when a concurrent request already consumed the attempt (atomic consumption)", async () => {
     const lead = createLead(5);
     leadRepository.seed(lead);

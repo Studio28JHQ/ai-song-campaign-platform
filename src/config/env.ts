@@ -32,7 +32,11 @@ const envSchema = z.object({
     .string()
     .min(32, "ADMIN_SESSION_SECRET must be at least 32 characters long."),
   CAMPAIGN_NAME: z.string().min(1),
-  MAX_LYRIC_ATTEMPTS: z.coerce.number().int().positive(),
+  // Lowered from 5 to 3 (see docs/Product/Business_Rules.md — Attempts
+  // Rules). Defaulted, unlike `CAMPAIGN_MAX_SONGS`, so this new limit
+  // takes effect in every environment that doesn't explicitly override
+  // it; an environment with `MAX_LYRIC_ATTEMPTS` already set still wins.
+  MAX_LYRIC_ATTEMPTS: z.coerce.number().int().positive().default(3),
   CAMPAIGN_MAX_SONGS: z.coerce.number().int().positive(),
 
   // RC-2 — Production Hardening. A Song stuck `GENERATING` past this many

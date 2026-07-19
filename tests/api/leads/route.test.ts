@@ -91,7 +91,7 @@ describe("POST /api/leads", () => {
 
     expect(response.status).toBe(201);
     expect(Object.keys(body).sort()).toEqual(["remainingAttempts", "status"]);
-    expect(body.remainingAttempts).toBe(5);
+    expect(body.remainingAttempts).toBe(3);
     expect(body.status).toBe("REGISTERED");
     expect(JSON.stringify(body)).not.toMatch(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,

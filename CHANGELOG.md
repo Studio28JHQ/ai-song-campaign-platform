@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.1] - 2026-08-18
+
+### Changed
+
+- **Lyrics regeneration limit lowered from 5 to 3** (`docs/Product/Business_Rules.md` — Attempts Rules): the limit was already fully centralized behind the `MAX_LYRIC_ATTEMPTS` environment variable (`src/config/env.ts` → `appConfig.campaign.maxLyricAttempts`), with every consumer (registration, the lyrics-generation form's attempt counter, the admin Settings screen) already reading from that single source — no duplicated or hardcoded "5" existed anywhere in application code. `MAX_LYRIC_ATTEMPTS` now defaults to `3` in code (`.default(3)`, previously required with no default) so the new limit takes effect in any environment that doesn't explicitly override it; `.env.example` documents the same new default. An environment with `MAX_LYRIC_ATTEMPTS` already set explicitly (e.g. production, if configured) continues to use that explicit value — updating it there is a deployment-configuration change outside this repository. No change to the attempt-consumption algorithm itself, generation flow, APIs, or database schema.
+
 ## [1.26.0] - 2026-08-17
 
 ### Added
