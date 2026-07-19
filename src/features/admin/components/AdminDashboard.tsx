@@ -109,7 +109,7 @@ function GenerationTimeStats({ summary }: { summary: DashboardSummary }) {
  */
 function StatisticsCards({ summary }: { summary: DashboardSummary }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       <SummaryCard label="Canciones hoy" value={summary.songsCompletedToday} icon={Music} />
       <SummaryCard
         label="Canciones últimos 7 días"
