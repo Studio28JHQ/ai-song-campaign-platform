@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import type { LeadCampaignConfig } from "@/application/lead/contracts/LeadCampaignConfig";
 import { CreateLeadUseCase } from "@/application/lead/use-cases/CreateLeadUseCase";
@@ -10,6 +10,7 @@ import {
   leadSessionCookieOptions,
 } from "@/infrastructure/auth/leadSessionCookie";
 import { PrismaLeadSessionService } from "@/infrastructure/auth/PrismaLeadSessionService";
+import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
@@ -48,6 +49,7 @@ const leadSessionService = new PrismaLeadSessionService();
 const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
 const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 const turnstileVerifier = new TurnstileVerifier(new TurnstileClient());
+const emailSender = new ResendEmailService();
 
 // Structural validation (shape/type/presence) plus the shared Sprint 8.1
 // input-hardening rules (trim, collapse whitespace, Unicode
@@ -153,6 +155,28 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
 
     response.cookies.set(LEAD_SESSION_COOKIE, session.token, leadSessionCookieOptions());
+
+    // "Resume journey by email" — sent after the response is already
+    // prepared, via `after()` (same backgrounding pattern as the song
+    // generation pipeline in `app/api/lyrics/approve/route.ts`).
+    // Registration itself never waits on, or fails because of, email
+    // delivery — any failure here is only ever logged.
+    const resumeUrl = new URL(`/resume/${result.lead.resumeToken}`, appConfig.url).toString();
+
+    after(async () => {
+      try {
+        await emailSender.sendWelcomeEmail({
+          to: result.lead.email,
+          parentName: result.lead.parentName,
+          babyName: result.lead.babyName,
+          resumeUrl,
+        });
+      } catch (error) {
+        logger.error("Failed to send welcome email", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
 
     return response;
   } catch (error) {

@@ -49,6 +49,10 @@ class InMemoryLeadRepository implements LeadRepository {
     for (const lead of this.leads.values()) if (lead.email.equals(email)) return lead;
     return null;
   }
+  async findByResumeToken(token: string): Promise<Lead | null> {
+    for (const lead of this.leads.values()) if (lead.resumeToken === token) return lead;
+    return null;
+  }
   async existsByEmail(email: Email): Promise<boolean> {
     return (await this.findByEmail(email)) !== null;
   }

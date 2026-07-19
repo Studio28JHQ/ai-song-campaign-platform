@@ -9,6 +9,20 @@ import { Email } from "../value-objects/Email";
 import { PhoneNumber } from "../value-objects/PhoneNumber";
 import { LeadStatus, type CreateLeadInput, type LeadProps, type LeadSnapshot } from "../types";
 
+const RESUME_TOKEN_BYTE_LENGTH = 32; // 256 bits — same security bar as `PrismaLeadSessionService`'s session token.
+
+/**
+ * Cryptographically random hex token for the "resume journey" email link.
+ * Uses the platform's Web Crypto API (`crypto.getRandomValues`, already
+ * relied on below for `crypto.randomUUID()`) rather than Node's `crypto`
+ * module, so this file stays free of any Node-specific import.
+ */
+function generateResumeToken(): string {
+  const bytes = new Uint8Array(RESUME_TOKEN_BYTE_LENGTH);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const ALLOWED_TRANSITIONS: Record<LeadStatus, ReadonlyArray<LeadStatus>> = {
   [LeadStatus.REGISTERED]: [LeadStatus.GENERATING],
   [LeadStatus.GENERATING]: [LeadStatus.COMPLETED, LeadStatus.BLOCKED, LeadStatus.FAILED],
@@ -66,6 +80,7 @@ export class Lead {
       phone,
       remainingAttempts: maxAttempts,
       status: LeadStatus.REGISTERED,
+      resumeToken: generateResumeToken(),
       createdAt: now,
       updatedAt: now,
     });
@@ -246,6 +261,10 @@ export class Lead {
     return this.props.status;
   }
 
+  get resumeToken(): string {
+    return this.props.resumeToken;
+  }
+
   get createdAt(): Date {
     return this.props.createdAt;
   }
@@ -266,6 +285,7 @@ export class Lead {
       phone: this.props.phone?.toString() ?? null,
       remainingAttempts: this.props.remainingAttempts,
       status: this.props.status,
+      resumeToken: this.props.resumeToken,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     };

@@ -10,6 +10,8 @@ export interface LeadRepository {
   findById(id: string): Promise<Lead | null>;
   findByEmail(email: Email): Promise<Lead | null>;
   existsByEmail(email: Email): Promise<boolean>;
+  /** Looks up the lead the "resume journey" email link's token belongs to — see `ResolveResumeTokenUseCase`. */
+  findByResumeToken(token: string): Promise<Lead | null>;
   create(lead: Lead): Promise<Lead>;
   update(lead: Lead): Promise<Lead>;
   /**

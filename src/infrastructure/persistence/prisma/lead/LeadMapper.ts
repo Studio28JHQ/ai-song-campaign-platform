@@ -53,6 +53,7 @@ export class LeadMapper {
       phone: record.phone !== null ? PhoneNumber.create(record.phone) : null,
       remainingAttempts: record.remainingAttempts,
       status: PERSISTENCE_TO_DOMAIN_STATUS[record.status],
+      resumeToken: record.resumeToken,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
@@ -72,6 +73,7 @@ export class LeadMapper {
       phone: lead.phone?.toString() ?? null,
       remainingAttempts: lead.remainingAttempts,
       status: LeadMapper.toPersistenceStatus(lead.status),
+      resumeToken: lead.resumeToken,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
     };

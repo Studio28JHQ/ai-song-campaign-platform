@@ -18,6 +18,7 @@ function buildRecord(overrides: Partial<PrismaLeadRecord> = {}): PrismaLeadRecor
     phone: null,
     remainingAttempts: 5,
     status: PrismaLeadStatus.REGISTERED,
+    resumeToken: "a".repeat(64),
     createdAt: now,
     updatedAt: now,
     ...overrides,

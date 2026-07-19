@@ -9,6 +9,7 @@ import { ExternalApiError } from "@/shared/errors";
 const mockLeadRepository: { [K in keyof LeadRepository]: ReturnType<typeof vi.fn> } = {
   findById: vi.fn(),
   findByEmail: vi.fn(),
+  findByResumeToken: vi.fn(),
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),

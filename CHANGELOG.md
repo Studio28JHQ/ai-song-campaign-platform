@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0] - 2026-08-24
+
+### Added
+
+- **Resume the song journey by email**: every lead now receives a transactional welcome email immediately after registration, containing a secure, reusable resume link — clicking it (from a new browser, another device, at any point in the journey) reissues a normal parent session and lands on whichever step the lead is actually at, no login required. `Lead` gains a `resumeToken` (256-bit, `crypto.getRandomValues`, generated once at registration and never rotated — the same link keeps working for the lead's whole campaign lifetime; existing rows were backfilled with an equally random value via migration `20260824090000_add_lead_resume_token`). `GET /resume/[token]` (`ResolveResumeTokenUseCase`) validates the token server-side, rejects an invalid one by redirecting home without revealing why, and reuses the _existing_ workflow rather than duplicating it: it makes exactly one routing decision — `/generate` (no lyrics yet, or awaiting approval) vs. `/song` (approved: generating or completed) — using the same `LyricsRepository.findApprovedByLead` query `GetLeadSessionStateUseCase` already relies on; both destination pages already reconstruct their own full UI state from `GET /api/leads/session` on every mount, so nothing about the workflow itself changed. The welcome email (`WelcomeEmailTemplate`, sent via the same `ResendEmailService` the "song ready" email already uses) is dispatched via `after()` (the same backgrounding pattern `app/api/lyrics/approve/route.ts` already uses for song generation) — registration's response is never delayed by, and never fails because of, email delivery; a send failure is only ever logged. The link/email never contain a Lead id, email address, or any other internal identifier — only the opaque `resumeToken`.
+
 ## [1.26.6] - 2026-08-23
 
 ### Fixed

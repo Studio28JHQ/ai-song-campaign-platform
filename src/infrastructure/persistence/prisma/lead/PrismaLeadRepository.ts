@@ -45,6 +45,15 @@ export class PrismaLeadRepository implements LeadRepository {
     }
   }
 
+  async findByResumeToken(token: string): Promise<Lead | null> {
+    try {
+      const record = await this.client.lead.findUnique({ where: { resumeToken: token } });
+      return record ? LeadMapper.toDomain(record) : null;
+    } catch (error) {
+      this.handleError(error, { operation: "findByResumeToken" });
+    }
+  }
+
   async create(lead: Lead): Promise<Lead> {
     try {
       const record = await this.client.lead.create({ data: LeadMapper.toCreateInput(lead) });

@@ -104,6 +104,11 @@ model Lead {
   phone             String?
   remainingAttempts Int        @default(5)
   status            LeadStatus @default(REGISTERED)
+  // "Resume journey by email" — a stable, cryptographically random token
+  // for the emailed resume link (see `ResolveResumeTokenUseCase`).
+  // Generated once at registration and never rotated; unrelated to
+  // `LeadSession.token`, which is short-lived/reissuable per session.
+  resumeToken       String     @unique
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 

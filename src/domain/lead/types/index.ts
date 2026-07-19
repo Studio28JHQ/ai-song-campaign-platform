@@ -40,6 +40,14 @@ export interface LeadProps {
   phone: PhoneNumber | null;
   remainingAttempts: number;
   status: LeadStatus;
+  /**
+   * Opaque, cryptographically random, stable identifier for the "resume
+   * journey" email link (see `ResolveResumeTokenUseCase`) — generated once
+   * at registration and never rotated, so the same emailed link keeps
+   * working for the lead's whole campaign lifetime. Never derived from or
+   * exposing `id`/`email`.
+   */
+  resumeToken: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,6 +64,7 @@ export interface LeadSnapshot {
   phone: string | null;
   remainingAttempts: number;
   status: LeadStatus;
+  resumeToken: string;
   createdAt: Date;
   updatedAt: Date;
 }

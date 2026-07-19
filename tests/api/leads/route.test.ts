@@ -8,6 +8,7 @@ const mockRepository: {
 } = {
   findById: vi.fn(),
   findByEmail: vi.fn(),
+  findByResumeToken: vi.fn(),
   existsByEmail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
@@ -15,6 +16,22 @@ const mockRepository: {
 };
 
 const mockCreateSession = vi.fn();
+const mockSendWelcomeEmail = vi.fn();
+
+// `after()` throws when called outside a real Next.js request scope, so
+// this test captures the scheduled callback rather than letting it run
+// unhandled (same pattern as tests/api/lyrics/approve.test.ts).
+const capturedAfterCallbacks: Array<() => Promise<void>> = [];
+
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return {
+    ...actual,
+    after: vi.fn((callback: () => Promise<void>) => {
+      capturedAfterCallbacks.push(callback);
+    }),
+  };
+});
 
 vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
   PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
@@ -25,6 +42,12 @@ vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => (
 vi.mock("@/infrastructure/auth/PrismaLeadSessionService", () => ({
   PrismaLeadSessionService: vi.fn().mockImplementation(function PrismaLeadSessionService() {
     return { create: mockCreateSession, resolve: vi.fn() };
+  }),
+}));
+
+vi.mock("@/infrastructure/email/ResendEmailService", () => ({
+  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
+    return { sendWelcomeEmail: mockSendWelcomeEmail, sendSongReadyEmail: vi.fn() };
   }),
 }));
 
@@ -78,6 +101,7 @@ function postRequest(body: unknown): Request {
 describe("POST /api/leads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedAfterCallbacks.length = 0;
     mockCreateSession.mockResolvedValue({
       token: "session-token",
       expiresAt: new Date("2026-08-14T00:00:00.000Z"),
@@ -112,6 +136,44 @@ describe("POST /api/leads", () => {
     expect(setCookieHeader).toMatch(/HttpOnly/i);
     expect(setCookieHeader).toMatch(/SameSite=Lax/i);
     expect(setCookieHeader).toMatch(/Path=\//i);
+  });
+
+  it("schedules a welcome email with a resume link containing the lead's resume token, after the response is prepared", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+    mockRepository.create.mockImplementation(async (lead: Lead) => lead);
+
+    const response = await POST(postRequest(validPayload));
+
+    expect(response.status).toBe(201);
+    // Not sent synchronously — only scheduled, exactly once, via `after()`.
+    expect(mockSendWelcomeEmail).not.toHaveBeenCalled();
+    expect(capturedAfterCallbacks).toHaveLength(1);
+
+    const createdLead = mockRepository.create.mock.calls[0][0] as Lead;
+    await capturedAfterCallbacks[0]();
+
+    expect(mockSendWelcomeEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendWelcomeEmail).toHaveBeenCalledWith({
+      to: "jane@example.com",
+      parentName: "Jane Doe",
+      babyName: "Baby Doe",
+      resumeUrl: expect.stringContaining(`/resume/${createdLead.resumeToken}`),
+    });
+    // Never a bare token in isolation, nor the Lead id anywhere in the link.
+    expect(mockSendWelcomeEmail.mock.calls[0][0].resumeUrl).not.toContain(createdLead.id);
+  });
+
+  it("still registers the lead and returns 201 even when the welcome email fails to send", async () => {
+    mockRepository.existsByEmail.mockResolvedValue(false);
+    mockRepository.create.mockImplementation(async (lead: Lead) => lead);
+    mockSendWelcomeEmail.mockRejectedValue(new Error("Resend API responded with status 500."));
+
+    const response = await POST(postRequest(validPayload));
+
+    expect(response.status).toBe(201);
+    expect(capturedAfterCallbacks).toHaveLength(1);
+    // The backgrounded failure must never surface as an unhandled rejection.
+    await expect(capturedAfterCallbacks[0]()).resolves.toBeUndefined();
   });
 
   it("returns a dedicated code/message when Turnstile reports a reused/expired token (timeout-or-duplicate)", async () => {
