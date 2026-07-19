@@ -53,7 +53,7 @@ export class WelcomeEmailTemplate {
                   <tr>
                     <td style="border-radius:8px;background-color:#4f46e5;">
                       <a href="${content.resumeUrl}" style="display:inline-block;padding:12px 24px;font-size:15px;color:#ffffff;text-decoration:none;font-weight:bold;">
-                        Continuar mi canción
+                        Ver el progreso de mi canción
                       </a>
                     </td>
                   </tr>

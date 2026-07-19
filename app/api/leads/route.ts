@@ -4,7 +4,7 @@ import type { LeadCampaignConfig } from "@/application/lead/contracts/LeadCampai
 import { CreateLeadUseCase } from "@/application/lead/use-cases/CreateLeadUseCase";
 import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
-import { appConfig } from "@/config/app";
+import { appConfig, buildAppUrl } from "@/config/app";
 import {
   LEAD_SESSION_COOKIE,
   leadSessionCookieOptions,
@@ -161,7 +161,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // generation pipeline in `app/api/lyrics/approve/route.ts`).
     // Registration itself never waits on, or fails because of, email
     // delivery — any failure here is only ever logged.
-    const resumeUrl = new URL(`/resume/${result.lead.resumeToken}`, appConfig.url).toString();
+    const resumeUrl = buildAppUrl(`/resume/${result.lead.resumeToken}`);
 
     after(async () => {
       try {

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] - 2026-08-27
+
+### Changed
+
+- **Song production waiting page** (`SongResultView.tsx`): replaced the generic "en producción" copy with a warmer, more emotional message ("Estamos creando algo único para {babyName} ✨" + supporting body text) and removed the "Crear otra canción" button from this specific view — there is only one song per registered user, so the button was misleading here. The page now auto-redirects to `/` after 10 seconds with no user interaction required, since there's nothing further to do on this transient view. COMPLETED and FAILED still show their own copy and disabled button unchanged — a parent needs to actually see/act on that content first. The existing spinner is untouched.
+- **Welcome email resume button**: "Continuar mi canción" → "Ver el progreso de mi canción" — better reflects what the linked page actually does. Resume-token generation, the resume flow, and routing are all unchanged.
+- **Lyrics generation waiting experience** (`LyricsGenerationForm.tsx`): while Claude generates lyrics (a real, measured 15-35s wait), 10 rotating, reassuring messages now appear below the existing generation spinner, fading in/out (~300ms) roughly every 6 seconds, looping indefinitely. Announced via `role="status"`/`aria-live="polite"`; a fixed `min-height` prevents layout jumps as message length varies; the rotation index always starts at 0 (never `Math.random()`/`Date.now()`) so server and client render identically and no hydration mismatch is possible — all rotation happens client-side, after mount. No new dependency — pure `useState`/`useEffect`/CSS transition.
+
+### Fixed
+
+- **Email links could resolve to a `*.vercel.app` deployment URL instead of the production domain**: the resume link was already built from the app's single centralized public base URL (`appConfig.url` / `NEXT_PUBLIC_APP_URL`), never a hardcoded string in code — but nothing enforced that every future email/template use that same single mechanism. Extracted `buildAppUrl()` (`src/config/app.ts`) as the one function any absolute in-app link must go through; `app/api/leads/route.ts`'s resume-link construction now uses it. The actual `*.vercel.app` URL a parent might see in an email is a deployment environment-variable value (`NEXT_PUBLIC_APP_URL`), not application code — it must be set to the real production domain in the deployment's environment settings (Vercel project settings), which is outside this repository's access, the same as `CRON_SECRET`/other deployment-only configuration documented elsewhere in this changelog.
+
 ## [1.27.2] - 2026-08-26
 
 ### Fixed

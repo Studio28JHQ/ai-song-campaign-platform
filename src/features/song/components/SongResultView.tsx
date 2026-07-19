@@ -1,7 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSongResult } from "../hooks/useSongResult";
+
+/** How long the "song in production" waiting view stays up before it auto-redirects home — no user interaction required. */
+const PRODUCTION_REDIRECT_DELAY_MS = 10_000;
 
 interface SongResultViewProps {
   supportEmail: string;
@@ -21,12 +26,35 @@ function formatDuration(seconds: number | null): string | null {
  * PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5) and the
  * parent is notified by email once it's ready — this page never polls.
  * The user can only ever generate one final song (see
- * docs/Product/Business_Rules.md), so "Generate Another Song" is always
- * shown disabled rather than omitted.
+ * docs/Product/Business_Rules.md): the transient waiting view has no
+ * "Generate Another Song" affordance at all (it would be misleading —
+ * there is nothing else to generate) and auto-redirects home after
+ * `PRODUCTION_REDIRECT_DELAY_MS`; COMPLETED/FAILED still show it
+ * disabled, since a parent needs to actually see/act on that content
+ * first.
  */
 export function SongResultView({ supportEmail }: SongResultViewProps) {
+  const router = useRouter();
   const { babyName, status, audioUrl, duration, loading } = useSongResult();
   const title = babyName ? `La canción de ${babyName}` : "Tu canción";
+  const displayBabyName = babyName ?? "tu bebé";
+
+  // The "song in production" view (the only state this page auto-leaves —
+  // COMPLETED and FAILED both need the parent to actually see/act on
+  // their content) has nothing further for the parent to do here; the
+  // page never polls (see `useSongResult`), so once this state is
+  // reached it won't change again during this visit.
+  const isProducing = !loading && status !== "COMPLETED" && status !== "FAILED";
+
+  useEffect(() => {
+    if (!isProducing) return;
+
+    const timeout = setTimeout(() => {
+      router.replace("/");
+    }, PRODUCTION_REDIRECT_DELAY_MS);
+
+    return () => clearTimeout(timeout);
+  }, [isProducing, router]);
 
   if (loading) {
     return (
@@ -121,23 +149,28 @@ export function SongResultView({ supportEmail }: SongResultViewProps) {
 
   return (
     <div className="flex flex-col items-center gap-5 rounded-[24px] border border-border bg-card shadow-[0_8px_30px_rgba(139,92,246,0.08)] p-8 text-center">
-      <h1 className="font-heading text-heading font-bold text-foreground">{title}</h1>
+      <h1 className="font-heading text-heading font-bold text-foreground">
+        Estamos creando algo único para {displayBabyName} ✨
+      </h1>
       <div
         role="status"
         aria-label="Tu canción está en producción"
         className="size-10 animate-spin rounded-full border-4 border-muted border-t-primary"
       />
       <p className="text-body text-muted-foreground">
-        Tu letra fue aprobada. Tu canción está en producción. Te avisaremos por correo en cuanto
-        esté lista.
+        Tu letra ya fue aprobada y nuestro sistema está produciendo una canción completamente
+        personalizada para {displayBabyName}.
       </p>
-      <Button
-        type="button"
-        disabled
-        className="h-12 w-full rounded-full border-2 border-primary bg-card px-8 text-base font-semibold text-primary sm:w-auto"
-      >
-        Crear otra canción
-      </Button>
+      <p className="text-body text-muted-foreground">
+        Este proceso puede tardar unos minutos porque cada canción se crea desde cero, cuidando cada
+        detalle para que el resultado sea realmente especial.
+      </p>
+      <p className="text-body text-muted-foreground">
+        En cuanto esté lista, recibirás un correo con el enlace para escucharla y descargarla.
+      </p>
+      <p className="text-caption text-muted-foreground">
+        Esta página se cerrará automáticamente en unos segundos.
+      </p>
     </div>
   );
 }

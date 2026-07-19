@@ -91,3 +91,16 @@ export const MAX_SESSION_REQUESTS_PER_WINDOW = env.MAX_SESSION_REQUESTS_PER_WIND
 export const SESSION_RATE_LIMIT_WINDOW_MINUTES = env.SESSION_RATE_LIMIT_WINDOW_MINUTES;
 
 export type AppConfig = typeof appConfig;
+
+/**
+ * Builds an absolute URL from the app's single configured public base URL
+ * (`appConfig.url` / `NEXT_PUBLIC_APP_URL`) — every email link (or any
+ * other absolute link back into the app) must go through this, so the
+ * base URL is defined once and never duplicated or hardcoded at each
+ * call site. Must be set to the real production domain in the
+ * deployment's environment settings — never a platform-provided preview
+ * URL (e.g. `*.vercel.app`).
+ */
+export function buildAppUrl(path: string): string {
+  return new URL(path, appConfig.url).toString();
+}

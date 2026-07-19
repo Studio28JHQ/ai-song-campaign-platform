@@ -41,7 +41,7 @@ describe("SongResultView", () => {
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
   });
 
-  it("shows the informational waiting message for a QUEUED song, with the disabled 'Generate Another Song' button, and never polls", async () => {
+  it("shows the warm, emotional waiting message for a QUEUED song, with no 'Generate Another Song' button, and never polls", async () => {
     installSession({
       babyName: "Baby Doe",
       remainingAttempts: 5,
@@ -52,9 +52,14 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
-    expect(screen.getByText(/te avisaremos por correo/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /crear otra canción/i })).toBeDisabled();
+    expect(
+      await screen.findByText("Estamos creando algo único para Baby Doe ✨"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/nuestro sistema está produciendo/i)).toBeInTheDocument();
+    expect(screen.getByText(/se cerrará automáticamente/i)).toBeInTheDocument();
+    // There is only one song per registered user — no misleading "create
+    // another" affordance on this transient waiting view.
+    expect(screen.queryByRole("button", { name: /crear otra canción/i })).not.toBeInTheDocument();
     // Only one call — the single session fetch. No polling endpoint exists.
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
@@ -70,7 +75,53 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Estamos creando algo único para Baby Doe ✨"),
+    ).toBeInTheDocument();
+  });
+
+  it("auto-redirects home after 10 seconds while the song is still in production, with no user interaction", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installSession({
+      babyName: "Baby Doe",
+      remainingAttempts: 5,
+      leadStatus: "GENERATING",
+      approvedLyrics: null,
+      song: { songId: "song-1", status: "GENERATING" },
+    });
+
+    render(<SongResultView supportEmail="support@example.com" />);
+    await screen.findByText("Estamos creando algo único para Baby Doe ✨");
+
+    expect(replaceMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(replaceMock).toHaveBeenCalledWith("/");
+
+    vi.useRealTimers();
+  });
+
+  it("does not auto-redirect once the song is COMPLETED", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installSession({
+      babyName: "Baby Doe",
+      remainingAttempts: 5,
+      leadStatus: "GENERATING",
+      approvedLyrics: null,
+      song: {
+        songId: "song-1",
+        status: "COMPLETED",
+        audioUrl: "https://cdn.example.com/song.mp3",
+        duration: 90,
+      },
+    });
+
+    render(<SongResultView supportEmail="support@example.com" />);
+    await screen.findByText(/canción personalizada está lista/i);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 
   it("renders the player, duration, download, and share message once the song is COMPLETED", async () => {
@@ -131,7 +182,9 @@ describe("SongResultView", () => {
 
     render(<SongResultView supportEmail="support@example.com" />);
 
-    expect(await screen.findByText(/canción está en producción/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Estamos creando algo único para Baby Doe ✨"),
+    ).toBeInTheDocument();
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 });

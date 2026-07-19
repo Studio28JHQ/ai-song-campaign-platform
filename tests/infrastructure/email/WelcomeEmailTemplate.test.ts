@@ -20,6 +20,9 @@ describe("WelcomeEmailTemplate", () => {
     expect(html).toContain("Baby Doe");
     expect(html).toContain('href="https://example.com/resume/abc123"');
     expect(html).toContain("mailto:");
+    // The resume button reflects what the page actually does — checking
+    // progress, not "continuing" a song that's already in production.
+    expect(html).toContain("Ver el progreso de mi canción");
   });
 
   it("never embeds anything other than the resume URL, parent name, and baby name", () => {

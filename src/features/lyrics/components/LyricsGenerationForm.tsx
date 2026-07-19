@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { VOICE_OPTIONS, type Voice } from "@/domain/lyrics/types";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import { plainTextField } from "@/shared/validation/zodFields";
+import { LyricsGenerationWaitingMessages } from "./LyricsGenerationWaitingMessages";
 
 /**
  * V1 provides exactly four predefined moods (see
@@ -271,6 +272,8 @@ export function LyricsGenerationForm({
           "Crear la letra"
         )}
       </Button>
+
+      {isSubmitting ? <LyricsGenerationWaitingMessages babyName={babyName} /> : null}
     </form>
   );
 }
