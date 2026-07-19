@@ -49,6 +49,8 @@ describe("ClaudeClient.sendMessage", () => {
     const body = JSON.parse(init.body as string);
     expect(body.system).toBe("sys");
     expect(body.messages).toEqual([{ role: "user", content: "usr" }]);
+    // Measured production value (Claude max_tokens sizing investigation) — Claude only.
+    expect(body.max_tokens).toBe(4096);
   });
 
   it("throws a shared error on a non-ok response, without retrying (4xx is not retried)", async () => {
@@ -96,6 +98,74 @@ describe("ClaudeClient.sendMessage", () => {
     await expect(client.sendMessage({ system: "sys", user: "usr" })).rejects.toMatchObject({
       code: "claude.incomplete_response",
     });
+  });
+
+  it("rejects a truncated response (stop_reason: max_tokens) without parsing it, routing through the same shared-unavailable flow", async () => {
+    const partialLyricsText =
+      '{"approved": true, "reason": null, "lyrics": "[Intro]\\nShhh, escucha bajito the ocean nev';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: "text", text: partialLyricsText }],
+          stop_reason: "max_tokens",
+          usage: {
+            input_tokens: 4179,
+            output_tokens: 4096,
+            output_tokens_details: { thinking_tokens: 1640 },
+          },
+        }),
+      }),
+    );
+
+    const client = new ClaudeClient();
+
+    await expect(client.sendMessage({ system: "sys", user: "usr" })).rejects.toMatchObject({
+      code: "claude.response_truncated",
+    });
+
+    // Logs metadata only — never the partial lyrics/content text.
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      "Claude response truncated (max_tokens reached)",
+      expect.objectContaining({
+        stopReason: "max_tokens",
+        inputTokens: 4179,
+        outputTokens: 4096,
+        thinkingTokens: 1640,
+        attempt: 1,
+        durationMs: expect.any(Number),
+      }),
+    );
+    const loggedText = JSON.stringify([
+      ...mockLoggerInfo.mock.calls,
+      ...mockLoggerError.mock.calls,
+    ]);
+    expect(loggedText).not.toContain(partialLyricsText);
+    expect(loggedText).not.toContain("Shhh, escucha");
+    // Never even attempted a completion log for a truncated response.
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith("Claude request completed", expect.anything());
+  });
+
+  it("accepts a complete response when stop_reason is end_turn", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: "text", text: '{"approved": true}' }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 4159, output_tokens: 1327 },
+        }),
+      }),
+    );
+
+    const client = new ClaudeClient();
+    const result = await client.sendMessage({ system: "sys", user: "usr" });
+
+    expect(result.content).toEqual([{ type: "text", text: '{"approved": true}' }]);
   });
 
   it("logs full diagnostics (attempt, model, stop_reason, token counts) on a successful response, without logging prompt content", async () => {

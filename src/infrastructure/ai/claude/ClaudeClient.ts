@@ -7,7 +7,13 @@ import type { ClaudeMessageResponse } from "./types";
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_API_VERSION = "2023-06-01";
 const CLAUDE_MODEL = "claude-sonnet-5";
-const CLAUDE_MAX_TOKENS = 1024;
+// Sprint — Claude max_tokens sizing. Live-measured against the current
+// production prompt: natural (uncapped) completions ranged 864-3442
+// output tokens (thinking-token consumption alone varied 0-2077 on
+// identical prompts), so 1024 truncated every single request. 4096
+// covered every measured case with margin. Claude-specific only — no
+// other provider's request shape is touched.
+const CLAUDE_MAX_TOKENS = 4096;
 
 // Claude-specific override of the shared HTTP default (`HTTP_DEFAULT_TIMEOUT_MS`,
 // 10s — sized for the platform's other, much faster providers: Turnstile,
@@ -116,6 +122,30 @@ export class ClaudeClient {
       throw new ExternalApiError("Claude API response body was not valid JSON.", {
         code: "claude.invalid_response_body",
         cause,
+      });
+    }
+
+    // A `stop_reason` of "max_tokens" means Anthropic cut generation off
+    // mid-response — `body.content` can still look like a well-formed
+    // array here (it's the JSON *string inside* one of its text blocks
+    // that's cut off), so this must be checked independently of, and
+    // before, the content-array check below. Never attempt to parse or
+    // use this text — reject it outright, through the same
+    // `ExternalApiError` → 503 "claude_unavailable" flow as every other
+    // failure here, so `ResponseParser` never sees a partial JSON string.
+    if (body.stop_reason === "max_tokens") {
+      logger.error("Claude response truncated (max_tokens reached)", {
+        stopReason: body.stop_reason,
+        inputTokens: body.usage?.input_tokens,
+        outputTokens: body.usage?.output_tokens,
+        thinkingTokens: body.usage?.output_tokens_details?.thinking_tokens,
+        durationMs: lastAttempt.elapsedMs,
+        attempt: lastAttempt.attempt,
+      });
+
+      throw new ExternalApiError("Claude response was truncated at the max_tokens limit.", {
+        code: "claude.response_truncated",
+        context: { stopReason: body.stop_reason },
       });
     }
 

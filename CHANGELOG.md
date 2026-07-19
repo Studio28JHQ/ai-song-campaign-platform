@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.2] - 2026-08-26
+
+### Fixed
+
+- **Lyrics generation regularly failing after the timeout fix, with Claude's response truncated mid-JSON**: `CLAUDE_MAX_TOKENS` was 1024 — the token-sizing investigation measured natural (uncapped) completions for the current prompt ranging 864–3442 output tokens (thinking-token consumption alone varying 0–2077 on identical prompts), so 1024 truncated effectively every request. Raised to the measured-safe production value, `max_tokens: 4096` — Claude only; no other provider's request shape changed. Live-verified: 0 truncations across 3 real end-to-end generations after the change (previously ~100%).
+- **A truncated response could still reach `ResponseParser` as partial JSON**: `ClaudeClient` now checks `stop_reason === "max_tokens"` immediately after parsing the response envelope and, before ever attempting to use `content`, rejects it via the same `ExternalApiError` → 503 `claude_unavailable` flow every other Claude failure already uses — no user-facing message changed. The pre-existing integrity checks (missing/non-array `content`; `ResponseParser`'s own missing-text-block check) are unchanged.
+
+### Changed
+
+- **Truncation diagnostics**: a `stop_reason: "max_tokens"` response now logs `stop_reason`, `input_tokens`, `output_tokens`, `thinking_tokens` (when present), request duration, and attempt number — never the prompt, lyrics, parent message, or any other user content. Live-verified against real successful responses: the existing "Claude request completed" log continues to contain metadata only.
+
 ## [1.27.1] - 2026-08-25
 
 ### Fixed
