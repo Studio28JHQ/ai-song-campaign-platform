@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.2] - 2026-08-19
+
+### Changed
+
+- **`MAX_LYRIC_ATTEMPTS` is required again, with no code default** (`src/config/env.ts`): the `.default(3)` added in 1.26.1 is removed. As a business rule (not a technical/abuse-protection tunable), an unset value now fails application startup immediately with a clear error, the same `loadEnv()` fail-fast behavior every other required setting already has — rather than silently running the campaign under an implicit, undeclared attempt limit. `.env.example` (and every deployment) must still set `MAX_LYRIC_ATTEMPTS=3` explicitly; no other config layer changed, since the running value was already `3` everywhere. The attempt-consumption algorithm and every other behavior are unchanged.
+
 ## [1.26.1] - 2026-08-18
 
 ### Changed
