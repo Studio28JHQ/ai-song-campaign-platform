@@ -60,13 +60,16 @@ const envSchema = z.object({
   // only add churn. Never used for anything user-facing.
   CRON_SECRET: z.string().min(32, "CRON_SECRET must be at least 32 characters long."),
 
-  // Sprint 8.2 — Abuse Protection. The Turnstile defaults are Cloudflare's
-  // publicly documented "always passes" test keypair (see
-  // https://developers.cloudflare.com/turnstile/troubleshooting/testing/) —
-  // safe to ship as a default so local dev/tests work without secrets;
-  // production must override both via real environment variables.
-  TURNSTILE_SECRET_KEY: z.string().min(1).default("1x0000000000000000000000000000000AA"),
-  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1).default("1x00000000000000000000AA"),
+  // Sprint 8.2 — Abuse Protection. Required production secrets, same as
+  // every other API credential above (`CLAUDE_API_KEY`, `MUREKA_API_KEY`,
+  // etc.) — no default. Cloudflare's publicly documented "always passes"
+  // test keypair (see
+  // https://developers.cloudflare.com/turnstile/troubleshooting/testing/)
+  // is still fine to use as the actual *value* for local development —
+  // set explicitly, like any other secret — but this schema no longer
+  // silently substitutes it in when the variable is unset.
+  TURNSTILE_SECRET_KEY: z.string().min(1),
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
   RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(60),
   MAX_REGISTRATIONS_PER_IP: z.coerce.number().int().positive().default(5),
   MAX_REGISTRATIONS_PER_EMAIL: z.coerce.number().int().positive().default(3),

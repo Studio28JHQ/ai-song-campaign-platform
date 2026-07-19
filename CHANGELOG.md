@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.3] - 2026-08-20
+
+### Changed
+
+- **Turnstile production keys, and both variables now required** (`src/config/env.ts`): `TURNSTILE_SECRET_KEY` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` no longer default to Cloudflare's "always passes" test keypair — both are now required with no default, the same as `CLAUDE_API_KEY`/`MUREKA_API_KEY`, so an unset value fails application startup immediately instead of silently running abuse protection with a test key that accepts everything. `.env.example` now shows generic placeholders (`your-turnstile-secret-key`/`your-turnstile-site-key`) rather than the test keypair values. No change to `TurnstileWidget`, `TurnstileClient`, or `TurnstileVerifier` — all already read the configured key dynamically, with no hardcoded test-specific behavior.
+- Local `.env` and `.env.example` variable names are unchanged; no Vercel environment variable was touched by this change (outside this repository's access).
+
 ## [1.26.2] - 2026-08-19
 
 ### Changed
