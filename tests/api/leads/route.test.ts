@@ -49,9 +49,11 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
   }),
 }));
 
+const mockSiteverify = vi.fn().mockResolvedValue({ success: true });
+
 vi.mock("@/infrastructure/security/turnstile/TurnstileClient", () => ({
   TurnstileClient: vi.fn().mockImplementation(function TurnstileClient() {
-    return { siteverify: vi.fn().mockResolvedValue({ success: true }) };
+    return { siteverify: mockSiteverify };
   }),
 }));
 
@@ -110,6 +112,33 @@ describe("POST /api/leads", () => {
     expect(setCookieHeader).toMatch(/HttpOnly/i);
     expect(setCookieHeader).toMatch(/SameSite=Lax/i);
     expect(setCookieHeader).toMatch(/Path=\//i);
+  });
+
+  it("returns a dedicated code/message when Turnstile reports a reused/expired token (timeout-or-duplicate)", async () => {
+    mockSiteverify.mockResolvedValueOnce({
+      success: false,
+      "error-codes": ["timeout-or-duplicate"],
+    });
+
+    const response = await POST(postRequest(validPayload));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe("turnstile_expired_or_reused");
+    expect(mockRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("returns the generic verification-failed code for any other Turnstile rejection", async () => {
+    mockSiteverify.mockResolvedValueOnce({
+      success: false,
+      "error-codes": ["invalid-input-response"],
+    });
+
+    const response = await POST(postRequest(validPayload));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe("human_verification_failed");
   });
 
   it("returns 409 when the email is already registered", async () => {

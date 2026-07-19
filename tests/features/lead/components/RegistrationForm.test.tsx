@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RegistrationForm } from "@/features/lead/components/RegistrationForm";
 
 const pushMock = vi.fn();
+const turnstileResetMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
@@ -13,14 +14,25 @@ vi.mock("next/navigation", () => ({
 // The real widget loads Cloudflare's script and calls a real network
 // endpoint — irrelevant to what these tests verify (form wiring), and
 // unavailable in jsdom. It auto-verifies on mount so existing
-// happy-path tests don't need to interact with it.
+// happy-path tests don't need to interact with it. `reset` is exposed via
+// the same imperative-handle contract the real widget has, so
+// `RegistrationForm`'s token-reuse fix (calling it after a failed
+// submission) can be exercised/asserted on.
 vi.mock("@/components/security/TurnstileWidget", () => ({
-  TurnstileWidget: ({ onVerify }: { onVerify: (token: string) => void }) => {
+  TurnstileWidget: forwardRef(function TurnstileWidget(
+    { onVerify }: { onVerify: (token: string) => void },
+    ref: React.Ref<{ reset: () => void }>,
+  ) {
+    useImperativeHandle(ref, () => ({ reset: turnstileResetMock }));
     useEffect(() => {
       onVerify("test-turnstile-token");
-    }, [onVerify]);
+      // Mount once, like the real widget — `onVerify` is a fresh inline
+      // closure on every parent render, and re-running this on every
+      // change would keep re-supplying a token after a reset clears it.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     return null;
-  },
+  }),
 }));
 
 function renderForm() {
@@ -45,6 +57,34 @@ describe("RegistrationForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.sessionStorage.clear();
+  });
+
+  it("resets the Turnstile widget after a failed submission and blocks retrying without a fresh token", async () => {
+    const user = userEvent.setup();
+    mockFetchOnce({
+      ok: false,
+      status: 403,
+      body: { error: "human_verification_failed", message: "irrelevant — never rendered" },
+    });
+
+    renderForm();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
+
+    expect(
+      await screen.findByText("No pudimos verificar que no eres un robot. Inténtalo de nuevo."),
+    ).toBeInTheDocument();
+    // The spent token is cleared and the same widget instance is reset —
+    // never replaced — so the mocked widget (which only auto-verifies once,
+    // on mount) never re-supplies a token on its own.
+    expect(turnstileResetMock).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
+
+    expect(await screen.findByText("Completa la verificación de seguridad.")).toBeInTheDocument();
+    // No second network call — a fresh token is required before resubmitting.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("submits successfully and navigates to /generate — the server identifies the lead via a session cookie, never a client-stored id", async () => {

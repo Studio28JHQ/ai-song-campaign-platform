@@ -1,6 +1,7 @@
 import { appConfig } from "@/config/app";
 import { ExternalApiError } from "@/shared/errors";
 import { httpRequest } from "@/shared/http";
+import { logger } from "@/shared/logger/logger";
 
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
@@ -9,6 +10,10 @@ export interface TurnstileSiteverifyResponse {
   "error-codes"?: string[];
   challenge_ts?: string;
   hostname?: string;
+  action?: string;
+  cdata?: string;
+  metadata?: Record<string, unknown>;
+  messages?: string[];
 }
 
 /**
@@ -43,13 +48,36 @@ export class TurnstileClient {
       });
     }
 
+    let result: TurnstileSiteverifyResponse;
+
     try {
-      return (await response.json()) as TurnstileSiteverifyResponse;
+      result = (await response.json()) as TurnstileSiteverifyResponse;
     } catch (cause) {
       throw new ExternalApiError("Turnstile API response body was not valid JSON.", {
         code: "turnstile.invalid_response_body",
         cause,
       });
     }
+
+    // Cloudflare signals a rejected/expired/reused token with HTTP 200 and
+    // `success: false` in the body — not a non-2xx status — so this is the
+    // only place that failure is ever visible. Log the complete response
+    // (every field Cloudflare's `siteverify` can return, not just
+    // `error-codes`) so the real cause is diagnosable server-side, the same
+    // as `ClaudeClient` already does for Anthropic.
+    if (result.success !== true) {
+      logger.error("Turnstile siteverify returned an unsuccessful response", {
+        success: result.success,
+        errorCodes: result["error-codes"],
+        hostname: result.hostname,
+        challengeTs: result.challenge_ts,
+        metadata: result.metadata,
+        action: result.action,
+        cdata: result.cdata,
+        messages: result.messages,
+      });
+    }
+
+    return result;
   }
 }

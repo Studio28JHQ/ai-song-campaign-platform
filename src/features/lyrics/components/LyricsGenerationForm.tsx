@@ -1,9 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { TurnstileWidget } from "@/components/security/TurnstileWidget";
+import { TurnstileWidget, type TurnstileWidgetHandle } from "@/components/security/TurnstileWidget";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { VOICE_OPTIONS, type Voice } from "@/domain/lyrics/types";
@@ -126,6 +127,25 @@ export function LyricsGenerationForm({
       voice: "FEMALE",
     },
   });
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
+
+  // This form doesn't call the API itself — `onSubmit` (owned by
+  // `LyricsWorkflow`) does, and reports failure back via `errorMessage`,
+  // which it always clears before a new attempt. So a transition to a new
+  // truthy value here reliably means "the previous submission just failed"
+  // (Turnstile rejection, rate limit, moderation rejection, ...) — the
+  // submitted token is spent either way, so pull a fresh one from the same
+  // widget before another submit is allowed. Not `shouldValidate: true`:
+  // `handleSubmit`'s own resolver already re-validates on the next submit
+  // attempt, and eagerly showing "Completa la verificación de seguridad."
+  // right on top of `errorMessage`'s own banner would be redundant. See the
+  // Turnstile token reuse investigation this fixes.
+  useEffect(() => {
+    if (errorMessage) {
+      setValue("turnstileToken", "");
+      turnstileRef.current?.reset();
+    }
+  }, [errorMessage, setValue]);
 
   function submit(values: FormValues) {
     const mood = MOODS.find((candidate) => candidate.id === values.moodId) ?? MOODS[0];
@@ -220,6 +240,7 @@ export function LyricsGenerationForm({
 
       <div className="flex flex-col gap-1.5">
         <TurnstileWidget
+          ref={turnstileRef}
           siteKey={turnstileSiteKey}
           onVerify={(token) => setValue("turnstileToken", token, { shouldValidate: true })}
           onExpire={() => setValue("turnstileToken", "", { shouldValidate: true })}

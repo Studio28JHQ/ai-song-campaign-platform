@@ -107,6 +107,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         entity: "IpAddress",
         metadata: { ip, scope: "registration", errorCodes: verification.errorCodes },
       });
+
+      if (turnstileVerifier.isExpiredOrAlreadyUsed(verification)) {
+        return errorResponse(
+          403,
+          "turnstile_expired_or_reused",
+          "Your verification expired or was already used. Please verify again.",
+        );
+      }
+
       return errorResponse(
         403,
         "human_verification_failed",

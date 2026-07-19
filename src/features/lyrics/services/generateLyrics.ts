@@ -33,6 +33,7 @@ export type GenerateLyricsErrorCode =
   | "claude_unavailable"
   | "too_many_requests"
   | "human_verification_failed"
+  | "turnstile_expired_or_reused"
   | "verification_unavailable"
   | "internal_error";
 
@@ -46,6 +47,7 @@ const KNOWN_ERROR_CODES: readonly GenerateLyricsErrorCode[] = [
   "claude_unavailable",
   "too_many_requests",
   "human_verification_failed",
+  "turnstile_expired_or_reused",
   "verification_unavailable",
   "internal_error",
 ];
@@ -65,6 +67,7 @@ const DEFAULT_MESSAGES: Record<GenerateLyricsErrorCode, string> = {
     "El servicio de creación de letras no está disponible en este momento. Inténtalo en unos minutos.",
   too_many_requests: "Demasiados intentos. Espera unos minutos antes de volver a intentarlo.",
   human_verification_failed: "No pudimos verificar que no eres un robot. Inténtalo de nuevo.",
+  turnstile_expired_or_reused: "Tu verificación expiró. Vuelve a verificar e inténtalo nuevamente.",
   verification_unavailable:
     "La verificación no está disponible en este momento. Inténtalo en unos minutos.",
   internal_error: "Algo salió mal. Inténtalo de nuevo.",

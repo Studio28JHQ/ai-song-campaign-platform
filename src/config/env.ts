@@ -12,6 +12,11 @@ import { z } from "zod";
  */
 
 const envSchema = z.object({
+  // Set automatically by Next.js/Node (`next dev` vs `next build`/`next
+  // start` vs the test runner) — never set by hand in `.env`. Used only
+  // to gate verbose, stack-preserving error logging (see
+  // `app/api/lyrics/generate/route.ts`) to non-production environments.
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   NEXT_PUBLIC_APP_NAME: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   SUPABASE_URL: z.string().url(),

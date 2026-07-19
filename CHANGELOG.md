@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.6] - 2026-08-23
+
+### Fixed
+
+- **Turnstile token reuse causing repeated verification failures and, eventually, "Demasiados intentos"** (`RegistrationForm.tsx`, `LyricsGenerationForm.tsx`, `TurnstileWidget.tsx`): neither form ever cleared its Turnstile token or reset the widget after a failed submission, so a retry resubmitted the same, already-consumed token — Cloudflare tokens are single-use, so this always failed (`timeout-or-duplicate`), and since rate limiting is checked before Turnstile on every attempt, enough retries eventually tripped the real rate limit. `TurnstileWidget` now exposes an imperative `reset()` handle (`forwardRef`/`useImperativeHandle`, same rendered widget instance — never remounted) that both forms call, alongside clearing the stored token, after any failed submission; the token's own required-field validation then blocks resubmission until a fresh `onVerify` fires. `RegistrationForm` does this inline in its own submit handler; `LyricsGenerationForm` (which doesn't call the API itself) does it via a `useEffect` on its `errorMessage` prop, which the parent (`LyricsWorkflow`) already clears before every new attempt.
+- **Generic "we couldn't verify you" message shown even for an expired/reused token**: the already-existing (but previously unused) `TurnstileVerifier.isExpiredOrAlreadyUsed()` is now called from both `/api/leads` and `/api/lyrics/generate` — a `timeout-or-duplicate` response from Cloudflare now returns a dedicated `turnstile_expired_or_reused` code, mapped client-side to "Tu verificación expiró. Vuelve a verificar e inténtalo nuevamente." Every other Turnstile rejection still returns the unchanged `human_verification_failed` response/message. No change to rate limiting, its ordering, or any other security policy.
+
+### Changed
+
+- **Turnstile diagnostics** (`TurnstileClient.ts`): Cloudflare signals a rejected/expired/reused token with HTTP 200 and `success: false` in the body, not a non-2xx status, so this was previously never logged at all. Every unsuccessful `siteverify` response is now logged in full — `success`, `error-codes`, `hostname`, `challenge_ts`, `metadata`, `action`, `cdata`, `messages` — the same diagnostic style already used for Anthropic. `TurnstileSiteverifyResponse` now declares `action`/`cdata`/`metadata`/`messages`, which Cloudflare could already return but the type silently dropped.
+
+## [1.26.5] - 2026-08-22
+
+### Changed
+
+- **AI error diagnostics for lyrics generation** (`app/api/lyrics/generate/route.ts`, `src/infrastructure/ai/claude/ClaudeClient.ts`): `POST /api/lyrics/generate` always returned the same generic "The lyrics generation service is temporarily unavailable" message on failure — correct for the user, but server logs only ever recorded `error.message` and `code`, discarding the stack trace, the `.cause` chain, and the `context` (HTTP status, Anthropic's raw error body, Turnstile's raw error body) every `ExternalApiError` already carried. A new `logDiagnostics()` helper now logs the full picture — message, stack, one level of `cause` (message/stack/code/context), and this error's own `code`/`context` — for every failure branch (Turnstile, Claude, a newly-added explicit `DatabaseError`/Prisma branch, and the unexpected-error fallback), plus a best-effort `source` classification (`turnstile` / `anthropic` / `anthropic_rate_limited` / `timeout` / `prisma` / `unexpected`) so a human reading logs doesn't have to reverse-engineer which dependency failed. `ClaudeClient` now also captures Anthropic's `request-id` response header and logs the raw error payload immediately when Anthropic responds non-2xx, before wrapping it into the generic `ExternalApiError`. A new `NODE_ENV`-derived `appConfig.isDevelopment` flag (`src/config/env.ts`, `src/config/app.ts`) additionally prints the raw error to the console — full native stack and cause chain — in development only, never in production. No response body, status code, or user-facing message changed on any path; no business logic, routing, or authentication touched.
+
 ## [1.26.4] - 2026-08-21
 
 ### Fixed

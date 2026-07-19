@@ -14,7 +14,13 @@ import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyri
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
 import { TurnstileVerifier } from "@/infrastructure/security/turnstile/TurnstileVerifier";
-import { BusinessRuleError, ExternalApiError, ValidationError } from "@/shared/errors";
+import {
+  AppError,
+  BusinessRuleError,
+  DatabaseError,
+  ExternalApiError,
+  ValidationError,
+} from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import { plainTextField } from "@/shared/validation/zodFields";
@@ -119,6 +125,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         entityId: leadId,
         metadata: { ip, scope: "lyrics_generation", errorCodes: verification.errorCodes },
       });
+
+      if (turnstileVerifier.isExpiredOrAlreadyUsed(verification)) {
+        return errorResponse(
+          403,
+          "turnstile_expired_or_reused",
+          "Your verification expired or was already used. Please verify again.",
+        );
+      }
+
       return errorResponse(
         403,
         "human_verification_failed",
@@ -171,10 +186,14 @@ function handleUseCaseError(error: unknown): NextResponse {
     return errorResponse(422, "business_rule_violation", error.message);
   }
 
+  if (error instanceof DatabaseError) {
+    logDiagnostics("Database error while generating lyrics", error, { source: "prisma" });
+    return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+  }
+
   if (error instanceof ExternalApiError) {
-    logger.error("Claude API failure while generating lyrics", {
-      error: error.message,
-      code: error.code,
+    logDiagnostics("Claude API failure while generating lyrics", error, {
+      source: classifyExternalApiError(error),
     });
 
     return errorResponse(
@@ -184,19 +203,14 @@ function handleUseCaseError(error: unknown): NextResponse {
     );
   }
 
-  logger.error("Unexpected error while generating lyrics", {
-    error: error instanceof Error ? error.message : String(error),
-  });
+  logDiagnostics("Unexpected error while generating lyrics", error, { source: "unexpected" });
 
   return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
 }
 
 function handleTurnstileError(error: unknown): NextResponse {
   if (error instanceof ExternalApiError) {
-    logger.error("Turnstile verification failed", {
-      error: error.message,
-      code: error.code,
-    });
+    logDiagnostics("Turnstile verification failed", error, { source: "turnstile" });
 
     return errorResponse(
       503,
@@ -205,11 +219,78 @@ function handleTurnstileError(error: unknown): NextResponse {
     );
   }
 
-  logger.error("Unexpected error while verifying Turnstile token", {
-    error: error instanceof Error ? error.message : String(error),
+  logDiagnostics("Unexpected error while verifying Turnstile token", error, {
+    source: "unexpected",
   });
 
   return errorResponse(500, "internal_error", "Something went wrong. Please try again.");
+}
+
+/**
+ * Best-effort classification of an `ExternalApiError` thrown while calling
+ * Claude, purely to make server logs immediately actionable (see the
+ * investigation checklist this endpoint's diagnostics were hardened
+ * against: Turnstile vs Anthropic vs a timeout vs Anthropic's own rate
+ * limiting). Never affects the response sent to the client.
+ */
+function classifyExternalApiError(error: ExternalApiError): string {
+  const cause = error.cause;
+  const isTimeout =
+    (cause instanceof Error && cause.name === "AbortError") ||
+    (cause instanceof AppError &&
+      cause.cause instanceof Error &&
+      cause.cause.name === "AbortError");
+
+  if (isTimeout) {
+    return "timeout";
+  }
+
+  const status = error.context?.status;
+  if (status === 429) {
+    return "anthropic_rate_limited";
+  }
+
+  if (error.code.startsWith("claude.")) {
+    return "anthropic";
+  }
+
+  return "external_api";
+}
+
+/**
+ * Logs everything needed to diagnose a failure without ever exposing it to
+ * the user (every route handler here keeps returning its own fixed,
+ * generic message/status regardless of what this logs) — message, stack,
+ * one level of `cause` (message/stack, plus its own code/context if it's
+ * itself an `AppError`, e.g. the Anthropic status/response/request id
+ * `ClaudeClient` attaches), and this `AppError`'s own `code`/`context`.
+ * In development, also prints the raw error to the console so the full,
+ * unredacted native stack (including Node's own nested `cause` rendering)
+ * is visible while iterating locally — never in production.
+ */
+function logDiagnostics(message: string, error: unknown, meta: Record<string, unknown>): void {
+  const cause = error instanceof Error ? error.cause : undefined;
+
+  logger.error(message, {
+    ...meta,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+    code: error instanceof AppError ? error.code : undefined,
+    context: error instanceof AppError ? error.context : undefined,
+    cause:
+      cause instanceof Error
+        ? {
+            message: cause.message,
+            stack: cause.stack,
+            code: cause instanceof AppError ? cause.code : undefined,
+            context: cause instanceof AppError ? cause.context : undefined,
+          }
+        : cause,
+  });
+
+  if (appConfig.isDevelopment) {
+    console.error(error);
+  }
 }
 
 function tooManyRequestsResponse(): NextResponse {

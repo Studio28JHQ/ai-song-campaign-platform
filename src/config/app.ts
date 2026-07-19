@@ -10,6 +10,7 @@ import { env } from "./env";
 export const appConfig = {
   name: env.NEXT_PUBLIC_APP_NAME,
   url: env.NEXT_PUBLIC_APP_URL,
+  isDevelopment: env.NODE_ENV === "development",
   admin: {
     email: env.ADMIN_EMAIL,
     sessionSecret: env.ADMIN_SESSION_SECRET,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef } from "react";
 
 /**
  * Cloudflare Turnstile (Sprint 8.2 — Abuse Protection) rendered via the
@@ -30,6 +30,7 @@ interface TurnstileRenderOptions {
 interface TurnstileGlobal {
   render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
   remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
 }
 
 declare global {
@@ -64,38 +65,59 @@ export interface TurnstileWidgetProps {
   onError?: () => void;
 }
 
-export function TurnstileWidget({ siteKey, onVerify, onExpire, onError }: TurnstileWidgetProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const id = useId();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    loadTurnstileScript()
-      .then(() => {
-        if (cancelled || !containerRef.current || !window.turnstile) return;
-
-        widgetIdRef.current = window.turnstile.render(containerRef.current, {
-          sitekey: siteKey,
-          callback: onVerify,
-          "expired-callback": onExpire,
-          "error-callback": onError,
-        });
-      })
-      .catch(() => {
-        onError?.();
-      });
-
-    return () => {
-      cancelled = true;
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
-      }
-    };
-    // Mount once — Turnstile manages its own re-render/reset lifecycle internally.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return <div ref={containerRef} id={`turnstile-${id}`} data-testid="turnstile-widget" />;
+/**
+ * Imperative handle exposed to consumers so a failed submission can force
+ * a fresh token out of the *same* rendered widget (`window.turnstile.reset`)
+ * instead of unmounting/remounting it — a used-up token is never reused by
+ * a retry (see `TurnstileVerifier.isExpiredOrAlreadyUsed`).
+ */
+export interface TurnstileWidgetHandle {
+  reset: () => void;
 }
+
+export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
+  function TurnstileWidget({ siteKey, onVerify, onExpire, onError }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const widgetIdRef = useRef<string | null>(null);
+    const id = useId();
+
+    useImperativeHandle(ref, () => ({
+      reset: () => {
+        if (widgetIdRef.current && window.turnstile) {
+          window.turnstile.reset(widgetIdRef.current);
+        }
+      },
+    }));
+
+    useEffect(() => {
+      let cancelled = false;
+
+      loadTurnstileScript()
+        .then(() => {
+          if (cancelled || !containerRef.current || !window.turnstile) return;
+
+          widgetIdRef.current = window.turnstile.render(containerRef.current, {
+            sitekey: siteKey,
+            callback: onVerify,
+            "expired-callback": onExpire,
+            "error-callback": onError,
+          });
+        })
+        .catch(() => {
+          onError?.();
+        });
+
+      return () => {
+        cancelled = true;
+        if (widgetIdRef.current && window.turnstile) {
+          window.turnstile.remove(widgetIdRef.current);
+        }
+      };
+      // Mount once — resets are driven imperatively via the exposed handle,
+      // not by re-running this effect.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    return <div ref={containerRef} id={`turnstile-${id}`} data-testid="turnstile-widget" />;
+  },
+);

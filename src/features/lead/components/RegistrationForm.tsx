@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { CampaignButton } from "@/components/campaign/CampaignButton";
@@ -14,7 +14,7 @@ import {
   PhoneIcon,
   UserIcon,
 } from "@/components/campaign/CampaignFieldIcons";
-import { TurnstileWidget } from "@/components/security/TurnstileWidget";
+import { TurnstileWidget, type TurnstileWidgetHandle } from "@/components/security/TurnstileWidget";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import {
   emailField,
@@ -134,6 +134,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   });
   const { submit, isSubmitting } = useRegisterLead();
   const [formError, setFormError] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
 
   async function onSubmit(values: RegistrationFormValues) {
     setFormError(null);
@@ -155,6 +156,16 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
       } else {
         setFormError(outcome.message);
       }
+
+      // The submitted token is spent (or invalid) either way — clear it and
+      // pull a fresh one from the same widget before another submit is
+      // allowed. Not `shouldValidate: true`: `handleSubmit`'s own resolver
+      // already re-validates on the next submit attempt, and eagerly
+      // showing "Completa la verificación de seguridad." right on top of
+      // this failure's own message would be redundant. See the Turnstile
+      // token reuse investigation this fixes.
+      setValue("turnstileToken", "");
+      turnstileRef.current?.reset();
     }
   }
 
@@ -241,6 +252,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
 
       <div className="flex flex-col gap-1.5">
         <TurnstileWidget
+          ref={turnstileRef}
           siteKey={turnstileSiteKey}
           onVerify={(token) => setValue("turnstileToken", token, { shouldValidate: true })}
           onExpire={() => setValue("turnstileToken", "", { shouldValidate: true })}

@@ -1,6 +1,7 @@
 import { appConfig } from "@/config/app";
 import { ExternalApiError } from "@/shared/errors";
 import { httpRequest } from "@/shared/http";
+import { logger } from "@/shared/logger/logger";
 import type { ClaudeMessageResponse } from "./types";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
@@ -40,9 +41,21 @@ export class ClaudeClient {
 
     if (!response.ok) {
       const details = await response.json().catch(() => null);
+      // Anthropic's own request id (header `request-id`), when present —
+      // the single most useful thing to hand Anthropic support when
+      // escalating a failure. Inspect and log the raw error payload here,
+      // before it is wrapped into the generic `ExternalApiError` the rest
+      // of the app only ever sees the message/code of.
+      const requestId = response.headers.get("request-id") ?? undefined;
+      logger.error("Anthropic API returned an error response", {
+        status: response.status,
+        requestId,
+        details,
+      });
+
       throw new ExternalApiError(`Claude API responded with status ${response.status}.`, {
         code: "claude.api_error",
-        context: { status: response.status, details },
+        context: { status: response.status, details, requestId },
       });
     }
 

@@ -1,11 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LyricsWorkflow } from "@/features/lyrics/components/LyricsWorkflow";
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
+const turnstileResetMock = vi.fn();
 // A stable object reference matters here: `LyricsWorkflow` depends on
 // `router` inside a `useEffect`, and real Next.js returns a memoized
 // router — a fresh object per call would make the effect re-run every
@@ -19,14 +20,25 @@ vi.mock("next/navigation", () => ({
 // The real widget loads Cloudflare's script and calls a real network
 // endpoint — irrelevant to what these tests verify (workflow wiring),
 // and unavailable in jsdom. It auto-verifies on mount so existing
-// happy-path tests don't need to interact with it.
+// happy-path tests don't need to interact with it. `reset` is exposed via
+// the same imperative-handle contract the real widget has, so
+// `LyricsGenerationForm`'s token-reuse fix (calling it after a failed
+// submission) can be exercised/asserted on.
 vi.mock("@/components/security/TurnstileWidget", () => ({
-  TurnstileWidget: ({ onVerify }: { onVerify: (token: string) => void }) => {
+  TurnstileWidget: forwardRef(function TurnstileWidget(
+    { onVerify }: { onVerify: (token: string) => void },
+    ref: React.Ref<{ reset: () => void }>,
+  ) {
+    useImperativeHandle(ref, () => ({ reset: turnstileResetMock }));
     useEffect(() => {
       onVerify("test-turnstile-token");
-    }, [onVerify]);
+      // Mount once, like the real widget — `onVerify` is a fresh inline
+      // closure on every parent render, and re-running this on every
+      // change would keep re-supplying a token after a reset clears it.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     return null;
-  },
+  }),
 }));
 
 const DEFAULT_PROPS = {
@@ -222,6 +234,53 @@ describe("LyricsWorkflow", () => {
     expect(await screen.findByText("Contains offensive language.")).toBeInTheDocument();
     expect(screen.getByText("Intentos restantes: 4")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear la letra/i })).toBeInTheDocument();
+  });
+
+  it("resets the Turnstile widget after a failed submission and blocks retrying without a fresh token", async () => {
+    const user = userEvent.setup();
+    // A real (non-ok) failure, unlike `generateResponses` above (always a
+    // 200 — moderation rejections are a normal, expected outcome; see
+    // `routedFetch`'s `jsonResponse` default). Turnstile rejection is a
+    // genuine `403`, so this test builds its own fetch mock instead.
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/leads/session") return Promise.resolve(jsonResponse(baseSession()));
+      if (url === "/api/lyrics/generate") {
+        return Promise.resolve(
+          jsonResponse(
+            { error: "human_verification_failed", message: "irrelevant — never rendered" },
+            false,
+            403,
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    renderWorkflow();
+    await user.type(await screen.findByLabelText(/tu mensaje/i), "A gentle bedtime song.");
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
+
+    // The generate service maps a non-ok response to its Spanish,
+    // code-keyed message — never the server's raw `message` field.
+    expect(
+      await screen.findByText("No pudimos verificar que no eres un robot. Inténtalo de nuevo."),
+    ).toBeInTheDocument();
+    expect(turnstileResetMock).toHaveBeenCalledTimes(1);
+
+    const generateCallsBefore = fetchMock.mock.calls.filter(
+      ([url]) => String(url) === "/api/lyrics/generate",
+    ).length;
+
+    await user.click(screen.getByRole("button", { name: /crear la letra/i }));
+
+    expect(await screen.findByText("Completa la verificación de seguridad.")).toBeInTheDocument();
+    const generateCallsAfter = fetchMock.mock.calls.filter(
+      ([url]) => String(url) === "/api/lyrics/generate",
+    ).length;
+    // No second network call — a fresh token is required before resubmitting.
+    expect(generateCallsAfter).toBe(generateCallsBefore);
   });
 
   it("consumes an attempt and refreshes the UI on Generate Again", async () => {
