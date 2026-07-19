@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.4] - 2026-08-21
+
+### Fixed
+
+- **Registration succeeded but redirected back to home instead of reaching the lyrics page**: `GET /api/leads/session` — called by `LyricsWorkflow` on every mount of `/generate`, immediately after registration — threw `Database request failed (P2022)` from `PrismaLyricsRepository.findApprovedByLead()`, whose default (no-`select`) query requests every column Prisma's schema declares for `Lyrics`, including `parentMessage`/`musicMood`/`musicDirection`/`voice` from migration `20260811090000_ai_musical_direction` (Sprint v1.1), which had never actually been deployed to the database — the same root cause already patched around once, for a different query path, in `1.25.1`. That earlier fix narrowed one query's `select`; it did not deploy the pending migration, so the drift between `schema.prisma` and the live database remained and surfaced again here. The frontend's `getLeadSession()` service (`src/features/lead/services/getLeadSession.ts`) treats any non-2xx response — including this 500 — identically to "no session," so `LyricsWorkflow` fell back to `router.replace("/")`, discarding the freshly created lead's session. Root cause fixed by running `prisma migrate deploy` (applying `20260811090000_ai_musical_direction`, purely additive: nullable/defaulted columns on `lyrics`) — no application code changed. Verified: fresh registration now reaches `/generate` and stays there, `GET /api/leads/session` returns 200 immediately after registration and on refresh, and the lead is still created exactly once.
+
 ## [1.26.3] - 2026-08-20
 
 ### Changed
