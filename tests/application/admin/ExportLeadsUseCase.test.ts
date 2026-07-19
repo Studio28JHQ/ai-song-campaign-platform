@@ -14,6 +14,8 @@ function fakeRow(overrides: Partial<AdminLeadExportRow> = {}): AdminLeadExportRo
     babyName: "Baby Doe",
     email: "jane@example.com",
     phone: null,
+    babyAge: null,
+    city: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     lyricsStatus: "APPROVED",
     songStatus: "COMPLETED",

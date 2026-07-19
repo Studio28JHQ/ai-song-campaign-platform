@@ -7,7 +7,9 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => body };
 }
 
-function buildDetailBody(overrides: { song?: Record<string, unknown> | null } = {}) {
+function buildDetailBody(
+  overrides: { song?: Record<string, unknown> | null; lead?: Record<string, unknown> } = {},
+) {
   return {
     lead: {
       id: "lead-1",
@@ -22,6 +24,7 @@ function buildDetailBody(overrides: { song?: Record<string, unknown> | null } = 
       status: "COMPLETED",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
+      ...overrides.lead,
     },
     lyricsHistory: [
       {
@@ -91,6 +94,8 @@ describe("LeadDetailView", () => {
 
     expect(await screen.findByText("jane@example.com")).toBeInTheDocument();
     expect(screen.getByText("+1 555 123 4567")).toBeInTheDocument();
+    expect(screen.getByText("6 meses")).toBeInTheDocument();
+    expect(screen.getByText("Austin")).toBeInTheDocument();
     expect(screen.getAllByText("Completada").length).toBe(2);
     expect(screen.getByText(/Duración: 2:05/)).toBeInTheDocument();
     expect(screen.getByText(/Enviado el/)).toBeInTheDocument();
@@ -100,6 +105,20 @@ describe("LeadDetailView", () => {
     const downloadLink = screen.getByText("Descargar canción").closest("a");
     expect(downloadLink).toHaveAttribute("href", "https://cdn.example.com/song.mp3");
     expect(downloadLink).toHaveAttribute("download");
+  });
+
+  it("shows a placeholder for baby age and city when neither was collected", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(buildDetailBody({ lead: { babyAge: null, city: null } })),
+      ) as unknown as typeof fetch;
+
+    render(<LeadDetailView leadId="lead-1" />);
+
+    expect(await screen.findByText("jane@example.com")).toBeInTheDocument();
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows a not-found message for a missing lead", async () => {

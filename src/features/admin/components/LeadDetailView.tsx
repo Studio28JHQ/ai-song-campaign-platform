@@ -97,6 +97,12 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
             <dd className="text-foreground">{lead.babyName}</dd>
           </div>
           <div>
+            <dt className="text-label text-muted-foreground">Edad del bebé</dt>
+            <dd className="text-foreground">
+              {lead.babyAge != null ? `${lead.babyAge} meses` : "—"}
+            </dd>
+          </div>
+          <div>
             <dt className="text-label text-muted-foreground">Correo</dt>
             <dd className="text-foreground">{lead.email}</dd>
           </div>

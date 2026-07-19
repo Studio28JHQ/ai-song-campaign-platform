@@ -47,6 +47,8 @@ function fakeRow(overrides: Record<string, unknown> = {}) {
     babyName: "Baby Doe",
     email: "jane@example.com",
     phone: "+1 555 123 4567",
+    babyAge: 6,
+    city: "Austin",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     lyricsStatus: "APPROVED",
     songStatus: "COMPLETED",
@@ -114,6 +116,17 @@ describe("GET /api/admin/leads/export", () => {
     expect(body).toContain("'@SUM(1+1)");
   });
 
+  it("escapes a formula-triggering city value the same way as every other cell", async () => {
+    mockStreamRows.mockImplementation(async function* () {
+      yield [fakeRow({ city: "=cmd|'/c calc'!A1" })];
+    });
+
+    const response = await GET(getRequest());
+    const body = await readBody(response);
+
+    expect(body).toContain("'=cmd|'/c calc'!A1");
+  });
+
   it("streams a CSV with the header row and one line per lead", async () => {
     mockStreamRows.mockImplementation(async function* () {
       yield [fakeRow()];
@@ -129,12 +142,29 @@ describe("GET /api/admin/leads/export", () => {
     const lines = body.trim().split("\n");
 
     expect(lines[0]).toBe(
-      "Lead,Baby,Email,Phone,Created Date,Lyrics Status,Song Status,Email Status,Generation Date,Delivery Date",
+      "Lead,Baby,Email,Phone,Baby Age,City,Created Date,Lyrics Status,Song Status,Email Status,Generation Date,Delivery Date",
     );
     expect(lines[1]).toContain("Jane Doe");
     expect(lines[1]).toContain("jane@example.com");
     expect(lines[1]).toContain("COMPLETED");
     expect(lines[1]).toContain("SENT");
+    expect(lines[1]).toContain("6");
+    expect(lines[1]).toContain("Austin");
+  });
+
+  it("includes Baby Age and City as empty cells when null, appended right after Phone", async () => {
+    mockStreamRows.mockImplementation(async function* () {
+      yield [fakeRow({ babyAge: null, city: null })];
+    });
+
+    const response = await GET(getRequest());
+    const body = await readBody(response);
+    const lines = body.trim().split("\n");
+    const cells = lines[1].split(",");
+
+    // Column order: Lead(0), Baby(1), Email(2), Phone(3), Baby Age(4), City(5), ...
+    expect(cells[4]).toBe("");
+    expect(cells[5]).toBe("");
   });
 
   it("streams multiple batches as they arrive, without buffering them all first", async () => {

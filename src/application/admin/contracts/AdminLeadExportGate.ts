@@ -6,6 +6,8 @@ export interface AdminLeadExportRow {
   babyName: string;
   email: string;
   phone: string | null;
+  babyAge: number | null;
+  city: string | null;
   createdAt: Date;
   lyricsStatus: "NONE" | "GENERATED" | "APPROVED";
   /** Public song-status vocabulary (PENDING/GENERATING/COMPLETED/FAILED), or `null` if no song has been started yet. */

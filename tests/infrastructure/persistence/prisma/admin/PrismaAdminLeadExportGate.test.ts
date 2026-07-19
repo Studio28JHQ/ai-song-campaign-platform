@@ -10,6 +10,8 @@ function buildRecord(overrides: Record<string, unknown> = {}) {
     babyName: "Baby Doe",
     email: "jane@example.com",
     phone: "+1 555 123 4567",
+    babyAge: 6,
+    city: "Austin",
     createdAt: now,
     lyrics: [{ approved: true }],
     song: { status: "COMPLETED", generatedAt: now, emailedAt: now },
@@ -37,6 +39,8 @@ describe("PrismaAdminLeadExportGate.streamRows", () => {
       babyName: "Baby Doe",
       email: "jane@example.com",
       phone: "+1 555 123 4567",
+      babyAge: 6,
+      city: "Austin",
       createdAt: now,
       lyricsStatus: "APPROVED",
       songStatus: "COMPLETED",
@@ -44,6 +48,20 @@ describe("PrismaAdminLeadExportGate.streamRows", () => {
       generatedAt: now,
       emailedAt: now,
     });
+  });
+
+  it("maps null babyAge and city through unchanged", async () => {
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([buildRecord({ babyAge: null, city: null })])
+      .mockResolvedValueOnce([]);
+    const client = { lead: { findMany } } as unknown as PrismaClient;
+    const gate = new PrismaAdminLeadExportGate(client);
+
+    const batches = await collect(gate.streamRows({}, 500));
+
+    expect(batches[0][0].babyAge).toBeNull();
+    expect(batches[0][0].city).toBeNull();
   });
 
   it("reports lyricsStatus NONE when no lyrics exist, and GENERATED when none are approved", async () => {

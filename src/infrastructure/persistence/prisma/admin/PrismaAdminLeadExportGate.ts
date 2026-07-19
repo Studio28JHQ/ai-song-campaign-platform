@@ -56,6 +56,8 @@ export class PrismaAdminLeadExportGate implements AdminLeadExportGate {
         babyName: record.babyName,
         email: record.email,
         phone: record.phone,
+        babyAge: record.babyAge,
+        city: record.city,
         createdAt: record.createdAt,
         lyricsStatus: this.toLyricsStatus(record.lyrics),
         songStatus: record.song ? toPublicSongStatus(record.song.status) : null,

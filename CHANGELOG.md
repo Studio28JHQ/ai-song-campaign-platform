@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - 2026-08-17
+
+### Added
+
+- **Baby Age and City in admin reporting**: both fields were already collected at registration, validated, and persisted, but were not surfaced in reporting. Admin → Lead Detail now displays "Edad del bebé" (formatted as, e.g., "6 meses", or "—" when not collected) alongside the existing City field. The Leads CSV export now includes two new columns, `Baby Age` and `City`, appended immediately after `Phone` — existing column order and values are unchanged, and both null values export as empty cells through the same CSV/formula-injection escaping already applied to every other cell. No change to filtering, audit logging, response format, architecture, database schema, or business logic.
+
 ## [1.25.1] - 2026-08-16
 
 ### Fixed
