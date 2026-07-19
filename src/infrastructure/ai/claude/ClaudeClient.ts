@@ -1,6 +1,6 @@
 import { appConfig } from "@/config/app";
 import { ExternalApiError } from "@/shared/errors";
-import { httpRequest } from "@/shared/http";
+import { httpRequest, type HttpRequestAttemptInfo } from "@/shared/http";
 import { logger } from "@/shared/logger/logger";
 import type { ClaudeMessageResponse } from "./types";
 
@@ -9,9 +9,32 @@ const CLAUDE_API_VERSION = "2023-06-01";
 const CLAUDE_MODEL = "claude-sonnet-5";
 const CLAUDE_MAX_TOKENS = 1024;
 
+// Claude-specific override of the shared HTTP default (`HTTP_DEFAULT_TIMEOUT_MS`,
+// 10s — sized for the platform's other, much faster providers: Turnstile,
+// Resend, Mureka's submit call). Live-measured Anthropic latency for this
+// prompt is ~12-14s, so 10s aborted every single attempt. 60s applies only
+// to this client — every other provider keeps using the shared default,
+// unchanged.
+const CLAUDE_TIMEOUT_MS = 60_000;
+
 export interface ClaudeMessageRequest {
   system: string;
   user: string;
+}
+
+/**
+ * Not `error instanceof Error && error.name === "AbortError"` — whether
+ * `DOMException` (what an aborted `fetch` actually rejects with) extends
+ * `Error` is environment-dependent (true in Node, false in jsdom), so an
+ * `instanceof Error` guard would silently miss real aborts in some
+ * runtimes. Checking `.name` directly works regardless.
+ */
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
 }
 
 /**
@@ -24,6 +47,14 @@ export interface ClaudeMessageRequest {
  */
 export class ClaudeClient {
   async sendMessage(request: ClaudeMessageRequest): Promise<ClaudeMessageResponse> {
+    // Mutated (never reassigned) by `onAttempt` below — avoids a `let`
+    // narrowed to `null` at every later read, since it's only ever
+    // reassigned inside a closure TypeScript can't order against.
+    const lastAttempt: { attempt: number | undefined; elapsedMs: number | undefined } = {
+      attempt: undefined,
+      elapsedMs: undefined,
+    };
+
     const response = await httpRequest(CLAUDE_API_URL, {
       method: "POST",
       headers: {
@@ -37,6 +68,24 @@ export class ClaudeClient {
         system: request.system,
         messages: [{ role: "user", content: request.user }],
       }),
+      // Claude-specific timeout override only — `retries`/`retryDelayMs`
+      // are deliberately left unset so both keep using the shared
+      // defaults (`HTTP_DEFAULT_RETRY_COUNT`/`HTTP_DEFAULT_RETRY_DELAY_MS`),
+      // unchanged. See `CLAUDE_TIMEOUT_MS`.
+      timeoutMs: CLAUDE_TIMEOUT_MS,
+      onAttempt: (info: HttpRequestAttemptInfo) => {
+        lastAttempt.attempt = info.attempt + 1;
+        lastAttempt.elapsedMs = info.elapsedMs;
+
+        if (isAbortError(info.error)) {
+          logger.error("Claude request aborted (timeout exceeded)", {
+            timeoutMs: CLAUDE_TIMEOUT_MS,
+            elapsedMs: info.elapsedMs,
+            attempt: info.attempt + 1,
+            abortErrorConfirmed: true,
+          });
+        }
+      },
     });
 
     if (!response.ok) {
@@ -59,13 +108,47 @@ export class ClaudeClient {
       });
     }
 
+    let body: ClaudeMessageResponse;
+
     try {
-      return (await response.json()) as ClaudeMessageResponse;
+      body = (await response.json()) as ClaudeMessageResponse;
     } catch (cause) {
       throw new ExternalApiError("Claude API response body was not valid JSON.", {
         code: "claude.invalid_response_body",
         cause,
       });
     }
+
+    // Response-integrity check: a 2xx status and parseable JSON aren't
+    // proof the body is actually usable — verify the one structural
+    // expectation this class's own contract documents (a `content` array)
+    // before accepting it. Anything about the *content* of that array
+    // (the moderation/lyrics JSON inside its text block) is
+    // `ResponseParser`'s job, not this one's — this only guards against an
+    // incomplete/malformed envelope, and routes through the exact same
+    // `ExternalApiError` → 503 "claude_unavailable" flow as every other
+    // failure here.
+    if (!Array.isArray(body.content)) {
+      throw new ExternalApiError("Claude API response was missing the expected content array.", {
+        code: "claude.incomplete_response",
+        context: { stopReason: body.stop_reason },
+      });
+    }
+
+    logger.info("Claude request completed", {
+      durationMs: lastAttempt.elapsedMs,
+      attempt: lastAttempt.attempt,
+      model: CLAUDE_MODEL,
+      stopReason: body.stop_reason,
+      inputTokens: body.usage?.input_tokens,
+      outputTokens: body.usage?.output_tokens,
+      thinkingTokens: body.usage?.output_tokens_details?.thinking_tokens,
+      totalTokens:
+        body.usage?.input_tokens !== undefined && body.usage?.output_tokens !== undefined
+          ? body.usage.input_tokens + body.usage.output_tokens
+          : undefined,
+    });
+
+    return body;
   }
 }

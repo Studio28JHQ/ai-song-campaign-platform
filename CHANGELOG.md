@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.1] - 2026-08-25
+
+### Fixed
+
+- **Every lyrics generation request aborting with `AbortError` and returning 503**: `ClaudeClient` used the shared HTTP default timeout (`HTTP_DEFAULT_TIMEOUT_MS`, 10s — sized for the platform's much faster providers: Turnstile, Resend, Mureka's submit call), but live-measured Anthropic latency for this prompt is ~12–17s, so every attempt — including all retries — aborted before Anthropic ever finished responding. `ClaudeClient.sendMessage()` now passes an explicit `timeoutMs: 60_000` override to `httpRequest()`, scoped to Claude only; `retries`/`retryDelayMs` are left unset so both keep using the unchanged shared defaults, and no other provider is affected (`HTTP_DEFAULT_TIMEOUT_MS` itself was not touched). Live-verified against the real Anthropic API: 4 consecutive requests all completed in 13.6–17s with zero `AbortError`s (previously 100% failure).
+
+### Changed
+
+- **Claude request diagnostics** (`ClaudeClient.ts`): every successful request now logs duration, attempt number, model, `stop_reason`, and input/output/thinking/total token counts (never prompt or user content); every aborted attempt logs the timeout value, elapsed time, attempt number, and an explicit AbortError confirmation. `src/shared/http/index.ts` gained an optional, purely additive `onAttempt` diagnostics hook to make this possible — it never influences retry count, backoff timing, or any other control flow, so every existing caller that omits it is unaffected.
+- **Response-integrity check**: `ClaudeClient` now verifies Anthropic's response actually contains the expected `content` array before accepting it; an incomplete/malformed envelope routes through the same existing `ExternalApiError` → 503 `claude_unavailable` flow, with no user-facing message changed.
+- Note: live verification also surfaced a separate, previously-masked, highly-reproducible issue — `max_tokens: 1024` is being fully consumed (in some responses, entirely by "thinking" tokens) before Claude finishes writing the JSON response, truncating it. This is unrelated to the timeout and was invisible before this fix (the abort always happened first); it is not addressed here and needs its own follow-up.
+
 ## [1.27.0] - 2026-08-24
 
 ### Added

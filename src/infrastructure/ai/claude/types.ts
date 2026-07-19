@@ -7,6 +7,16 @@ export interface ClaudeContentBlock {
 /** The subset of Anthropic's Messages API response shape this integration cares about. */
 export interface ClaudeMessageResponse {
   content: ClaudeContentBlock[];
+  /** Optional here only for lenient typing against a possibly-malformed body — see `ClaudeClient`'s integrity check. */
+  stop_reason?: string | null;
+  model?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    output_tokens_details?: {
+      thinking_tokens?: number;
+    };
+  };
 }
 
 /** The structured result our prompt requests — see `PromptBuilder`. */
