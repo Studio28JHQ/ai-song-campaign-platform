@@ -9,7 +9,7 @@ const FADE_DURATION_MS = 300;
 const MESSAGE_TEMPLATES = [
   "✨ Estamos conociendo un poquito mejor a {{babyName}} para que su canción sea única.",
   "🎵 Buscando las palabras perfectas para contar su historia.",
-  "💜 Cada canción se escribe desde cero especialmente para ella.",
+  "💜 Cada canción se escribe desde cero especialmente para ella/él.",
   "🌟 Queremos que cuando la escuches, sientas que fue creada solo para tu familia.",
   "🎶 Ajustando el ritmo y el estilo para que cada verso tenga vida.",
   "💫 La magia lleva un poquito de tiempo... pero vale la pena esperar.",

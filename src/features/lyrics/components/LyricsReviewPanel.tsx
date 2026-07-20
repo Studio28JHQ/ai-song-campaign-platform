@@ -47,7 +47,7 @@ export function LyricsReviewPanel({
       <LyricsContent content={content} />
 
       <p className="text-center text-caption text-muted-foreground">
-        Intentos restantes: {remainingAttempts}
+        Intentos restantes: {Math.max(0, remainingAttempts - 1)}
       </p>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
