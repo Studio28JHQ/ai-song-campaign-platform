@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.1] - 2026-08-28
+
+### Investigated
+
+- **"This song's approved lyrics have no musical direction to generate from" — not a code defect.** Traced `musicDirection`'s complete lifecycle (Claude `ResponseParser`'s required, bounded, non-nullable-by-refine schema → `ClaudeLyricsService` → `GenerateLyricsForLeadUseCase` → `Lyrics.create()`'s own `requireNonEmpty` guard → `LyricsMapper`/`PrismaLyricsRepository` — no explicit `select` anywhere, always the full row → `ApproveLyricsUseCase` → `GenerateSongUseCase` → `GenerationDispatcher`) and found every layer correctly enforces and preserves it; a fresh, live end-to-end registration → lyrics generation → approval confirmed `hasMusicMood`/`hasMusicDirection: true` at the exact point `GenerationDispatcher` builds the Mureka prompt. The only Song that ever threw this error belongs to a Lyrics row created 2026-07-14 — before the AI Musical Direction migration (`20260811090000_ai_musical_direction`) was deployed to this database — a legitimate legacy row the schema's own nullable columns and this guard clause were always designed to reject rather than crash on deeper in the pipeline. Nothing was changed in the generation pipeline itself.
+- Live validation also surfaced a separate, pre-existing, unrelated issue: real Mureka submissions are currently rejected with "invalid payload" (confirmed on 3 of 3 recent attempts, all with `musicMood`/`musicDirection` correctly present) — out of this investigation's scope; needs its own follow-up.
+
+### Added
+
+- **Temporary diagnostic log** in `GenerationDispatcher` — logs `leadId`, `lyricsId`, `hasMusicMood`, `hasMusicDirection` (booleans/ids only, never lyrics or user content) immediately before building the Mureka prompt, to make any future recurrence immediately diagnosable without a database query.
+
 ## [1.28.0] - 2026-08-27
 
 ### Changed

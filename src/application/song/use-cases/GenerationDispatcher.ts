@@ -107,6 +107,16 @@ export class GenerationDispatcher {
         });
       }
 
+      // TEMPORARY — diagnostic only, remove once the legacy-lyrics
+      // (pre-AI-Musical-Direction) backlog is cleared. Never logs lyrics
+      // or any other user content — booleans and ids only.
+      logger.info("GenerationDispatcher: preparing Mureka prompt inputs", {
+        leadId: lyrics.leadId,
+        lyricsId: lyrics.id,
+        hasMusicMood: Boolean(lyrics.musicMood),
+        hasMusicDirection: Boolean(lyrics.musicDirection),
+      });
+
       // Sprint v1.1 — AI Musical Direction. Only `null` for a Lyrics row
       // created before this sprint (see `Lyrics.musicMood`'s doc
       // comment) — every row created going forward always has them.
