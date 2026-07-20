@@ -219,7 +219,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
 
         <CampaignField
           label="Ciudad"
-          placeholder="Ej. Guadalajara"
+          placeholder="Ej. Quito"
           autoComplete="address-level2"
           maxLength={FIELD_LIMITS.city}
           error={translateFieldError(errors.city?.message)}
@@ -240,7 +240,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
 
         <CampaignField
           label="Teléfono"
-          placeholder="+52 55 1234 5678"
+          placeholder="+593 9 9912 3456"
           type="tel"
           autoComplete="tel"
           maxLength={FIELD_LIMITS.phone}

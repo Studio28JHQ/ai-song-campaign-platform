@@ -147,7 +147,7 @@ export function LeadSearchTable() {
               id="filter-city"
               value={city}
               onChange={(event) => setCity(event.target.value)}
-              placeholder="Ej. Guadalajara"
+              placeholder="Ej. Quito"
             />
           </div>
         </div>
