@@ -15,6 +15,15 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.28.6] - 2026-07-20
+
+### Fixed
+
+- **Reverted the [1.28.4] self-perpetuating polling chain — incompatible with the production serverless execution model.** `GET /api/internal/pipeline/run` no longer reschedules itself via `after()` + an in-process `sleep()`; that pattern requires the serverless instance to stay alive for several seconds _after_ its response has already been sent, which this app's production execution model does not reliably guarantee — the callback was silently cut short before ever reaching the self-call, so a submitted song still only ever advanced one step per invocation and then stalled until some unrelated request happened to hit the endpoint again (diagnosed in the prior investigation; root cause confirmed by code trace, not by reproducing the production environment directly). The endpoint now runs `GenerationDispatcher`/`GenerationPoller` exactly once per invocation, with no looping, no draining, and no rescheduling — the same shape it had before [1.28.4].
+  The scheduled GitHub Actions workflow (`.github/workflows/song-pipeline.yml`, every 10 minutes) is now the **only** periodic mechanism a song's completion depends on. `triggerPipelineTick` (still used by `/api/lyrics/approve`, `/api/song/generate`, `/api/admin/songs/[songId]/retry`) is now purely a responsiveness optimization — one immediate, single-shot nudge when a real user request is already in flight — never a requirement for completion.
+  Workflow hardening: the workflow now fails fast with a clear `::error::` if `CRON_SECRET` is empty/unset, mirroring its existing `APP_URL` check, instead of silently sending an empty `Authorization` header and getting an opaque `401` (the exact failure mode confirmed, via `gh run list`/`gh run view`, on every scheduled run since at least 2026-07-17 — the GitHub repository secret itself is still unset; see "Remaining manual configuration" in this fix's own investigation notes, not resolved here per instruction not to modify repository secrets).
+  Live end-to-end re-verified against the reverted behavior: approving lyrics immediately dispatches the song (single `triggerPipelineTick` call); with zero further requests, a song sits `GENERATING` indefinitely (confirmed static after 90+ seconds — proving no in-process chain remains); a single explicit call to `/api/internal/pipeline/run` (modeling exactly what the scheduled workflow does) is sufficient to complete it; three sequential leads queued and completed correctly across separate, independent ticks with zero automatic chaining between them, each with a distinct `providerTaskId` (no duplicate Mureka submissions).
+
 ## [1.28.5] - 2026-07-20
 
 ### Fixed

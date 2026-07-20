@@ -99,7 +99,7 @@ The pipeline scheduler (RC-2 — Production Hardening) is `.github/workflows/son
 | `CRON_SECRET` | Secret   | Same value as the `CRON_SECRET` environment variable configured in Vercel. Never hardcoded in the workflow file — read via `${{ secrets.CRON_SECRET }}`. |
 | `APP_URL`     | Variable | The deployed application's base URL (e.g. `https://campaign.example.com`). Not sensitive, so it's a repository **variable**, not a secret.               |
 
-The workflow fails fast with a clear error if `APP_URL` isn't set, instead of silently calling an empty URL.
+The workflow fails fast with a clear error if `APP_URL` or `CRON_SECRET` isn't set, instead of silently calling an empty URL or sending an empty `Authorization` header (which the endpoint would otherwise just reject with an opaque `401`).
 
 **Schedule** — `*/10 * * * *` (every 10 minutes, UTC). GitHub Actions schedules are best-effort, same tolerance the queue already had under Vercel Cron.
 

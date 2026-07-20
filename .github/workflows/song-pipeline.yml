@@ -36,6 +36,11 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::The CRON_SECRET repository secret is not set (or is empty). This workflow is the only mechanism that advances the song queue without user traffic — see docs/Development/Environment.md."
+            exit 1
+          fi
+
           curl --fail-with-body --silent --show-error \
             --max-time 60 \
             --request GET \

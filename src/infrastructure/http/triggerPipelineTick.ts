@@ -2,8 +2,8 @@ import { appConfig } from "@/config/app";
 import { logger } from "@/shared/logger/logger";
 
 /**
- * Fires one authenticated call to the internal pipeline endpoint
- * (`GET /api/internal/pipeline/run`) — the single place
+ * Fires one authenticated, single-shot call to the internal pipeline
+ * endpoint (`GET /api/internal/pipeline/run`) — the single place
  * `GenerationDispatcher`/`GenerationPoller` are ever invoked from (see
  * that route). Every request-triggered call site
  * (`/api/lyrics/approve`, `/api/song/generate`,
@@ -11,13 +11,18 @@ import { logger } from "@/shared/logger/logger";
  * its own dispatcher/poller, so there is exactly one polling
  * implementation, not one per call site.
  *
- * Also how the pipeline keeps itself going once started (see
- * `/api/internal/pipeline/run`'s own self-reschedule): as long as a
- * song remains `GENERATING` or the queue isn't empty, that route calls
- * this same function again after a short delay, entirely independent
- * of any further user request. The external scheduler
- * (`.github/workflows/song-pipeline.yml`) remains a periodic safety net
- * on top of this, not the primary mechanism.
+ * Purely a responsiveness optimization: when a real user request is
+ * already in flight, it's worth immediately nudging the queue forward
+ * rather than waiting for the next scheduled tick. It must never be
+ * relied on for correctness — the only mechanism a song's completion
+ * actually depends on is the scheduled GitHub Actions workflow
+ * (`.github/workflows/song-pipeline.yml`), which calls this same
+ * endpoint on a fixed interval independent of any user traffic. An
+ * earlier version of this endpoint had itself call this function again
+ * after an in-process delay, self-perpetuating a chain of ticks — that
+ * was reverted (see `/api/internal/pipeline/run`'s doc comment) because
+ * it depended on the serverless instance surviving past the response,
+ * which this app's production execution model doesn't guarantee.
  *
  * `origin` must be the origin that is actually serving the current
  * request (`new URL(request.url).origin` at every call site) — never
@@ -25,8 +30,7 @@ import { logger } from "@/shared/logger/logger";
  * stable public domain used for user-facing links (see `buildAppUrl`)
  * and is deliberately never a preview/local URL, so using it here would
  * make a local dev server (or a preview deployment) silently call a
- * *different*, unrelated deployment instead of continuing its own
- * chain.
+ * *different*, unrelated deployment.
  *
  * Never throws — a failed trigger is logged and otherwise swallowed,
  * matching every other background call site in this codebase (a

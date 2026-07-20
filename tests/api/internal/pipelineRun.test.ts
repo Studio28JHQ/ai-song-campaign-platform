@@ -19,33 +19,6 @@ const mockClaimDelivery = vi.fn();
 const mockDownloadAudio = vi.fn();
 const mockUploadAudio = vi.fn();
 const mockResolveAudioUrl = vi.fn();
-const mockTriggerPipelineTick = vi.fn();
-
-// Polling reliability fix: this route reschedules itself via `after()`
-// (a self-call through `triggerPipelineTick`) whenever a tick actually
-// touched a song, so a submitted song keeps progressing to a terminal
-// state without depending on another request. Both are mocked so the
-// reschedule can be asserted without a real timer wait or network call.
-const capturedAfterCallbacks: Array<() => Promise<void>> = [];
-
-vi.mock("next/server", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("next/server")>();
-  return {
-    ...actual,
-    after: vi.fn((callback: () => Promise<void>) => {
-      capturedAfterCallbacks.push(callback);
-    }),
-  };
-});
-
-vi.mock("@/shared/utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/shared/utils")>();
-  return { ...actual, sleep: vi.fn().mockResolvedValue(undefined) };
-});
-
-vi.mock("@/infrastructure/http/triggerPipelineTick", () => ({
-  triggerPipelineTick: mockTriggerPipelineTick,
-}));
 
 vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => ({
   PrismaSongRepository: vi.fn().mockImplementation(function PrismaSongRepository() {
@@ -128,10 +101,8 @@ function getRequest(token?: string): Request {
 describe("GET /api/internal/pipeline/run", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedAfterCallbacks.length = 0;
     mockSongFindGenerating.mockResolvedValue(null);
     mockSongFindOldestQueued.mockResolvedValue(null);
-    mockTriggerPipelineTick.mockResolvedValue(undefined);
   });
 
   it("returns 401 with no Authorization header", async () => {
@@ -155,13 +126,7 @@ describe("GET /api/internal/pipeline/run", () => {
     expect(mockSongFindGenerating).toHaveBeenCalledTimes(2); // dispatcher + poller's findGenerating call each run once
   });
 
-  it("does not reschedule another tick when the queue is empty and nothing is generating", async () => {
-    await GET(getRequest(appConfig.internal.cronSecret));
-
-    expect(capturedAfterCallbacks).toHaveLength(0);
-  });
-
-  it("reschedules exactly one more tick, via triggerPipelineTick, when a song is still GENERATING", async () => {
+  it("polls a song still GENERATING exactly once, without scheduling anything further", async () => {
     const now = new Date();
     const generatingSong = Song.fromPersistence({
       id: "song-1",
@@ -189,17 +154,14 @@ describe("GET /api/internal/pipeline/run", () => {
     mockSongUpdate.mockImplementation(async (song: Song) => song);
 
     const response = await GET(getRequest(appConfig.internal.cronSecret));
+    const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(capturedAfterCallbacks).toHaveLength(1);
-    expect(mockTriggerPipelineTick).not.toHaveBeenCalled();
-
-    await capturedAfterCallbacks[0]();
-
-    expect(mockTriggerPipelineTick).toHaveBeenCalledTimes(1);
+    expect(body.poller).toEqual({ songId: "song-1", outcome: "pending" });
+    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("reschedules another tick when the dispatcher just claimed a queued song, so it gets polled next", async () => {
+  it("dispatches a queued song exactly once per invocation — completing it requires the next scheduled tick, not this same call", async () => {
     const now = new Date();
     const queuedSong = Song.fromPersistence({
       id: "song-1",
@@ -237,12 +199,12 @@ describe("GET /api/internal/pipeline/run", () => {
     const response = await GET(getRequest(appConfig.internal.cronSecret));
 
     expect(response.status).toBe(200);
+    // Claimed and submitted exactly once — never twice for the same
+    // song, and this invocation never polls the song it just claimed
+    // (that's the next tick's job, whenever the scheduler runs it).
     expect(mockSongClaimQueued).toHaveBeenCalledTimes(1);
-    expect(capturedAfterCallbacks).toHaveLength(1);
-
-    await capturedAfterCallbacks[0]();
-
-    expect(mockTriggerPipelineTick).toHaveBeenCalledTimes(1);
+    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
+    expect(mockPollGenerationStatus).not.toHaveBeenCalled();
   });
 
   it("returns 500 when the pipeline throws an unexpected error", async () => {
