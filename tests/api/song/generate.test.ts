@@ -38,15 +38,8 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 };
 
 const mockIsActiveAndGenerationEnabled = vi.fn();
-const mockGetMoodDetails = vi.fn();
-const mockSubmitGeneration = vi.fn();
-const mockPollGenerationStatus = vi.fn();
-const mockClaimDelivery = vi.fn();
-const mockSendSongReadyEmail = vi.fn();
 const mockGetLeadSession = vi.fn();
-const mockDownloadAudio = vi.fn();
-const mockUploadAudio = vi.fn();
-const mockResolveAudioUrl = vi.fn();
+const mockTriggerPipelineTick = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope (see
 // node_modules/next/dist/server/after/after.js), which is exactly the
@@ -92,53 +85,17 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaCampaignGate", () => ({
   }),
 }));
 
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider", () => ({
-  PrismaMoodSunoPromptProvider: vi.fn().mockImplementation(function PrismaMoodSunoPromptProvider() {
-    return { getMoodDetails: mockGetMoodDetails };
-  }),
-}));
-
-vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
-  MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
-    return {
-      submitGeneration: mockSubmitGeneration,
-      pollGenerationStatus: mockPollGenerationStatus,
-    };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
-  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
-    return { download: mockDownloadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
-  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
-    return { upload: mockUploadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
-  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
-    return { resolve: mockResolveAudioUrl };
-  }),
-}));
-
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker", () => ({
-  PrismaEmailDeliveryTracker: vi.fn().mockImplementation(function PrismaEmailDeliveryTracker() {
-    return { claimDelivery: mockClaimDelivery };
-  }),
-}));
-
-vi.mock("@/infrastructure/email/ResendEmailService", () => ({
-  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
-    return { sendSongReadyEmail: mockSendSongReadyEmail };
-  }),
-}));
-
 vi.mock("@/infrastructure/auth/getLeadSession", () => ({
   getLeadSession: mockGetLeadSession,
+}));
+
+// The route no longer runs GenerationDispatcher/GenerationPoller
+// in-process — it only kicks off the self-sustaining pipeline chain
+// via `triggerPipelineTick` (see /api/internal/pipeline/run, the only
+// place those use cases actually run; covered by
+// tests/api/internal/pipelineRun.test.ts).
+vi.mock("@/infrastructure/http/triggerPipelineTick", () => ({
+  triggerPipelineTick: mockTriggerPipelineTick,
 }));
 
 const { POST } = await import("../../../app/api/song/generate/route");
@@ -227,17 +184,7 @@ describe("POST /api/song/generate", () => {
       return song;
     });
     mockIsActiveAndGenerationEnabled.mockResolvedValue(true);
-    mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
-    mockClaimDelivery.mockResolvedValue(true);
-    mockSendSongReadyEmail.mockResolvedValue(undefined);
-    mockDownloadAudio.mockResolvedValue({
-      bytes: new Uint8Array([1, 2, 3]),
-      contentType: "audio/mpeg",
-    });
-    mockUploadAudio.mockResolvedValue(undefined);
-    mockResolveAudioUrl.mockImplementation(
-      async (key: string) => `https://signed.example.com/${key}`,
-    );
+    mockTriggerPipelineTick.mockResolvedValue(undefined);
   });
 
   it("returns 401 when there is no active session, without touching the use case", async () => {
@@ -268,88 +215,30 @@ describe("POST /api/song/generate", () => {
       "The song has entered the generation queue. You will be notified by email once it is ready.",
     );
     expect(mockLeadRepository.findById).toHaveBeenCalledWith(lead.id);
-    // The provider must never be called synchronously as part of the request.
-    expect(mockSubmitGeneration).not.toHaveBeenCalled();
+    // The pipeline must never be triggered synchronously as part of the request.
+    expect(mockTriggerPipelineTick).not.toHaveBeenCalled();
   });
 
-  it("schedules background processing that eventually completes the song", async () => {
+  it("schedules the pipeline trigger in the background, which kicks off the self-sustaining chain", async () => {
+    // What actually happens once the chain is kicked off (dispatch,
+    // poll, complete, email) is GenerationDispatcher/GenerationPoller's
+    // and /api/internal/pipeline/run's responsibility — this route's
+    // only job is to place the first call. See
+    // tests/api/internal/pipelineRun.test.ts for the rest of the chain.
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
     const lyrics = buildApprovedLyrics(lead.id);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
-    mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
-    mockPollGenerationStatus.mockResolvedValue({
-      status: "completed",
-      providerSongId: "suno-123",
-      audioUrl: "https://provider.example.com/short-lived.mp3",
-      duration: 120,
-    });
 
     const response = await POST(postRequest());
     expect(response.status).toBe(202);
     expect(capturedAfterCallbacks).toHaveLength(1);
+    expect(mockTriggerPipelineTick).not.toHaveBeenCalled();
 
     await runScheduledBackgroundWork();
 
-    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
-    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
-    expect(mockSongRepository.update).toHaveBeenCalled();
-    const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
-    expect(lastUpdateCall.status).toBe("COMPLETED");
-
-    // Exactly one email, sent to the lead, once the song completes.
-    expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
-    expect(mockSendSongReadyEmail).toHaveBeenCalledTimes(1);
-    expect(mockSendSongReadyEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "jane@example.com",
-        audioUrl: expect.stringContaining("https://signed.example.com/"),
-      }),
-    );
-  });
-
-  it("never sends an email when the delivery claim was already taken (duplicate prevention)", async () => {
-    const lead = buildLead();
-    mockGetLeadSession.mockResolvedValue(lead.id);
-    mockLeadRepository.findById.mockResolvedValue(lead);
-    const lyrics = buildApprovedLyrics(lead.id);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
-    mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
-    mockPollGenerationStatus.mockResolvedValue({
-      status: "completed",
-      providerSongId: "suno-123",
-      audioUrl: "https://provider.example.com/short-lived.mp3",
-      duration: 120,
-    });
-    mockClaimDelivery.mockResolvedValue(false);
-
-    await POST(postRequest());
-    await runScheduledBackgroundWork();
-
-    expect(mockClaimDelivery).toHaveBeenCalledTimes(1);
-    expect(mockSendSongReadyEmail).not.toHaveBeenCalled();
-  });
-
-  it("persists a FAILED status when the provider fails in the background, without crashing, and never sends an email", async () => {
-    const lead = buildLead();
-    mockGetLeadSession.mockResolvedValue(lead.id);
-    mockLeadRepository.findById.mockResolvedValue(lead);
-    const lyrics = buildApprovedLyrics(lead.id);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
-    mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockSubmitGeneration.mockRejectedValue(new Error("Mureka API responded with status 503."));
-
-    const response = await POST(postRequest());
-    expect(response.status).toBe(202);
-
-    await expect(runScheduledBackgroundWork()).resolves.toBeUndefined();
-
-    const lastUpdateCall = mockSongRepository.update.mock.calls.at(-1)?.[0] as Song;
-    expect(lastUpdateCall.status).toBe("FAILED");
-    expect(mockSendSongReadyEmail).not.toHaveBeenCalled();
+    expect(mockTriggerPipelineTick).toHaveBeenCalledTimes(1);
   });
 
   it("returns 404 when the lead is not found", async () => {

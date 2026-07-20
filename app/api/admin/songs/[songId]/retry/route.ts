@@ -1,20 +1,9 @@
 import { NextResponse, after } from "next/server";
-import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
-import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import { RetryFailedSongUseCase } from "@/application/admin/use-cases/RetryFailedSongUseCase";
-import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
-import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
-import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
-import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
-import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
-import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
-import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
-import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
-import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
-import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
+import { triggerPipelineTick } from "@/infrastructure/http/triggerPipelineTick";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 
@@ -22,52 +11,29 @@ import { logger } from "@/shared/logger/logger";
  * POST /api/admin/songs/[songId]/retry — the "Retry" operational
  * recovery action (see docs/Product/User_Flow.md), available only for a
  * `FAILED` song. Resets the existing row to `QUEUED` synchronously, then
- * schedules the same Song Queue dispatcher+poller a brand-new song uses
- * (`GenerationDispatcher`/`GenerationPoller`, via `after()`) — it never
- * regenerates lyrics, never consumes another attempt, and never creates
- * a second Song row, since it reuses the same `songId` throughout. The
- * dispatcher itself picks the oldest `QUEUED` song rather than being
- * told which one to process, so retrying is simply re-queueing (see
- * PROJECT_MANIFEST.md — Architecture exception, Sprint 7.5). See
- * docs/Architecture/System_Architecture.md — Operational Recovery.
+ * kicks off the same self-sustaining pipeline a brand-new song uses
+ * (`triggerPipelineTick`, via `after()` — see
+ * `/api/internal/pipeline/run`, the only place
+ * `GenerationDispatcher`/`GenerationPoller` ever actually run) — it
+ * never regenerates lyrics, never consumes another attempt, and never
+ * creates a second Song row, since it reuses the same `songId`
+ * throughout. The dispatcher itself picks the oldest `QUEUED` song
+ * rather than being told which one to process, so retrying is simply
+ * re-queueing (see PROJECT_MANIFEST.md — Architecture exception, Sprint
+ * 7.5). See docs/Architecture/System_Architecture.md — Operational
+ * Recovery.
  */
 
 const songRepository = new PrismaSongRepository();
-const lyricsRepository = new PrismaLyricsRepository();
-const leadRepository = new PrismaLeadRepository();
-const moodProvider = new PrismaMoodSunoPromptProvider();
-const songGenerator = new MurekaSongService();
-const emailSender = new ResendEmailService();
-const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
-const campaignGate = new PrismaCampaignGate();
 const auditLogRepository = new PrismaAuditLogRepository();
 
 const retryFailedSongUseCase = new RetryFailedSongUseCase(songRepository, auditLogRepository);
-
-const generationDispatcher = new GenerationDispatcher(
-  songRepository,
-  lyricsRepository,
-  moodProvider,
-  songGenerator,
-);
-
-const generationPoller = new GenerationPoller(
-  songRepository,
-  songGenerator,
-  new HttpAudioDownloader(),
-  new CloudflareR2Storage(),
-  new R2AudioUrlResolver(),
-  leadRepository,
-  emailSender,
-  emailDeliveryTracker,
-  campaignGate,
-);
 
 interface RouteContext {
   params: Promise<{ songId: string }>;
 }
 
-export async function POST(_request: Request, context: RouteContext): Promise<NextResponse> {
+export async function POST(request: Request, context: RouteContext): Promise<NextResponse> {
   const { songId } = await context.params;
 
   if (!songId) {
@@ -84,18 +50,11 @@ export async function POST(_request: Request, context: RouteContext): Promise<Ne
 
     // Same "respond now, generate in the background" pattern as
     // POST /api/song/generate — the admin is never made to wait for the
-    // music provider.
-    after(async () => {
-      try {
-        await generationDispatcher.execute();
-        await generationPoller.execute();
-      } catch (error) {
-        logger.error("Background song retry failed", {
-          songId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
+    // music provider. `triggerPipelineTick` never throws. This
+    // request's own origin (not `appConfig.url`) is what the self-call
+    // targets — see `triggerPipelineTick`.
+    const origin = new URL(request.url).origin;
+    after(() => triggerPipelineTick(origin));
 
     return NextResponse.json({ songId, status: result.song.status }, { status: 202 });
   } catch (error) {

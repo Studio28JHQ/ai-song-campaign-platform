@@ -6,20 +6,8 @@ import { SongStatus } from "@/domain/song/types";
 const mockGetAdminSession = vi.fn();
 const mockSongFindById = vi.fn();
 const mockSongUpdate = vi.fn();
-const mockSongFindGenerating = vi.fn();
-const mockSongFindOldestQueued = vi.fn();
-const mockSongClaimQueued = vi.fn();
 const mockAuditCreate = vi.fn();
-const mockSubmitGeneration = vi.fn();
-const mockPollGenerationStatus = vi.fn();
-const mockLyricsFindById = vi.fn();
-const mockGetMoodDetails = vi.fn();
-const mockLeadFindById = vi.fn();
-const mockSendSongReadyEmail = vi.fn();
-const mockClaimDelivery = vi.fn();
-const mockDownloadAudio = vi.fn();
-const mockUploadAudio = vi.fn();
-const mockResolveAudioUrl = vi.fn();
+const mockTriggerPipelineTick = vi.fn();
 
 const capturedAfterCallbacks: Array<() => Promise<void>> = [];
 
@@ -42,9 +30,6 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => (
     return {
       findById: mockSongFindById,
       update: mockSongUpdate,
-      findGenerating: mockSongFindGenerating,
-      findOldestQueued: mockSongFindOldestQueued,
-      claimQueued: mockSongClaimQueued,
     };
   }),
 }));
@@ -55,61 +40,13 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
   }),
 }));
 
-vi.mock("@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository", () => ({
-  PrismaLyricsRepository: vi.fn().mockImplementation(function PrismaLyricsRepository() {
-    return { findById: mockLyricsFindById };
-  }),
-}));
-
-vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
-  PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
-    return { findById: mockLeadFindById };
-  }),
-}));
-
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider", () => ({
-  PrismaMoodSunoPromptProvider: vi.fn().mockImplementation(function PrismaMoodSunoPromptProvider() {
-    return { getMoodDetails: mockGetMoodDetails };
-  }),
-}));
-
-vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
-  MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
-    return {
-      submitGeneration: mockSubmitGeneration,
-      pollGenerationStatus: mockPollGenerationStatus,
-    };
-  }),
-}));
-
-vi.mock("@/infrastructure/email/ResendEmailService", () => ({
-  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
-    return { sendSongReadyEmail: mockSendSongReadyEmail };
-  }),
-}));
-
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker", () => ({
-  PrismaEmailDeliveryTracker: vi.fn().mockImplementation(function PrismaEmailDeliveryTracker() {
-    return { claimDelivery: mockClaimDelivery };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
-  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
-    return { download: mockDownloadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
-  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
-    return { upload: mockUploadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
-  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
-    return { resolve: mockResolveAudioUrl };
-  }),
+// The route no longer runs GenerationDispatcher/GenerationPoller
+// in-process — it only kicks off the self-sustaining pipeline chain
+// via `triggerPipelineTick` (see /api/internal/pipeline/run, the only
+// place those use cases actually run; covered by
+// tests/api/internal/pipelineRun.test.ts).
+vi.mock("@/infrastructure/http/triggerPipelineTick", () => ({
+  triggerPipelineTick: mockTriggerPipelineTick,
 }));
 
 const { POST } = await import("../../../app/api/admin/songs/[songId]/retry/route");
@@ -148,34 +85,13 @@ function fakeFailedSong(): Song {
 }
 
 describe("POST /api/admin/songs/[songId]/retry", () => {
-  let updatedSong: Song | undefined;
-  // See the identical comment in tests/api/song/generate.test.ts.
-  let persistedStatus: SongStatus | undefined;
-
   beforeEach(() => {
     vi.clearAllMocks();
     capturedAfterCallbacks.length = 0;
-    updatedSong = undefined;
-    persistedStatus = undefined;
     mockGetAdminSession.mockResolvedValue({ adminId: "admin-1", email: "admin@example.com" });
-    mockSongUpdate.mockImplementation(async (song: Song) => {
-      updatedSong = song;
-      persistedStatus = song.status;
-      return song;
-    });
+    mockSongUpdate.mockImplementation(async (song: Song) => song);
     mockAuditCreate.mockImplementation(async (entry: unknown) => entry);
-    mockSongFindGenerating.mockImplementation(async () =>
-      updatedSong?.status === SongStatus.GENERATING ? updatedSong : null,
-    );
-    mockSongFindOldestQueued.mockImplementation(async () =>
-      updatedSong?.status === SongStatus.QUEUED ? updatedSong : null,
-    );
-    mockSongClaimQueued.mockImplementation(async (song: Song) => {
-      if (persistedStatus !== SongStatus.QUEUED) return null;
-      updatedSong = song;
-      persistedStatus = song.status;
-      return song;
-    });
+    mockTriggerPipelineTick.mockResolvedValue(undefined);
   });
 
   it("returns 202 with QUEUED status for a FAILED song, and schedules background regeneration", async () => {
@@ -198,46 +114,21 @@ describe("POST /api/admin/songs/[songId]/retry", () => {
     expect(capturedAfterCallbacks).toHaveLength(1);
   });
 
-  it("reuses the existing lyrics/mood and never regenerates lyrics when the background job runs", async () => {
+  it("schedules the pipeline trigger in the background, which kicks off the self-sustaining chain", async () => {
+    // What actually happens once the chain is kicked off (dispatch,
+    // poll, complete, email — reusing the existing lyrics/mood, never
+    // regenerating them) is GenerationDispatcher/GenerationPoller's and
+    // /api/internal/pipeline/run's responsibility — this route's only
+    // job is to place the first call, same as every other call site.
+    // See tests/api/internal/pipelineRun.test.ts for the rest of the
+    // chain.
     mockSongFindById.mockResolvedValue(fakeFailedSong());
-    mockLyricsFindById.mockResolvedValue({
-      content: "Title\nVerse 1",
-      moodId: "mood-1",
-      musicMood: "Warm, joyful and playful.",
-      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
-      parentMessage: "A gentle song about bedtime.",
-      voice: "FEMALE",
-    });
-    mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
-    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
-    mockPollGenerationStatus.mockResolvedValue({
-      status: "completed",
-      providerSongId: "suno-123",
-      audioUrl: "https://cdn.example.com/song.mp3",
-      duration: 120,
-    });
-    mockDownloadAudio.mockResolvedValue({
-      bytes: new Uint8Array([1, 2, 3]),
-      contentType: "audio/mpeg",
-    });
-    mockUploadAudio.mockResolvedValue(undefined);
-    mockResolveAudioUrl.mockResolvedValue("https://signed.example.com/songs/song-1.mp3");
-    mockClaimDelivery.mockResolvedValue(true);
-    mockLeadFindById.mockResolvedValue({
-      email: { toString: () => "jane@example.com" },
-      parentName: "Jane Doe",
-      babyName: "Baby Doe",
-    });
 
     await POST(postRequest(), context("song-1"));
     const callback = capturedAfterCallbacks[0];
     await callback();
 
-    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
-    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
-    // No lyrics-creation call exists anywhere in this dependency graph —
-    // only `findById` (a read) is ever invoked.
-    expect(mockLyricsFindById).toHaveBeenCalledTimes(1);
+    expect(mockTriggerPipelineTick).toHaveBeenCalledTimes(1);
   });
 
   it("returns 422 when the song is not FAILED", async () => {

@@ -1,20 +1,12 @@
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { GenerateSongUseCase } from "@/application/song/use-cases/GenerateSongUseCase";
-import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
-import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
-import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
-import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
-import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
 import { PrismaSongRepository } from "@/infrastructure/persistence/prisma/song/PrismaSongRepository";
-import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloader";
-import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
-import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
-import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
+import { triggerPipelineTick } from "@/infrastructure/http/triggerPipelineTick";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { toPublicSongStatus } from "../publicSongStatus";
@@ -22,11 +14,11 @@ import { toPublicSongStatus } from "../publicSongStatus";
 /**
  * POST /api/song/generate — creates the queued Song job for a lead. This
  * file only validates input, invokes `GenerateSongUseCase` (the
- * synchronous, DB-only intake), schedules `SongGenerationWorker` to run
- * in the background via Next.js's `after()`, and responds immediately
- * with `202 Accepted` — it never waits for the music provider. No
- * business rule is evaluated here; those live in the Application and
- * Domain layers.
+ * synchronous, DB-only intake), kicks off the pipeline in the
+ * background via `after()`/`triggerPipelineTick`, and responds
+ * immediately with `202 Accepted` — it never waits for the music
+ * provider. No business rule is evaluated here; those live in the
+ * Application and Domain layers.
  *
  * As of Sprint 7.5, the parent-facing flow no longer calls this route
  * directly — `POST /api/lyrics/approve` creates the queued job itself
@@ -40,34 +32,11 @@ const leadRepository = new PrismaLeadRepository();
 const lyricsRepository = new PrismaLyricsRepository();
 const songRepository = new PrismaSongRepository();
 const campaignGate = new PrismaCampaignGate();
-const moodProvider = new PrismaMoodSunoPromptProvider();
-const songGenerator = new MurekaSongService();
-const emailSender = new ResendEmailService();
-const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 
 const generateSongUseCase = new GenerateSongUseCase(
   leadRepository,
   lyricsRepository,
   songRepository,
-  campaignGate,
-);
-
-const generationDispatcher = new GenerationDispatcher(
-  songRepository,
-  lyricsRepository,
-  moodProvider,
-  songGenerator,
-);
-
-const generationPoller = new GenerationPoller(
-  songRepository,
-  songGenerator,
-  new HttpAudioDownloader(),
-  new CloudflareR2Storage(),
-  new R2AudioUrlResolver(),
-  leadRepository,
-  emailSender,
-  emailDeliveryTracker,
   campaignGate,
 );
 
@@ -96,20 +65,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     const result = await generateSongUseCase.execute({ leadId });
 
     // Scheduled with `after()` so it keeps running once the response has
-    // been sent, without the caller ever waiting for it. Any failure is
-    // persisted as FAILED by the dispatcher/poller themselves — nothing
-    // to do with the rejection here except log it; it must never crash
-    // the request.
-    after(async () => {
-      try {
-        await generationDispatcher.execute();
-        await generationPoller.execute();
-      } catch (error) {
-        logger.error("Background song generation failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
+    // been sent, without the caller ever waiting for it —
+    // `triggerPipelineTick` never throws, and the pipeline endpoint it
+    // calls keeps rescheduling itself until the song reaches a terminal
+    // state (see `/api/internal/pipeline/run`). This request's own
+    // origin (not `appConfig.url`) is what the self-call targets — see
+    // `triggerPipelineTick`.
+    const origin = new URL(request.url).origin;
+    after(() => triggerPipelineTick(origin));
 
     return NextResponse.json(
       {

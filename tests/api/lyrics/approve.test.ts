@@ -38,15 +38,8 @@ const mockSongRepository: { [K in keyof SongRepository]: ReturnType<typeof vi.fn
 };
 
 const mockIsActiveAndGenerationEnabled = vi.fn();
-const mockGetMoodDetails = vi.fn();
-const mockSubmitGeneration = vi.fn();
-const mockPollGenerationStatus = vi.fn();
-const mockClaimDelivery = vi.fn();
-const mockSendSongReadyEmail = vi.fn();
 const mockGetLeadSession = vi.fn();
-const mockDownloadAudio = vi.fn();
-const mockUploadAudio = vi.fn();
-const mockResolveAudioUrl = vi.fn();
+const mockTriggerPipelineTick = vi.fn();
 
 // `after()` throws when called outside a real Next.js request scope, so
 // this test captures the scheduled callback rather than letting it run
@@ -90,53 +83,17 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaCampaignGate", () => ({
   }),
 }));
 
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider", () => ({
-  PrismaMoodSunoPromptProvider: vi.fn().mockImplementation(function PrismaMoodSunoPromptProvider() {
-    return { getMoodDetails: mockGetMoodDetails };
-  }),
-}));
-
-vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
-  MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
-    return {
-      submitGeneration: mockSubmitGeneration,
-      pollGenerationStatus: mockPollGenerationStatus,
-    };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/HttpAudioDownloader", () => ({
-  HttpAudioDownloader: vi.fn().mockImplementation(function HttpAudioDownloader() {
-    return { download: mockDownloadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/CloudflareR2Storage", () => ({
-  CloudflareR2Storage: vi.fn().mockImplementation(function CloudflareR2Storage() {
-    return { upload: mockUploadAudio };
-  }),
-}));
-
-vi.mock("@/infrastructure/storage/R2AudioUrlResolver", () => ({
-  R2AudioUrlResolver: vi.fn().mockImplementation(function R2AudioUrlResolver() {
-    return { resolve: mockResolveAudioUrl };
-  }),
-}));
-
-vi.mock("@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker", () => ({
-  PrismaEmailDeliveryTracker: vi.fn().mockImplementation(function PrismaEmailDeliveryTracker() {
-    return { claimDelivery: mockClaimDelivery };
-  }),
-}));
-
-vi.mock("@/infrastructure/email/ResendEmailService", () => ({
-  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
-    return { sendSongReadyEmail: mockSendSongReadyEmail };
-  }),
-}));
-
 vi.mock("@/infrastructure/auth/getLeadSession", () => ({
   getLeadSession: mockGetLeadSession,
+}));
+
+// The route no longer runs GenerationDispatcher/GenerationPoller
+// in-process — it only kicks off the self-sustaining pipeline chain
+// via `triggerPipelineTick` (see /api/internal/pipeline/run, the only
+// place those use cases actually run; covered by
+// tests/api/internal/pipelineRun.test.ts).
+vi.mock("@/infrastructure/http/triggerPipelineTick", () => ({
+  triggerPipelineTick: mockTriggerPipelineTick,
 }));
 
 // Sprint 8.2 — Abuse Protection. Mocked so no real DB call happens; see
@@ -239,17 +196,7 @@ describe("POST /api/lyrics/approve", () => {
       return song;
     });
     mockIsActiveAndGenerationEnabled.mockResolvedValue(true);
-    mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
-    mockClaimDelivery.mockResolvedValue(true);
-    mockSendSongReadyEmail.mockResolvedValue(undefined);
-    mockDownloadAudio.mockResolvedValue({
-      bytes: new Uint8Array([1, 2, 3]),
-      contentType: "audio/mpeg",
-    });
-    mockUploadAudio.mockResolvedValue(undefined);
-    mockResolveAudioUrl.mockImplementation(
-      async (key: string) => `https://signed.example.com/${key}`,
-    );
+    mockTriggerPipelineTick.mockResolvedValue(undefined);
   });
 
   it("returns 401 when there is no active session, without touching the repository", async () => {
@@ -273,9 +220,9 @@ describe("POST /api/lyrics/approve", () => {
 
     expect(response.status).toBe(200);
     expect(body.lyrics.approved).toBe(true);
-    // The music provider must never be called synchronously as part of
-    // the request — only the background dispatcher/poller call it.
-    expect(mockSubmitGeneration).not.toHaveBeenCalled();
+    // The pipeline must never be triggered synchronously as part of the
+    // request — only scheduled in the background via `after()`.
+    expect(mockTriggerPipelineTick).not.toHaveBeenCalled();
   });
 
   it("synchronously creates a QUEUED song job right after approval", async () => {
@@ -289,37 +236,24 @@ describe("POST /api/lyrics/approve", () => {
     expect(createdSong?.status).toBe("QUEUED");
   });
 
-  it("schedules the background worker, which runs generation through to COMPLETED and sends the email", async () => {
+  it("schedules the pipeline trigger in the background, which kicks off the self-sustaining chain", async () => {
+    // What actually happens once the chain is kicked off (dispatch,
+    // poll, complete, email) is GenerationDispatcher/GenerationPoller's
+    // and /api/internal/pipeline/run's responsibility — this route's
+    // only job is to place the first call. See
+    // tests/api/internal/pipelineRun.test.ts for the rest of the chain.
     const lyrics = buildLyrics();
     mockLyricsRepository.findById.mockResolvedValue(lyrics);
     mockLyricsRepository.findApprovedByLead.mockResolvedValue(lyrics);
-    mockLyricsRepository.findById.mockResolvedValue(lyrics);
-    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
-    mockPollGenerationStatus.mockResolvedValue({
-      status: "completed",
-      providerSongId: "suno-123",
-      audioUrl: "https://provider.example.com/short-lived.mp3",
-      duration: 120,
-    });
 
     const response = await POST(postRequest({ lyricsId: lyrics.id }));
     expect(response.status).toBe(200);
     expect(capturedAfterCallbacks).toHaveLength(1);
+    expect(mockTriggerPipelineTick).not.toHaveBeenCalled();
 
     await runScheduledBackgroundWork();
 
-    expect(mockSubmitGeneration).toHaveBeenCalledTimes(1);
-    expect(mockPollGenerationStatus).toHaveBeenCalledTimes(1);
-    expect(mockUploadAudio).toHaveBeenCalledTimes(1);
-    expect(createdSong?.status).toBe("COMPLETED");
-    expect(createdSong?.audioStorageKey).toBeTruthy();
-    expect(mockSendSongReadyEmail).toHaveBeenCalledTimes(1);
-    expect(mockSendSongReadyEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "jane@example.com",
-        audioUrl: expect.stringContaining("https://signed.example.com/"),
-      }),
-    );
+    expect(mockTriggerPipelineTick).toHaveBeenCalledTimes(1);
   });
 
   it("returns 404 when the lyrics id does not exist", async () => {
