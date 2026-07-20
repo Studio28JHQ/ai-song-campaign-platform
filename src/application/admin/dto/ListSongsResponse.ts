@@ -17,6 +17,7 @@ export interface AdminSongView {
   babyName: string;
   status: string;
   provider: string;
+  musicDirection: string | null;
   audioUrl: string | null;
   providerError: string | null;
   emailedAt: Date | null;

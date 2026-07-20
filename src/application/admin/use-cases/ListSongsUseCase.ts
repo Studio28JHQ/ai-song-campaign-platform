@@ -60,6 +60,7 @@ export class ListSongsUseCase {
         babyName: row.babyName,
         status: row.status,
         provider: row.provider,
+        musicDirection: row.musicDirection,
         audioUrl: row.audioStorageKey
           ? await this.audioUrlResolver.resolve(row.audioStorageKey)
           : null,

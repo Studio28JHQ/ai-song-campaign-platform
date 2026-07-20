@@ -8,6 +8,7 @@ export interface AdminSongRow {
   babyName: string;
   status: string;
   provider: string;
+  musicDirection: string | null;
   audioUrl: string | null;
   providerError: string | null;
   emailedAt: string | null;

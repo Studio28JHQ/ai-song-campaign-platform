@@ -15,6 +15,7 @@ function row(overrides: Partial<AdminSongRow> = {}): AdminSongRow {
     babyName: "Baby Doe",
     status: "COMPLETED",
     provider: "mureka",
+    musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
     audioStorageKey: "songs/song-1.mp3",
     providerError: null,
     emailedAt: new Date("2026-01-01T01:00:00.000Z"),

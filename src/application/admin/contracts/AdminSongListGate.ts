@@ -28,6 +28,7 @@ export interface AdminSongRow {
   /** Public song-status vocabulary (QUEUED/GENERATING/COMPLETED/FAILED). */
   status: string;
   provider: string;
+  musicDirection: string | null;
   audioStorageKey: string | null;
   /** The provider's reported failure reason, if any — surfaced so an operator can triage a `FAILED` song without leaving this screen. */
   providerError: string | null;

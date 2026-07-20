@@ -49,7 +49,7 @@ function formatDate(value: string): string {
 
 /**
  * Sprint ADMIN-1 — Backoffice de Campaña. The "Canciones" list:
- * estado, proveedor, fecha, escuchar, descargar, reenviar correo. Read
+ * estado, estilo, fecha, escuchar, descargar, reenviar correo. Read
  * URLs are the same freshly signed URL `ListSongsUseCase` resolves —
  * never a stored one. "Reenviar correo" reuses the exact same
  * `ResendEmailAction` the Lead Detail screen already uses, not a
@@ -141,7 +141,7 @@ export function SongsList() {
                   Estado
                 </th>
                 <th scope="col" className="px-4 py-3 font-medium">
-                  Proveedor
+                  Estilo
                 </th>
                 <th scope="col" className="px-4 py-3 font-medium">
                   Fecha
@@ -180,7 +180,7 @@ export function SongsList() {
                   <td className="px-4 py-3">
                     <SongStatusBadge status={song.status} />
                   </td>
-                  <td className="px-4 py-3">{song.provider}</td>
+                  <td className="max-w-[220px] truncate px-4 py-3">{song.musicDirection ?? "—"}</td>
                   <td className="px-4 py-3">{formatDate(song.createdAt)}</td>
                   <td className="px-4 py-3">
                     {song.audioUrl ? (

@@ -32,7 +32,10 @@ export class PrismaAdminSongListGate implements AdminSongListGate {
           orderBy: { createdAt: "desc" },
           skip: (filter.page - 1) * filter.pageSize,
           take: filter.pageSize,
-          include: { lead: { select: { parentName: true, babyName: true } } },
+          include: {
+            lead: { select: { parentName: true, babyName: true } },
+            lyrics: { select: { musicDirection: true } },
+          },
         }),
         this.client.song.count({ where }),
       ]);
@@ -45,6 +48,7 @@ export class PrismaAdminSongListGate implements AdminSongListGate {
         babyName: record.lead.babyName,
         status: toPublicSongStatus(record.status),
         provider: record.provider,
+        musicDirection: record.lyrics.musicDirection,
         audioStorageKey: record.audioStorageKey,
         providerError: record.providerError,
         emailedAt: record.emailedAt,
