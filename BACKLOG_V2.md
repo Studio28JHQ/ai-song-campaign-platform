@@ -41,3 +41,15 @@ Integrate lead capture and campaign data with HubSpot.
 ## Mailchimp Integration
 
 Integrate email delivery/marketing with Mailchimp.
+
+## Mureka `reference_id` Support
+
+Let a song generation reference a prior Mureka job (e.g. for variation/remix workflows). Deliberately out of scope for the current one-song-per-user, generate-from-lyrics-only flow.
+
+## Mureka `vocal_id` Support
+
+Support Mureka's vocal-cloning parameter. Out of scope for V1 — the campaign only offers the two fixed `gender` options.
+
+## Mureka `melody_id` Support
+
+Support Mureka's melody-guide parameter (generating a song around an existing melody). Out of scope for V1 — every song is generated from lyrics and creative direction only, never a reference melody.

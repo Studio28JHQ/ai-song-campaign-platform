@@ -6,7 +6,14 @@ describe("MurekaClient.submitGeneration", () => {
     vi.unstubAllGlobals();
   });
 
-  const payload = { lyrics: "Title\n...", model: "auto", prompt: "upbeat joyful lullaby", n: 1 };
+  const payload = {
+    lyrics: "Title\n...",
+    prompt: "upbeat joyful lullaby",
+    model: "auto",
+    n: 1,
+    gender: "female" as const,
+    stream: false,
+  };
 
   it("sends the expected request to the official endpoint and returns the parsed body", async () => {
     const fetchMock = vi.fn().mockResolvedValue({

@@ -14,6 +14,7 @@ describe("PromptBuilder.build", () => {
 
     expect(payload.model).toBe("auto");
     expect(payload.n).toBe(1);
+    expect(payload.stream).toBe(false);
     expect(payload.prompt).toBe(
       [
         "Create an original children's song.",
@@ -23,9 +24,6 @@ describe("PromptBuilder.build", () => {
         "",
         "Musical Direction:",
         "Warm acoustic arrangement with gentle piano and ukulele.",
-        "",
-        "Voice:",
-        "Female voice",
       ].join("\n"),
     );
   });
@@ -60,19 +58,28 @@ describe("PromptBuilder.build", () => {
     expect(payload.prompt.length).toBeLessThan(1024);
   });
 
-  it("maps FEMALE to a female voice label", () => {
+  it("maps FEMALE to Mureka's dedicated gender field — never described inside the prompt text", () => {
     const payload = PromptBuilder.build({ ...baseInput, voice: "FEMALE" });
-    expect(payload.prompt).toContain("Voice:\nFemale voice");
+    expect(payload.gender).toBe("female");
+    expect(payload.prompt).not.toContain("Voice");
+    expect(payload.prompt).not.toContain("female");
   });
 
-  it("maps MALE to a male voice label", () => {
+  it("maps MALE to Mureka's dedicated gender field — never described inside the prompt text", () => {
     const payload = PromptBuilder.build({ ...baseInput, voice: "MALE" });
-    expect(payload.prompt).toContain("Voice:\nMale voice");
+    expect(payload.gender).toBe("male");
+    expect(payload.prompt).not.toContain("Voice");
+    expect(payload.prompt).not.toContain("male");
   });
 
   it("always requests exactly one song", () => {
     const payload = PromptBuilder.build(baseInput);
     expect(payload.n).toBe(1);
+  });
+
+  it("never streams — this pipeline always polls to completion", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.stream).toBe(false);
   });
 
   it("no longer reads Mood.sunoPrompt — the prompt is built entirely from the Lyrics version's musical direction", () => {
@@ -98,17 +105,26 @@ describe("PromptBuilder.build", () => {
       expect(hasParentMessage).toBe(false);
     });
 
-    it("the prompt contains exactly the three creative-direction sections, in order, and nothing else", () => {
+    it("the prompt contains exactly the two creative-direction sections, in order, and nothing else", () => {
       const payload = PromptBuilder.build(baseInput);
       const moodIndex = payload.prompt.indexOf("Mood:");
       const directionIndex = payload.prompt.indexOf("Musical Direction:");
-      const voiceIndex = payload.prompt.indexOf("Voice:");
 
       expect(payload.prompt.startsWith("Create an original children's song.")).toBe(true);
       expect(moodIndex).toBeGreaterThan(0);
       expect(directionIndex).toBeGreaterThan(moodIndex);
-      expect(voiceIndex).toBeGreaterThan(directionIndex);
       expect(payload.prompt).not.toContain("Lyrics:");
+      expect(payload.prompt).not.toContain("Voice:");
+    });
+  });
+
+  describe("official Mureka request contract", () => {
+    it("sends exactly the documented fields — no reference_id, vocal_id, or melody_id", () => {
+      const payload = PromptBuilder.build(baseInput);
+
+      expect(Object.keys(payload).sort()).toEqual(
+        ["gender", "lyrics", "model", "n", "prompt", "stream"].sort(),
+      );
     });
   });
 
@@ -166,7 +182,7 @@ describe("PromptBuilder.build", () => {
       }
     });
 
-    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction/Voice", () => {
+    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction", () => {
       const payload = PromptBuilder.build(baseInput);
       expect(payload.prompt).toBe(
         [
@@ -177,9 +193,6 @@ describe("PromptBuilder.build", () => {
           "",
           "Musical Direction:",
           baseInput.musicDirection,
-          "",
-          "Voice:",
-          "Female voice",
         ].join("\n"),
       );
     });

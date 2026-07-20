@@ -33,3 +33,11 @@ The `GenerationAttempt` table is defined in the schema but not populated — the
 ## Expand End-to-End Test Coverage
 
 The current Playwright suite is a single landing-page smoke test. Expanding it to cover the full registration → lyrics → song → email journey would require mocking the Claude/Mureka/Resend provider boundaries at the network level — worth doing once a dedicated E2E test environment/strategy is planned.
+
+## Evaluate Additional Mureka Parameters
+
+Mureka's `POST /v1/song/generate` contract may document further optional parameters beyond `lyrics`/`prompt`/`model`/`n`/`gender`/`stream` — worth a deliberate review once the current contract has run in production for a while, rather than speculatively adding fields now.
+
+## Improve Mureka Adapter Typing
+
+`src/infrastructure/mureka/` currently types the submission/poll responses only as narrowly as `ResponseParser`'s Zod schemas require. A stronger, fuller typing of Mureka's documented response shapes (beyond the fields this integration actually reads) could make future field additions safer.

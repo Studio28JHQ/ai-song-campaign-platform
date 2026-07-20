@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Future Improvements
+
+Ideas identified during development but deliberately not implemented, since they're outside the current version's scope — see `BACKLOG_V2.md`/`BACKLOG_V3.md` for full detail:
+
+- Support Mureka's `reference_id`
+- Support Mureka's `vocal_id`
+- Support Mureka's `melody_id`
+- Evaluate additional Mureka request parameters
+- Improve Mureka adapter typing
+
+## [1.28.3] - 2026-08-30
+
+### Fixed
+
+- **Mureka request brought into full compliance with the official `POST /v1/song/generate` contract**: `MurekaGenerateRequest` now models exactly the documented fields — `lyrics`, `prompt`, `model`, `n`, `gender`, `stream` — no `reference_id`/`vocal_id`/`melody_id` (deliberately out of scope, see "Future Improvements" below). The domain `Voice` type (`MALE`/`FEMALE`) is unchanged everywhere outside infrastructure; `mureka/PromptBuilder.ts` is the only place that translates it to Mureka's own lowercase `gender` value (`FEMALE` → `"female"`, `MALE` → `"male"`) — no Mureka-specific value ever crosses out of `src/infrastructure/mureka/`. `prompt` no longer describes the voice at all, now that `gender` is its own dedicated field — describing it in both places would be redundant; `prompt` still carries only Mood and Musical Direction (lyrics remain excluded from `prompt`, unrelated to this change — see `[1.28.2]`). `stream` is always `false` — this pipeline only ever polls to completion, never streams playback. Live end-to-end verified with a real, deliverable email address: registration → lyrics generated and approved → Mureka accepted the request → `providerTaskId` returned → polling reached `succeeded` → song `COMPLETED` with audio persisted to R2 (5.5MB, verified downloadable) → song-ready email delivered (no delivery error, `Song.emailedAt` claimed) with no other business rule (exactly one song, no streaming, no reference audio, no vocal clone, no melody guide) touched.
+
 ## [1.28.2] - 2026-08-29
 
 ### Fixed

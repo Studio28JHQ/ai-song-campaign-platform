@@ -1,6 +1,6 @@
 import type { SongGenerationInput } from "@/application/song/contracts/SongGenerationProvider";
 import type { Voice } from "@/domain/lyrics/types";
-import type { MurekaGenerateRequest } from "./types";
+import type { MurekaGender, MurekaGenerateRequest } from "./types";
 
 /**
  * Mureka's official docs show `"model": "auto"` in their quickstart
@@ -14,10 +14,17 @@ const MUREKA_MODEL = "auto";
 /** Exactly one song is ever generated per call (see docs/Product/Business_Rules.md — Song Rules). */
 const MUREKA_SONG_COUNT = 1;
 
-/** Sprint v1.1 — AI Musical Direction. English, matching the rest of the prompt's language. */
-const VOICE_LABEL: Record<Voice, string> = {
-  FEMALE: "Female voice",
-  MALE: "Male voice",
+/** This pipeline never streams playback — Mureka generates the full song asynchronously, polled to completion (see `GenerationPoller`). */
+const MUREKA_STREAM = false;
+
+/**
+ * Translates the domain `Voice` ("MALE"/"FEMALE") into Mureka's own
+ * `gender` field — the only place this translation happens; the
+ * Mureka-specific lowercase values never cross out of this adapter.
+ */
+const GENDER_MAP: Record<Voice, MurekaGender> = {
+  FEMALE: "female",
+  MALE: "male",
 };
 
 /**
@@ -37,15 +44,18 @@ const VOICE_LABEL: Record<Voice, string> = {
  * duplicating the full song lyrics inside it on top of the dedicated
  * `lyrics` field, which Mureka rejected with `HTTP 400` /
  * "The prompt exceeds 1024 characters." `prompt` now carries only
- * creative direction (mood, musical direction, voice) — comfortably
- * within the limit regardless of song length.
+ * creative direction (mood and musical direction) — comfortably within
+ * the limit regardless of song length. The narrator voice is no longer
+ * described in `prompt` either, now that Mureka's official contract has
+ * a dedicated `gender` field for it — describing it in both places
+ * would be redundant.
  *
  * Sprint v1.2 — AI Safety Hardening: the parent's raw message never
  * reaches this class — `SongGenerationInput` has no `parentMessage`
  * field at all (see its own doc comment). Mureka receives only
  * Claude's already-moderated creative output (`musicMood`,
- * `musicDirection`, `lyrics`) and the fixed `voice` selection; it is
- * never responsible for moderation itself.
+ * `musicDirection`, `lyrics`) and the fixed `voice` selection (as
+ * `gender`); it is never responsible for moderation itself.
  */
 export class PromptBuilder {
   static build(input: SongGenerationInput): MurekaGenerateRequest {
@@ -57,16 +67,15 @@ export class PromptBuilder {
       "",
       "Musical Direction:",
       input.musicDirection,
-      "",
-      "Voice:",
-      VOICE_LABEL[input.voice],
     ].join("\n");
 
     return {
       lyrics: input.lyrics,
-      model: MUREKA_MODEL,
       prompt,
+      model: MUREKA_MODEL,
       n: MUREKA_SONG_COUNT,
+      gender: GENDER_MAP[input.voice],
+      stream: MUREKA_STREAM,
     };
   }
 }

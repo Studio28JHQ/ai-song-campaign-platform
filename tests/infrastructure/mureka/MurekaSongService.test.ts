@@ -40,6 +40,8 @@ describe("MurekaSongService.submitGeneration", () => {
       model: "auto",
       prompt: expect.stringContaining("Warm acoustic arrangement with gentle piano and ukulele."),
       n: 1,
+      gender: "female",
+      stream: false,
     });
     expect(result).toEqual({
       providerTaskId: "task-123",
