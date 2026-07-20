@@ -26,10 +26,19 @@ const VOICE_LABEL: Record<Voice, string> = {
  * no longer the Mood's fixed `sunoPrompt` — it is composed from the
  * approved Lyrics version's own AI-generated musical direction (Claude
  * is responsible for all creative decisions; Mureka only composes the
- * music from them). `lyrics` is still passed through exactly as
- * approved, never regenerated or otherwise altered — both as its own
- * top-level field (Mureka's actual structural field) and, unchanged,
- * inside the composed `prompt` text.
+ * music from them). `lyrics` is passed through exactly as approved,
+ * never regenerated or otherwise altered, as its own top-level field —
+ * Mureka's actual structural field for the song text.
+ *
+ * `prompt` deliberately does NOT also embed `lyrics` — live-verified
+ * against the real Mureka API: `prompt` has an undocumented (not shown
+ * in Mureka's own quickstart/reference examples) hard limit of 1024
+ * characters, and every production submission's `prompt` exceeded it by
+ * duplicating the full song lyrics inside it on top of the dedicated
+ * `lyrics` field, which Mureka rejected with `HTTP 400` /
+ * "The prompt exceeds 1024 characters." `prompt` now carries only
+ * creative direction (mood, musical direction, voice) — comfortably
+ * within the limit regardless of song length.
  *
  * Sprint v1.2 — AI Safety Hardening: the parent's raw message never
  * reaches this class — `SongGenerationInput` has no `parentMessage`
@@ -48,9 +57,6 @@ export class PromptBuilder {
       "",
       "Musical Direction:",
       input.musicDirection,
-      "",
-      "Lyrics:",
-      input.lyrics,
       "",
       "Voice:",
       VOICE_LABEL[input.voice],

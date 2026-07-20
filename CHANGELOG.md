@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.2] - 2026-08-29
+
+### Fixed
+
+- **Every Mureka song submission rejected with HTTP 400 "invalid payload"**: `mureka/PromptBuilder.ts` embedded the full lyrics text inside `prompt`, in addition to sending it in its own dedicated `lyrics` field — duplicate and unnecessary, since Mureka's real API (confirmed against the official `SkyworkAI/Mureka-mcp` reference implementation and live-verified directly against `POST /v1/song/generate`) has an undocumented hard limit of 1024 characters on `prompt`, which a full song's lyrics reliably exceeded. Real captured error: `{"error":{"message":"Invalid Request, The prompt exceeds 1024 characters."}}`. `prompt` now carries only the creative-direction sections (mood, musical direction, voice) — `lyrics` itself is unchanged, still sent as its own top-level field, exactly as approved. No other field, header, endpoint, retry policy, or polling logic was touched; `n: 1` (initially suspected) was live-verified as valid and unrelated. Live-verified end-to-end after the fix: Mureka accepted the submission, returned a `taskId`, polling reached `succeeded`, and the song reached `COMPLETED` with audio uploaded to R2.
+
 ## [1.28.1] - 2026-08-28
 
 ### Investigated

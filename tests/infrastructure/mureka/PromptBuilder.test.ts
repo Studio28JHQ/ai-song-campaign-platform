@@ -24,21 +24,40 @@ describe("PromptBuilder.build", () => {
         "Musical Direction:",
         "Warm acoustic arrangement with gentle piano and ukulele.",
         "",
-        "Lyrics:",
-        "Title\nVerse 1",
-        "",
         "Voice:",
         "Female voice",
       ].join("\n"),
     );
   });
 
-  it("passes the lyrics text through verbatim, never regenerating or editing it, both as the top-level field and inside the prompt", () => {
+  it("passes the lyrics text through verbatim as the top-level field, never regenerated or edited", () => {
     const lyrics = "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus";
     const payload = PromptBuilder.build({ ...baseInput, lyrics });
 
     expect(payload.lyrics).toBe(lyrics);
-    expect(payload.prompt).toContain(lyrics);
+  });
+
+  it("never duplicates the lyrics text inside prompt — Mureka's real API rejects a prompt over 1024 characters, and lyrics already has its own dedicated field", () => {
+    const lyrics = "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus";
+    const payload = PromptBuilder.build({ ...baseInput, lyrics });
+
+    expect(payload.prompt).not.toContain(lyrics);
+    expect(payload.prompt).not.toContain("Lyrics:");
+  });
+
+  it("keeps prompt comfortably short regardless of song length, since it never embeds the lyrics", () => {
+    // A full, multi-section song's worth of lyrics — long enough that
+    // embedding it in `prompt` (the actual production defect) would
+    // have exceeded Mureka's 1024-character limit.
+    const longLyrics = Array.from(
+      { length: 12 },
+      (_, i) => `[Section ${i}]\n` + "La la la, a line of lyrics for this section.\n".repeat(3),
+    ).join("\n");
+
+    const payload = PromptBuilder.build({ ...baseInput, lyrics: longLyrics });
+
+    expect(payload.lyrics).toBe(longLyrics);
+    expect(payload.prompt.length).toBeLessThan(1024);
   });
 
   it("maps FEMALE to a female voice label", () => {
@@ -79,23 +98,22 @@ describe("PromptBuilder.build", () => {
       expect(hasParentMessage).toBe(false);
     });
 
-    it("the prompt contains exactly the five required sections, in order, and nothing else", () => {
+    it("the prompt contains exactly the three creative-direction sections, in order, and nothing else", () => {
       const payload = PromptBuilder.build(baseInput);
       const moodIndex = payload.prompt.indexOf("Mood:");
       const directionIndex = payload.prompt.indexOf("Musical Direction:");
-      const lyricsIndex = payload.prompt.indexOf("Lyrics:");
       const voiceIndex = payload.prompt.indexOf("Voice:");
 
       expect(payload.prompt.startsWith("Create an original children's song.")).toBe(true);
       expect(moodIndex).toBeGreaterThan(0);
       expect(directionIndex).toBeGreaterThan(moodIndex);
-      expect(lyricsIndex).toBeGreaterThan(directionIndex);
-      expect(voiceIndex).toBeGreaterThan(lyricsIndex);
+      expect(voiceIndex).toBeGreaterThan(directionIndex);
+      expect(payload.prompt).not.toContain("Lyrics:");
     });
   });
 
   describe("Sprint v1.3 (AI Songwriting Quality): structured lyrics preservation", () => {
-    it("passes every official section label through to Mureka unchanged, both as the top-level lyrics field and inside the prompt", () => {
+    it("passes every official section label through to Mureka unchanged, in the top-level lyrics field", () => {
       const structuredLyrics = [
         "[Intro]",
         "La la la",
@@ -131,7 +149,8 @@ describe("PromptBuilder.build", () => {
       const payload = PromptBuilder.build({ ...baseInput, lyrics: structuredLyrics });
 
       expect(payload.lyrics).toBe(structuredLyrics);
-      expect(payload.prompt).toContain(structuredLyrics);
+      // Not duplicated into prompt — see the 1024-character-limit tests above.
+      expect(payload.prompt).not.toContain(structuredLyrics);
 
       for (const label of [
         "[Intro]",
@@ -147,7 +166,7 @@ describe("PromptBuilder.build", () => {
       }
     });
 
-    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction/Lyrics/Voice", () => {
+    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction/Voice", () => {
       const payload = PromptBuilder.build(baseInput);
       expect(payload.prompt).toBe(
         [
@@ -158,9 +177,6 @@ describe("PromptBuilder.build", () => {
           "",
           "Musical Direction:",
           baseInput.musicDirection,
-          "",
-          "Lyrics:",
-          baseInput.lyrics,
           "",
           "Voice:",
           "Female voice",
