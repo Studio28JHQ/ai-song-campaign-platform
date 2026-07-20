@@ -35,11 +35,26 @@ import { plainTextField } from "@/shared/validation/zodFields";
  *
  * The Lead is identified only via the session cookie (see
  * `getLeadSession`) — the request body never carries a Lead id.
+ *
+ * Turnstile is required only for a lead's first lyrics generation — the
+ * one public-entry-point action a session alone doesn't yet vouch for.
+ * "Is this a regeneration?" is derived the same way
+ * `GenerateLyricsForLeadUseCase` already derives it for attempt
+ * consumption — whether the lead already has any Lyrics versions, never
+ * from client input — so a "Generate another version" call (which has
+ * no Turnstile widget on screen at all, see `LyricsReviewPanel`) relies
+ * exclusively on the already-authenticated session instead of a
+ * necessarily-stale, already-consumed token. This never weakens lead
+ * creation's own Turnstile requirement (`POST /api/leads`, untouched)
+ * or the first-generation requirement below, and every generation call
+ * — first or repeated — still passes through the unchanged per-lead and
+ * per-IP rate limiters.
  */
 
+const lyricsRepository = new PrismaLyricsRepository();
 const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
   new PrismaLeadRepository(),
-  new PrismaLyricsRepository(),
+  lyricsRepository,
   new ClaudeLyricsService(),
 );
 const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
@@ -58,7 +73,11 @@ const generateLyricsRequestSchema = z
     moodName: z.string().min(1),
     moodDescription: z.string().min(1).optional(),
     parentMessage: plainTextField("Your message", FIELD_LIMITS.lyricsMessage),
-    turnstileToken: z.string().min(1, "Human verification is required."),
+    // Required only for a lead's first lyrics generation — see the
+    // route's own doc comment above. Optional here at the schema level
+    // because whether it's actually required can only be known once the
+    // lead's existing Lyrics versions have been checked, below.
+    turnstileToken: z.string().min(1).optional(),
     // Sprint v1.1 — AI Musical Direction. Optional with a default so an
     // older client that doesn't send it yet still works unchanged.
     voice: z.enum(VOICE_OPTIONS).default("FEMALE"),
@@ -116,32 +135,47 @@ export async function POST(request: Request): Promise<NextResponse> {
     return tooManyRequestsResponse();
   }
 
-  try {
-    const verification = await turnstileVerifier.verify(parsed.data.turnstileToken, ip);
-    if (!verification.success) {
-      await securityEventRecorder.record({
-        action: "invalid_turnstile_token",
-        entity: "Lead",
-        entityId: leadId,
-        metadata: { ip, scope: "lyrics_generation", errorCodes: verification.errorCodes },
-      });
+  // Same signal `GenerateLyricsForLeadUseCase` already uses to decide
+  // attempt consumption — never client input. A lead with no existing
+  // Lyrics versions yet is generating for the first time and still
+  // needs Turnstile; any later call is a regeneration and relies on the
+  // session established by `getLeadSession` above instead (see this
+  // route's doc comment).
+  const existingVersions = await lyricsRepository.findAllByLead(leadId);
+  const isRegeneration = existingVersions.length > 0;
 
-      if (turnstileVerifier.isExpiredOrAlreadyUsed(verification)) {
+  if (!isRegeneration) {
+    if (!parsed.data.turnstileToken) {
+      return errorResponse(400, "invalid_request", "Human verification is required.");
+    }
+
+    try {
+      const verification = await turnstileVerifier.verify(parsed.data.turnstileToken, ip);
+      if (!verification.success) {
+        await securityEventRecorder.record({
+          action: "invalid_turnstile_token",
+          entity: "Lead",
+          entityId: leadId,
+          metadata: { ip, scope: "lyrics_generation", errorCodes: verification.errorCodes },
+        });
+
+        if (turnstileVerifier.isExpiredOrAlreadyUsed(verification)) {
+          return errorResponse(
+            403,
+            "turnstile_expired_or_reused",
+            "Your verification expired or was already used. Please verify again.",
+          );
+        }
+
         return errorResponse(
           403,
-          "turnstile_expired_or_reused",
-          "Your verification expired or was already used. Please verify again.",
+          "human_verification_failed",
+          "We couldn't verify you're not a robot. Please try again.",
         );
       }
-
-      return errorResponse(
-        403,
-        "human_verification_failed",
-        "We couldn't verify you're not a robot. Please try again.",
-      );
+    } catch (error) {
+      return handleTurnstileError(error);
     }
-  } catch (error) {
-    return handleTurnstileError(error);
   }
 
   try {

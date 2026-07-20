@@ -15,6 +15,13 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.28.5] - 2026-07-20
+
+### Fixed
+
+- **"Generate another version" always failed with "Tu verificación expiró. Vuelve a verificar e inténtalo nuevamente."**: `POST /api/lyrics/generate` (the single endpoint used for both a lead's first lyrics generation and every later "Quiero otra versión" regeneration) required a Turnstile token on every call, unconditionally. `LyricsReviewPanel`/`LyricsWorkflow` has no Turnstile widget on the regeneration screen at all — `handleGenerateAgain()` simply resubmits the exact same `lastRequest` object the first, already-successful generation used, including its now-already-verified, single-use `turnstileToken`. Cloudflare Turnstile tokens can only ever be verified once, so every regeneration attempt was rejected as expired/reused by design, not by accident.
+  Fix: Turnstile is now required only for a lead's genuinely first lyrics generation. `POST /api/lyrics/generate` derives "is this a regeneration?" the exact same way `GenerateLyricsForLeadUseCase` already does for attempt-consumption purposes — whether the lead already has any Lyrics versions, never from client input — and skips Turnstile verification entirely for a regeneration, relying instead on the same authenticated lead session (`getLeadSession`, established by the existing resumeToken flow) every call already requires. `turnstileToken` is now optional at the schema level and only enforced (still returning the exact same errors as before) when this is the lead's first generation. No frontend change was needed — the client already only ever attaches a widget-issued token to the very first call. Lead creation's own Turnstile requirement (`POST /api/leads`) and the first-lyrics-generation requirement are both unchanged; both rate limiters on this endpoint (per-lead and per-IP) are unchanged and still apply to every call, first or repeated.
+
 ## [1.28.4] - 2026-07-20
 
 ### Fixed

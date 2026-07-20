@@ -109,6 +109,16 @@ function postRequest(body: unknown): Request {
   });
 }
 
+/** A regeneration payload as the client actually sends it — no `turnstileToken` at all. */
+function withoutTurnstileToken(): Omit<typeof validPayload, "turnstileToken"> {
+  return {
+    moodId: validPayload.moodId,
+    moodName: validPayload.moodName,
+    moodDescription: validPayload.moodDescription,
+    parentMessage: validPayload.parentMessage,
+  };
+}
+
 describe("POST /api/lyrics/generate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,6 +128,12 @@ describe("POST /api/lyrics/generate", () => {
     mockLyricsRepository.create.mockImplementation(async (lyrics: Lyrics) => lyrics);
     mockLeadRepository.update.mockImplementation(async (lead: Lead) => lead);
     mockLeadRepository.updateAttemptConsumption.mockImplementation(async (lead: Lead) => lead);
+    // `mockReset()` (not just a fresh `mockResolvedValue`) is required
+    // here: a prior test's `mockResolvedValueOnce` queued for a call
+    // that never actually happened (e.g. a regeneration test, which
+    // never calls Turnstile at all) stays queued otherwise, and would
+    // leak into whichever later test calls it next.
+    mockSiteverify.mockReset().mockResolvedValue({ success: true });
   });
 
   it("returns 401 when there is no active session, without touching the use case", async () => {
@@ -337,5 +353,130 @@ describe("POST /api/lyrics/generate", () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toBe("invalid_request");
+  });
+
+  describe("regeneration (a lead that already has a Lyrics version)", () => {
+    it("succeeds with no turnstileToken at all — 'Generate another version' has no widget on screen", async () => {
+      const lead = buildLead();
+      mockLeadRepository.findById.mockResolvedValue(lead);
+      mockGetLeadSession.mockResolvedValue(lead.id);
+      mockLyricsRepository.findAllByLead.mockResolvedValue([{ id: "lyrics-1" }] as Lyrics[]);
+      mockGenerateAndModerate.mockResolvedValue({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      });
+
+      const payloadWithoutToken = withoutTurnstileToken();
+      const response = await POST(postRequest(payloadWithoutToken));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.approved).toBe(true);
+      expect(mockSiteverify).not.toHaveBeenCalled();
+    });
+
+    it("succeeds even with the original, now-expired/reused token still attached — never verified", async () => {
+      const lead = buildLead();
+      mockLeadRepository.findById.mockResolvedValue(lead);
+      mockGetLeadSession.mockResolvedValue(lead.id);
+      mockLyricsRepository.findAllByLead.mockResolvedValue([{ id: "lyrics-1" }] as Lyrics[]);
+      // Would fail verification if it were ever checked — proves the
+      // route truly skips Turnstile for a regeneration rather than
+      // happening to pass.
+      mockSiteverify.mockResolvedValueOnce({
+        success: false,
+        "error-codes": ["timeout-or-duplicate"],
+      });
+      mockGenerateAndModerate.mockResolvedValue({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      });
+
+      const response = await POST(postRequest(validPayload));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.approved).toBe(true);
+      expect(mockSiteverify).not.toHaveBeenCalled();
+    });
+
+    it("supports multiple consecutive regenerations, none of them touching Turnstile", async () => {
+      const lead = buildLead();
+      mockLeadRepository.findById.mockResolvedValue(lead);
+      mockGetLeadSession.mockResolvedValue(lead.id);
+      mockLyricsRepository.findAllByLead.mockResolvedValue([
+        { id: "lyrics-1" },
+        { id: "lyrics-2" },
+      ] as Lyrics[]);
+      mockGenerateAndModerate.mockResolvedValue({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      });
+
+      const payloadWithoutToken = withoutTurnstileToken();
+      const first = await POST(postRequest(payloadWithoutToken));
+      const second = await POST(postRequest(payloadWithoutToken));
+      const third = await POST(postRequest(payloadWithoutToken));
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(third.status).toBe(200);
+      expect(mockSiteverify).not.toHaveBeenCalled();
+    });
+
+    it("still returns 401 for an unauthenticated caller, regardless of any Lyrics history", async () => {
+      mockGetLeadSession.mockResolvedValue(null);
+      mockLyricsRepository.findAllByLead.mockResolvedValue([{ id: "lyrics-1" }] as Lyrics[]);
+
+      const payloadWithoutToken = withoutTurnstileToken();
+      const response = await POST(postRequest(payloadWithoutToken));
+      const body = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(body.error).toBe("no_session");
+      expect(mockLyricsRepository.findAllByLead).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("first generation (no existing Lyrics version yet)", () => {
+    it("still requires Turnstile — returns 400 when the token is missing entirely", async () => {
+      mockLyricsRepository.findAllByLead.mockResolvedValue([]);
+
+      const payloadWithoutToken = withoutTurnstileToken();
+      const response = await POST(postRequest(payloadWithoutToken));
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body.error).toBe("invalid_request");
+      expect(mockSiteverify).not.toHaveBeenCalled();
+    });
+
+    it("still verifies a present token against Turnstile", async () => {
+      const lead = buildLead();
+      mockLeadRepository.findById.mockResolvedValue(lead);
+      mockGetLeadSession.mockResolvedValue(lead.id);
+      mockLyricsRepository.findAllByLead.mockResolvedValue([]);
+      mockGenerateAndModerate.mockResolvedValue({
+        approved: true,
+        reason: null,
+        lyrics: "Title\nVerse 1\nChorus\nVerse 2\nFinal Chorus",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+      });
+
+      const response = await POST(postRequest(validPayload));
+
+      expect(response.status).toBe(200);
+      expect(mockSiteverify).toHaveBeenCalledTimes(1);
+    });
   });
 });
