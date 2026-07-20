@@ -14,7 +14,7 @@ on:
     # Every 10 minutes. GitHub Actions schedules are UTC and best-effort
     # (a busy queue can delay a run by a few minutes) — the same
     # tolerance the queue already had to accommodate under Vercel Cron.
-    - cron: "*/10 * * * *"
+    - cron: "* * * * *"
   workflow_dispatch: {}
 
 concurrency:
