@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Cookie,
   FileText,
   History,
   LayoutDashboard,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/admin/lyrics", label: "Letras", icon: FileText },
   { href: "/admin/users", label: "Administradores", icon: ShieldCheck },
   { href: "/admin/audit", label: "Auditoría", icon: History },
+  { href: "/admin/consents", label: "Consentimientos", icon: Cookie },
   { href: "/admin/settings", label: "Configuración", icon: Settings },
 ] as const;
 

@@ -9,6 +9,7 @@ import { PrismaAdminLeadExportGate } from "@/infrastructure/persistence/prisma/a
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
+import { toCsvLine } from "@/shared/utils/csv";
 
 /**
  * GET /api/admin/leads/export — streams the same filtered/searched
@@ -36,9 +37,6 @@ import { logger } from "@/shared/logger/logger";
 const exportLeadsUseCase = new ExportLeadsUseCase(new PrismaAdminLeadExportGate());
 const auditLogRepository = new PrismaAuditLogRepository();
 
-/** Characters that, left unescaped, let a lead's own text field open as a formula when the exported CSV is opened in Excel/Sheets (CSV/formula injection). */
-const FORMULA_TRIGGER_CHARS = new Set(["=", "+", "-", "@"]);
-
 const CSV_HEADER = [
   "Lead",
   "Baby",
@@ -62,15 +60,6 @@ const exportParamsSchema = z.object({
   emailStatus: z.enum(["SENT", "NOT_SENT"]).optional(),
   city: z.string().optional(),
 });
-
-function csvEscape(value: string): string {
-  const safe = FORMULA_TRIGGER_CHARS.has(value[0]) ? `'${value}` : value;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
-
-function toCsvLine(cells: string[]): string {
-  return cells.map(csvEscape).join(",") + "\n";
-}
 
 function toCsvRow(row: AdminLeadExportRow): string {
   return toCsvLine([

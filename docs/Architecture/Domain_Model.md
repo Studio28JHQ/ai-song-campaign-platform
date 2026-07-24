@@ -114,7 +114,7 @@ QUEUED ──▶ GENERATING ──▶ COMPLETED
 
 ### Application Layer — Consent
 
-`src/application/consent/` has two use cases: `RecordConsentUseCase` (looks up the Consent by `sessionId`; returns it unchanged if found, otherwise creates a new one — "exactly one Consent per session, never duplicated") and `AssociateConsentWithLeadUseCase` (looks up the Consent by `sessionId` and links it to a newly registered Lead — a no-op if no session/no matching Consent exists). Wired into `POST /api/consent` and, as a best-effort step, `POST /api/leads` respectively — see `docs/Architecture/System_Architecture.md` — Privacy Consent Module.
+`src/application/consent/` has two use cases: `RecordConsentUseCase` (looks up the Consent by `sessionId`; returns it unchanged if found, otherwise creates a new one — "exactly one Consent per session, never duplicated") and `AssociateConsentWithLeadUseCase` (looks up the Consent by `sessionId` and links it to a newly registered Lead — a no-op if no session/no matching Consent exists). Wired into `POST /api/consent` and, as a best-effort step, `POST /api/leads` respectively — see `docs/Architecture/System_Architecture.md` — Privacy Consent Module. The admin "Consentimientos" screen (Feature 1 — Consent Management Screen) does not go through this repository at all — its latest-20 list and full-table CSV export are pure reads, satisfied by the narrow `AdminConsentGate` port (`src/application/admin/contracts/`) instead, the same "Reused, not duplicated" reporting pattern the Admin module already applies to Lead/Lyrics/Song.
 
 ## Admin
 

@@ -15,6 +15,17 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.30.0] - 2026-07-24
+
+### Added
+
+- **Consent Management Screen (Admin)**: a new "Consentimientos" screen (`/admin/consents`, sidebar entry with a cookie icon) shows the latest 20 `Consent` records — every stored field (`id`, `sessionId`, `leadId`, `ipAddress`, `userAgent`, `policyVersion`, `acceptedAt`, `createdAt`, `updatedAt`) plus the associated Lead (parent/baby name, linking to its Lead Detail page) read through the existing `Consent → Lead` relationship, no additional persistence. A "Descargar CSV" action (`GET /api/admin/consents/export`) streams **every** Consent record in the database — unfiltered, unpaginated, all fields (including the joined Lead's name/email) — as a standard CSV file, audit-logged (`export_consents`) the same way `export_leads` already is. New narrow reporting port, `AdminConsentGate` (`src/application/admin/contracts/`), backs both the list and the export; the export specifically uses keyset (cursor) pagination rather than `skip`/`take` so batch cost stays constant as Consent rows grow (they accumulate from every Landing visit, not just registrations, unlike the ≤3,000-row-bounded Leads export). Extracted the CSV-escaping/formula-injection-guard helper the Leads export already had into a shared `src/shared/utils/csv.ts` so both exports use one implementation, not two. See `docs/Architecture/System_Architecture.md` — Privacy Consent Module ("Admin reporting") and `docs/Product/User_Flow.md` — Administrator Workflow.
+
+### Changed
+
+- **Consent Banner UI**: the banner now sizes itself to ~90% of the viewport width, centered (`w-[90vw]`, `mx-auto`) — a look specific to this banner alone, achieved by no longer wrapping it in `CampaignContainer` (the shared max-width shell every other Landing section still uses unmodified). The Accept button now uses a lighter tint of the brand primary purple by default (`bg-primary/80`) and transitions to the exact primary color on hover (`bg-primary`, `#8B5CF6`) with white text preserved (`text-primary-foreground`) — both are overrides on the banner's own button instance only (via `className`), never a change to the shared `CampaignButton` component, so every other primary action on the Landing (e.g. the registration form's submit button) is unaffected. No new CSS file, no new color token — both states reuse the existing `--primary` token at different opacities.
+  **Fixed a real, previously-shipped scoping bug in the same file**: `ConsentBanner` renders as a sibling of `<main className="theme-campaign campaign-landing">` in `app/page.tsx` (so it can overlay the whole page, footer included, not just the content column) — since CSS custom properties only cascade to descendants, it had never actually inherited the campaign's purple palette or body font at all; a request for "the project's primary purple color" surfaced this immediately (the button was rendering the default, non-campaign theme's color). Fixed by giving the banner's own root element the same `theme-campaign campaign-landing` classes `<main>` carries — no shared component or layout touched, verified live: the button now measures the exact documented brand values (`rgb(139, 92, 246)` / `#8B5CF6` on hover, `oklab(... / 0.8)` — the same color at 80% opacity — by default), and the banner card measures exactly 90.0% of `window.innerWidth`, centered with equal left/right gaps.
+
 ## [1.29.0] - 2026-07-24
 
 ### Added

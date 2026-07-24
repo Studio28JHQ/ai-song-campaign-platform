@@ -4,7 +4,7 @@ This document is the permanent memory of the AI Song Campaign Platform repositor
 
 ## What Project Is Being Developed
 
-The AI Song Campaign Platform is a temporary, one-month marketing campaign Landing Page. It allows parents to register, have personalized song lyrics generated and previewed, approve those lyrics, and receive a final AI-generated song by email. An admin panel allows the campaign team to monitor submissions and export leads as CSV. The Admin panel also holds the campaign's one database-backed global setting — the Google Tag Manager container id, the exclusive mechanism for all external analytics — and the Landing shows a cookie/privacy consent banner that creates an anonymous, session-scoped Consent record, later associated with a Lead if the visitor registers.
+The AI Song Campaign Platform is a temporary, one-month marketing campaign Landing Page. It allows parents to register, have personalized song lyrics generated and previewed, approve those lyrics, and receive a final AI-generated song by email. An admin panel allows the campaign team to monitor submissions and export leads as CSV. The Admin panel also holds the campaign's one database-backed global setting — the Google Tag Manager container id, the exclusive mechanism for all external analytics — and the Landing shows a cookie/privacy consent banner that creates an anonymous, session-scoped Consent record, later associated with a Lead if the visitor registers. The Admin panel's "Consentimientos" screen shows the latest 20 Consent records and lets the team download every Consent record in the database as CSV.
 
 ## Business Problem It Solves
 
