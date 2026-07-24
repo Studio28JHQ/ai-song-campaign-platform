@@ -69,7 +69,7 @@ export function ConsentBanner() {
     <div
       role="region"
       aria-label="Aviso de privacidad"
-      className="theme-campaign campaign-landing fixed inset-x-0 bottom-0 z-50 pb-4"
+      className="theme-campaign !bg-transparent campaign-landing fixed inset-x-0 bottom-0 z-50 pb-4"
     >
       <CampaignCard className="mx-auto flex w-[90vw] flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-body text-foreground">
