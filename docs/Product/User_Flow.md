@@ -131,6 +131,10 @@ On successful registration, the flow continues exactly as already documented: th
 
 **Performance & accessibility.** Every photo (Sprint UI-2.5's campaign asset library — animals, products, backgrounds) is served through `next/image`, AVIF-first with a WEBP/original fallback (`next.config.ts`); decorative-only images are `alt=""` plus `aria-hidden`, content images carry real Spanish alt text. Semantic landmarks (`<header>`, `<main>`, one `<section>` per block, `<footer>`) and a single `<h1>` with ordered `<h2>`s establish the page's structure for assistive technology and search engines alike. The small motion system (`app/globals.css`) — floats, fades, drifts — is fully disabled under `prefers-reduced-motion: reduce`.
 
+**Google Tag Manager (Feature 1).** If the campaign has a GTM container id configured (Admin → Configuración), the Landing renders Google's official GTM snippet; if not, no tracking code of any kind is present on the page. See `docs/Architecture/System_Architecture.md` — Google Tag Manager Configuration.
+
+**Privacy consent banner (Feature 2).** A cookie/privacy consent banner is shown at the bottom of the Landing until the visitor accepts it, then never shown again to that visitor. Accepting it creates an anonymous `Consent` record tied to a first-party session cookie; if the same visitor goes on to register, that record is linked to their new Lead automatically. See `docs/Architecture/System_Architecture.md` — Privacy Consent Module and `docs/Product/Business_Rules.md` — Consent Rules.
+
 ## Lyrics Generation Endpoints
 
 **`POST /api/lyrics/generate`** implements the **Song Personalization → Claude Moderation → Lyrics Generation** steps of the happy path in one call — see `docs/Architecture/External_Services.md` for why moderation and generation are a single Claude request. It also serves regeneration ("Generate Again"): the same endpoint is called again, and the backend determines whether this is a first attempt or a regeneration by checking whether the lead already has any lyrics versions, rather than trusting a client-supplied flag.

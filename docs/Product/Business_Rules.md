@@ -57,3 +57,15 @@
 - The campaign supports generation of up to 3,000 songs in total.
 - Only one email is sent per user, containing the final generated song.
 - The campaign is temporary and is not intended to operate beyond its defined duration or song cap.
+
+## Analytics Rules
+
+- All external analytics/tracking integrations are managed exclusively through Google Tag Manager (GTM) — no other analytics provider is integrated directly into the codebase.
+- The GTM container id is a single, database-backed global setting, editable only from the Admin panel (Configuración). No environment variable and no hardcoded id may ever hold this value.
+- If no GTM container id is configured, no tracking code of any kind is rendered on the Landing.
+
+## Consent Rules
+
+- The Landing shows a cookie/privacy consent banner until the visitor accepts it; once accepted, it never shows again to that visitor.
+- Accepting consent creates exactly one anonymous `Consent` record per first-party session (never duplicated), capturing IP address, user agent, the privacy policy version in force, and the acceptance timestamp.
+- If the visitor later registers, the existing `Consent` record is associated with the new Lead via the session id — the registration flow never creates a second `Consent` for that session.

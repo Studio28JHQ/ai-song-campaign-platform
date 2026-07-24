@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { appConfig } from "@/config/app";
+import { ConsentBanner } from "@/features/consent/components/ConsentBanner";
 import { CampaignExplanation } from "@/features/landing/components/CampaignExplanation";
 import { Faq } from "@/features/landing/components/Faq";
+import { GoogleTagManager } from "@/features/landing/components/GoogleTagManager";
 import { HeroSection } from "@/features/landing/components/HeroSection";
 import { HowItWorks } from "@/features/landing/components/HowItWorks";
 import { LandingFooter } from "@/features/landing/components/LandingFooter";
@@ -48,17 +50,26 @@ export const metadata: Metadata = {
  * brand palette to this page only; `.campaign-landing` (Sprint UI-3A)
  * additionally activates Gotham Book as the body font — both scoped to
  * this page alone, see `app/globals.css`.
+ *
+ * `GoogleTagManager` (Feature 1) and `ConsentBanner` (Feature 2) are the
+ * only other client-side islands, alongside `RegistrationForm` — both
+ * fetch their own state independently and never block this page's own
+ * render.
  */
 export default function HomePage() {
   return (
-    <main className="theme-campaign campaign-landing">
-      <Navigation />
-      <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
-      <CampaignExplanation />
-      <HowItWorks />
-      <Faq />
-      <LegalDisclaimer />
-      <LandingFooter campaignName={appName} />
-    </main>
+    <>
+      <GoogleTagManager />
+      <main className="theme-campaign campaign-landing">
+        <Navigation />
+        <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
+        <CampaignExplanation />
+        <HowItWorks />
+        <Faq />
+        <LegalDisclaimer />
+        <LandingFooter campaignName={appName} />
+      </main>
+      <ConsentBanner />
+    </>
   );
 }

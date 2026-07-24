@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/layout/Section";
 import { appConfig } from "@/config/app";
+import { GtmSettingsForm } from "@/features/admin/components/GtmSettingsForm";
 
 export const metadata: Metadata = {
   title: "Configuración | Bassa",
@@ -20,9 +21,12 @@ const SETTINGS: Array<{ label: string; value: string }> = [
 /**
  * Sprint ADMIN-1 — Backoffice de Campaña. Read-only display of the
  * campaign's operational settings — never secrets/credentials, only the
- * values that shape the campaign itself (goal, attempt limits, timeout).
- * There is nothing to edit here yet: every value still comes from the
- * environment (see `appConfig`), unchanged by this sprint.
+ * values that shape the campaign itself (goal, attempt limits, timeout);
+ * every value still comes from the environment (see `appConfig`).
+ *
+ * Feature 1 — Google Tag Manager Configuration adds the one editable,
+ * DB-backed global setting this screen has: the GTM container id (see
+ * `GtmSettingsForm`).
  */
 export default function AdminSettingsPage() {
   return (
@@ -42,6 +46,8 @@ export default function AdminSettingsPage() {
               </div>
             ))}
           </dl>
+
+          <GtmSettingsForm />
         </div>
       </Section>
     </PageContainer>

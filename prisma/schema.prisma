@@ -84,6 +84,13 @@ model Campaign {
   startsAt            DateTime
   endsAt              DateTime
   isGenerationEnabled Boolean        @default(true)
+  // Google Tag Manager container id (e.g. "GTM-XXXXXXX") — the single,
+  // DB-backed global configuration setting for all external analytics
+  // integrations (see PROJECT_MANIFEST.md). Nullable/empty means GTM is
+  // disabled: no tracking code is ever rendered on the Landing. Never an
+  // environment variable and never hardcoded — editable only from the
+  // Admin panel (Configuración) and read fresh at render time.
+  gtmContainerId      String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
@@ -117,11 +124,38 @@ model Lead {
   song               Song?
   generationAttempts GenerationAttempt[]
   sessions           LeadSession[]
+  consent            Consent?
 
   @@index([campaignId])
   @@index([status])
   @@index([createdAt])
   @@map("leads")
+}
+
+// Privacy Consent Module. One anonymous Consent record is created the
+// moment a visitor accepts the cookie/privacy banner, keyed by a
+// first-party `sessionId` cookie generated at that moment — before any
+// Lead exists. If the same visitor later completes registration, the
+// existing row is associated with the new Lead via that same
+// `sessionId` (never a second Consent row); see
+// `AssociateConsentWithLeadUseCase`. `leadId` stays nullable/unique so a
+// visitor who accepts but never registers still has a durable,
+// standalone consent record, and a Lead can never end up linked to more
+// than one Consent.
+model Consent {
+  id            String   @id @default(uuid()) @db.Uuid
+  sessionId     String   @unique
+  leadId        String?  @unique @db.Uuid
+  ipAddress     String
+  userAgent     String
+  policyVersion String
+  acceptedAt    DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@map("consents")
 }
 
 // A dedicated, opaque, DB-backed session token for the parent-facing flow

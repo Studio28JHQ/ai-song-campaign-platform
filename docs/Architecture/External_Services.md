@@ -175,6 +175,26 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Retry Policy** — A failed pipeline tick is not retried within the same run — it simply waits for the next scheduled invocation (10 minutes later), which is also when a Song stuck past `GENERATION_TIMEOUT_MINUTES` would be reclaimed. A run can also be re-triggered manually via `workflow_dispatch`.
 
+## Google Tag Manager
+
+**Responsibilities**
+
+- The exclusive mechanism for all external analytics/tracking integrations (Feature 1 — GTM Configuration)
+
+**Purpose** — Lets the campaign team manage tracking/analytics tags without further code changes, while keeping the codebase itself free of any analytics-provider SDK or hardcoded tracking id. There is no direct application-level integration with any analytics provider (GA4, Meta Pixel, etc.) — anything beyond page-load tracking is configured inside the GTM container itself, entirely outside this repository.
+
+**Configuration, not a client SDK** — Unlike every other integration in this document, there is no dedicated client class calling an external API. The only application code involved is: `Campaign.gtmContainerId` (a nullable string column — the single global setting, see `docs/Architecture/Database_Model.md`), `CampaignSettingsGate`/`PrismaCampaignSettingsGate` (`src/application/campaign/`, `src/infrastructure/persistence/prisma/campaign/`) for reading/writing it, `GetCampaignSettingsUseCase`/`UpdateGtmSettingsUseCase` (`src/application/admin/use-cases/`) for the Admin Settings screen, and `GoogleTagManager` (`src/features/landing/components/`) — a client component that reads the current value from the public `GET /api/settings/gtm` endpoint and, only when non-empty, renders Google's own official snippet (a `next/script` tag plus a `<noscript>` iframe fallback) on the Landing.
+
+**Persistence, not an environment variable** — `Campaign.gtmContainerId` is validated against `GTM-[A-Z0-9]+` (case-insensitive, uppercased on save) by `UpdateGtmSettingsUseCase` before being persisted; an empty/blank value clears it. This is deliberate: an environment variable would require a redeploy to change, and campaign operators need to toggle/update tracking themselves from the Admin panel.
+
+**Expected Inputs** — An admin-entered GTM container id (`PATCH /api/admin/settings`, admin-session-gated).
+
+**Expected Outputs** — The official GTM snippet rendered on the Landing when configured; nothing rendered when not.
+
+**Failure Scenarios** — A malformed container id is rejected at write time with a `400`, before it is ever persisted. A failure to read the setting on the Landing (`GET /api/settings/gtm`) degrades to "no GTM code rendered" rather than surfacing an error to the visitor — analytics must never break the campaign experience.
+
+**Retry Policy** — Not applicable; GTM's own script handles its own loading/retry behavior once injected, same as on any other site that embeds it.
+
 ## Cloudflare
 
 **Responsibilities**

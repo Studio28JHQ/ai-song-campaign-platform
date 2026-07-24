@@ -12,7 +12,11 @@ This document describes the relational schema in `prisma/schema.prisma`. It is a
 
 ### Campaign
 
-Represents the single marketing campaign and its global constraints (see `docs/Architecture/Domain_Model.md#Campaign`). `maximumSongs`/`songsGenerated` track the campaign-wide song cap; `isGenerationEnabled` is an operational kill-switch independent of `status`, so generation can be paused without changing the campaign's lifecycle state. `status` (`DRAFT` / `ACTIVE` / `PAUSED` / `COMPLETED`) models the campaign's lifecycle.
+Represents the single marketing campaign and its global constraints (see `docs/Architecture/Domain_Model.md#Campaign`). `maximumSongs`/`songsGenerated` track the campaign-wide song cap; `isGenerationEnabled` is an operational kill-switch independent of `status`, so generation can be paused without changing the campaign's lifecycle state. `status` (`DRAFT` / `ACTIVE` / `PAUSED` / `COMPLETED`) models the campaign's lifecycle. `gtmContainerId` (nullable, Feature 1 — GTM Configuration) is the campaign's only Google Tag Manager container id, editable from the Admin panel — the sole DB-backed global setting the schema currently exposes; `null`/empty disables GTM entirely.
+
+### Consent
+
+An anonymous, session-scoped record of a visitor accepting the Landing's cookie/privacy banner (Feature 2 — Privacy Consent Module; see `docs/Architecture/Domain_Model.md#Consent`). `sessionId` is globally unique — the database is the final enforcement point for "exactly one Consent per session, never duplicated." `leadId` is nullable and unique: `null` until (if ever) the visitor completes registration, at which point the existing row is associated by `sessionId` — never a second `Consent` — and unique because a Lead can never be linked to more than one Consent. `ipAddress`/`userAgent`/`policyVersion`/`acceptedAt` are captured once, at acceptance time, and never mutated afterward; only `leadId` (and therefore `updatedAt`) ever changes after creation.
 
 ### Lead
 
@@ -53,6 +57,7 @@ Campaign 1 ──< Lead
 Lead     1 ──< Lyrics
 Lead     1 ──1 Song            (at most one)
 Lead     1 ──< GenerationAttempt
+Lead     1 ──1 Consent         (at most one, and only once registered)
 Mood     1 ──< Lyrics
 Mood     1 ──< Song
 Lyrics   1 ──1 GenerationAttempt (the attempt that produced it, if any)
@@ -70,18 +75,21 @@ AdminUser 1 ──< AuditLog
 | At most one approved lyrics version per lead | Hand-added partial unique index (`WHERE approved = true`) in the migration SQL (Prisma's schema DSL has no partial-index syntax) |
 | Attempt numbers don't collide per lead       | `@@unique([leadId, attemptNumber])` on `GenerationAttempt`                                                                       |
 | Lyrics versions don't collide per lead       | `@@unique([leadId, version])` on `Lyrics`                                                                                        |
+| Exactly one Consent per session              | `@unique` on `Consent.sessionId`                                                                                                 |
+| At most one Consent per lead                 | `@unique` on `Consent.leadId`                                                                                                    |
 | Cascade deletes only where appropriate       | See table below                                                                                                                  |
 
 ### Delete behavior
 
-| Relationship                         | On delete  | Reasoning                                                                                                         |
-| ------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| Lead → Campaign                      | `Restrict` | A campaign must not be deletable while it still has leads; prevents accidental mass data loss.                    |
-| Lyrics/GenerationAttempt/Song → Lead | `Cascade`  | Deleting a lead (e.g. a data-erasure request) removes all of that lead's data with it.                            |
-| Lyrics/Song → Mood                   | `Restrict` | Moods are a small, fixed reference set; deleting one must not silently orphan or destroy historical lyrics/songs. |
-| Song → Lyrics                        | `Restrict` | The lyrics version behind a generated song must not be deletable out from under it.                               |
-| GenerationAttempt → Lyrics           | `SetNull`  | The attempt log is an audit trail; it should survive even if the lyrics row it produced is later removed.         |
-| AuditLog → AdminUser                 | `Restrict` | Preserves audit trail integrity; admins are deactivated, not deleted.                                             |
+| Relationship                         | On delete  | Reasoning                                                                                                                                |
+| ------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Lead → Campaign                      | `Restrict` | A campaign must not be deletable while it still has leads; prevents accidental mass data loss.                                           |
+| Lyrics/GenerationAttempt/Song → Lead | `Cascade`  | Deleting a lead (e.g. a data-erasure request) removes all of that lead's data with it.                                                   |
+| Lyrics/Song → Mood                   | `Restrict` | Moods are a small, fixed reference set; deleting one must not silently orphan or destroy historical lyrics/songs.                        |
+| Song → Lyrics                        | `Restrict` | The lyrics version behind a generated song must not be deletable out from under it.                                                      |
+| GenerationAttempt → Lyrics           | `SetNull`  | The attempt log is an audit trail; it should survive even if the lyrics row it produced is later removed.                                |
+| Consent → Lead                       | `SetNull`  | A Consent record is anonymous by design; it must survive (reverting to unassociated) even if the Lead it was later linked to is removed. |
+| AuditLog → AdminUser                 | `Restrict` | Preserves audit trail integrity; admins are deactivated, not deleted.                                                                    |
 
 ## Indexes
 

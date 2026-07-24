@@ -1,7 +1,9 @@
+import { cookies } from "next/headers";
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import type { LeadCampaignConfig } from "@/application/lead/contracts/LeadCampaignConfig";
 import { CreateLeadUseCase } from "@/application/lead/use-cases/CreateLeadUseCase";
+import { AssociateConsentWithLeadUseCase } from "@/application/consent/use-cases/AssociateConsentWithLeadUseCase";
 import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { appConfig, buildAppUrl } from "@/config/app";
@@ -10,9 +12,11 @@ import {
   leadSessionCookieOptions,
 } from "@/infrastructure/auth/leadSessionCookie";
 import { PrismaLeadSessionService } from "@/infrastructure/auth/PrismaLeadSessionService";
+import { CONSENT_SESSION_COOKIE } from "@/infrastructure/consent/consentSessionCookie";
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
+import { PrismaConsentRepository } from "@/infrastructure/persistence/prisma/consent/PrismaConsentRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
@@ -50,6 +54,9 @@ const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
 const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 const turnstileVerifier = new TurnstileVerifier(new TurnstileClient());
 const emailSender = new ResendEmailService();
+const associateConsentWithLeadUseCase = new AssociateConsentWithLeadUseCase(
+  new PrismaConsentRepository(),
+);
 
 // Structural validation (shape/type/presence) plus the shared Sprint 8.1
 // input-hardening rules (trim, collapse whitespace, Unicode
@@ -145,6 +152,26 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const result = await createLeadUseCase.execute(parsed.data);
     const session = await leadSessionService.create(result.lead.id);
+
+    // Feature 2 — Privacy Consent Module: if this visitor already
+    // accepted the privacy banner (an existing `consent_session_id`
+    // cookie with a matching Consent row), link that anonymous record to
+    // the Lead just created — via `sessionId`, never creating a second
+    // Consent. Best-effort: a visitor who registers without ever having
+    // accepted the banner has nothing to associate, and a failure here
+    // must never block registration.
+    try {
+      const consentSessionId = (await cookies()).get(CONSENT_SESSION_COOKIE)?.value ?? null;
+      await associateConsentWithLeadUseCase.execute({
+        sessionId: consentSessionId,
+        leadId: result.lead.id,
+      });
+    } catch (error) {
+      logger.error("Failed to associate consent with the newly created lead", {
+        leadId: result.lead.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     const response = NextResponse.json(
       {

@@ -81,7 +81,7 @@ QUEUED ──▶ GENERATING ──▶ COMPLETED
 
 **Purpose** — The overall one-month marketing campaign and its global constraints (active window, song cap).
 
-**Implementation status** — There is no `Campaign` domain aggregate in `src/domain/`. `Campaign` exists only as a Prisma model (see `docs/Architecture/Database_Model.md`); the one thing the application layer needs from it — "is this campaign active and is generation enabled?" — is satisfied by the narrow `CampaignGate` port (`src/application/song/contracts/CampaignGate.ts`), backed by a thin Prisma adapter (`PrismaCampaignGate`). This was a deliberate simplification during implementation, not an oversight: a full aggregate would add a repository and lifecycle rules with no current caller.
+**Implementation status** — There is no `Campaign` domain aggregate in `src/domain/`. `Campaign` exists only as a Prisma model (see `docs/Architecture/Database_Model.md`); the one thing the application layer needs from it — "is this campaign active and is generation enabled?" — is satisfied by the narrow `CampaignGate` port (`src/application/song/contracts/CampaignGate.ts`), backed by a thin Prisma adapter (`PrismaCampaignGate`). This was a deliberate simplification during implementation, not an oversight: a full aggregate would add a repository and lifecycle rules with no current caller. Feature 1 (GTM Configuration) reads/writes the campaign's `gtmContainerId` the same way, through a second narrow port, `CampaignSettingsGate` (`src/application/campaign/contracts/`) — see `docs/Architecture/System_Architecture.md` — Google Tag Manager Configuration.
 
 **Relationships** — One Campaign has many Leads. Leads cannot be registered outside the Campaign's active window or once its song cap is reached (enforced at the application layer where each rule is actually checked, not by a `Campaign` entity).
 
@@ -98,6 +98,23 @@ QUEUED ──▶ GENERATING ──▶ COMPLETED
 **Purpose (as designed)** — Intended as a per-attempt audit trail of every interaction with Claude, including attempts that fail before producing lyrics (see `docs/Architecture/Database_Model.md`).
 
 **Implementation status** — The `GenerationAttempt` Prisma model exists in the schema but is never written to or read by any current code path (verified: no reference outside the generated Prisma client). The five-attempts business rule (see `docs/Product/Business_Rules.md`) is fully enforced today through a simpler mechanism — `Lead.remainingAttempts`, a single counter decremented by `GenerateLyricsForLeadUseCase` — which is sufficient for the rule as written. The practical effect: a moderation-rejected attempt that never produced a `Lyrics` row leaves no individual record of itself (only the decremented counter), so the Admin execution history (see `docs/Product/User_Flow.md`) cannot show it as a distinct timeline event. See `BACKLOG_V3.md` for wiring this table up as a real audit trail.
+
+## Consent
+
+**Purpose** — Represents a visitor's acceptance of the Landing's cookie/privacy banner (Feature 2 — Privacy Consent Module). Implemented as an aggregate root at `src/domain/consent/entities/Consent.ts`.
+
+**Responsibilities** — Holds the acceptance record (`sessionId`, `ipAddress`, `userAgent`, `policyVersion`, `acceptedAt`) and, once a visitor registers, the `leadId` it was later associated with. Created anonymously — `leadId: null` — since consent is captured before any Lead exists.
+
+**Invariants** (enforced by the entity itself, not by infrastructure):
+
+- `sessionId`, `ipAddress`, `userAgent`, and `policyVersion` are mandatory — construction fails otherwise.
+- `associateWithLead(leadId)` is idempotent when called again with the same lead, but throws a `BusinessRuleError` if the record is already associated with a _different_ lead — a Consent can never silently change owners.
+
+**Relationships** — At most one Consent per first-party session (`sessionId` unique at the database level — see `docs/Architecture/Database_Model.md`); at most one Consent per Lead (`leadId` nullable and unique). The persistence contract is `ConsentRepository` (`src/domain/consent/repositories/ConsentRepository.ts`), implemented by `PrismaConsentRepository` (`src/infrastructure/persistence/prisma/consent/`).
+
+### Application Layer — Consent
+
+`src/application/consent/` has two use cases: `RecordConsentUseCase` (looks up the Consent by `sessionId`; returns it unchanged if found, otherwise creates a new one — "exactly one Consent per session, never duplicated") and `AssociateConsentWithLeadUseCase` (looks up the Consent by `sessionId` and links it to a newly registered Lead — a no-op if no session/no matching Consent exists). Wired into `POST /api/consent` and, as a best-effort step, `POST /api/leads` respectively — see `docs/Architecture/System_Architecture.md` — Privacy Consent Module.
 
 ## Admin
 
