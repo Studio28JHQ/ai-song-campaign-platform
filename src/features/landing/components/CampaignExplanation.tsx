@@ -2,6 +2,7 @@ import Image from "next/image";
 import { CampaignContainer } from "@/components/campaign/CampaignContainer";
 import { CampaignHeading } from "@/components/campaign/CampaignHeading";
 import { CampaignSection } from "@/components/campaign/CampaignSection";
+import { CampaignProducts } from "./CampaignProducts";
 
 /** Explains what the campaign is and why it exists — see docs/Product/Product_Vision.md. */
 export function CampaignExplanation() {
@@ -15,24 +16,29 @@ export function CampaignExplanation() {
         height={56}
         className="pointer-events-none absolute top-8 right-[8%] hidden opacity-70 sm:block"
       />
+
       <CampaignContainer narrow>
-        <div className="flex flex-col items-center gap-6 text-center">
+        <div className="flex flex-col items-center text-center">
           <CampaignHeading as="h2" variant="section">
             ¿Qué es esta campaña?
           </CampaignHeading>
-          <p className="max-w-prose text-body text-muted-foreground">
+
+          <p className="mt-6 max-w-prose text-body text-muted-foreground">
             Por tiempo limitado, queremos celebrar a las familias con un regalo muy especial: una
             canción completamente original, escrita e interpretada exclusivamente para tu bebé.
             Cuéntanos un poco sobre tu pequeño y nuestra inteligencia artificial creará una letra
             inspirada en su historia. Cuando la apruebes, la convertiremos en una canción totalmente
             producida para que puedas conservarla y recordarla siempre.
           </p>
-          <p className="max-w-prose text-body text-muted-foreground">
+
+          <p className="mt-8 max-w-prose text-body text-muted-foreground">
             Es un regalo sin costo, creado con mucho cariño para tu familia y disponible únicamente
             durante el tiempo que dure esta campaña.
           </p>
         </div>
       </CampaignContainer>
+
+      <CampaignProducts />
     </CampaignSection>
   );
 }
