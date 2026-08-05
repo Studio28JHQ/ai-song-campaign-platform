@@ -43,6 +43,7 @@ async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
   await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
   await user.type(screen.getByLabelText("Correo electrónico"), "jane@example.com");
+  await user.click(screen.getByLabelText(/política de privacidad/i));
 }
 
 function mockFetchOnce(response: { ok: boolean; status?: number; body: unknown }) {
@@ -111,6 +112,10 @@ describe("RegistrationForm", () => {
     global.fetch = vi.fn();
 
     renderForm();
+    // The submit button stays disabled until terms are accepted (see its
+    // own dedicated test) — checked here too so this test can reach the
+    // *other* fields' validation.
+    await user.click(screen.getByLabelText(/política de privacidad/i));
     await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(await screen.findByText("Tu nombre es obligatorio.")).toBeInTheDocument();
@@ -127,6 +132,7 @@ describe("RegistrationForm", () => {
     await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
     await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
     await user.type(screen.getByLabelText("Correo electrónico"), "not-an-email");
+    await user.click(screen.getByLabelText(/política de privacidad/i));
     await user.click(screen.getByRole("button", { name: /crear la canción/i }));
 
     expect(await screen.findByText("Ingresa un correo electrónico válido.")).toBeInTheDocument();
@@ -193,5 +199,91 @@ describe("RegistrationForm", () => {
       json: async () => ({ remainingAttempts: 5, status: "REGISTERED" }),
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
+  });
+
+  it("keeps the submit button disabled until the terms checkbox is accepted", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn();
+
+    renderForm();
+    await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
+    await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
+    await user.type(screen.getByLabelText("Correo electrónico"), "jane@example.com");
+
+    const submitButton = screen.getByRole("button", { name: /crear la canción/i });
+    expect(submitButton).toBeDisabled();
+
+    await user.click(screen.getByLabelText(/política de privacidad/i));
+    expect(submitButton).toBeEnabled();
+  });
+
+  it("blocks submission and shows an error when the terms checkbox is unchecked", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn();
+
+    renderForm();
+    await user.type(screen.getByLabelText("Tu nombre"), "Jane Doe");
+    await user.type(screen.getByLabelText("Nombre del bebé"), "Baby Doe");
+    await user.type(screen.getByLabelText("Correo electrónico"), "jane@example.com");
+
+    // The button stays disabled while unchecked (see the test above), so
+    // native `noValidate` submission never fires — asserting the checkbox
+    // itself carries the failure is what actually matters here.
+    expect(screen.getByLabelText(/política de privacidad/i)).not.toBeChecked();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("submits the selected Age band as the integer the backend already expects", async () => {
+    const user = userEvent.setup();
+    mockFetchOnce({
+      ok: true,
+      body: { remainingAttempts: 5, status: "REGISTERED" },
+    });
+
+    renderForm();
+    await fillRequiredFields(user);
+    await user.selectOptions(screen.getByLabelText("Edad del bebé"), "1 a 2 años");
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [, requestInit] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse((requestInit as RequestInit).body as string);
+    expect(body.babyAge).toBe(24);
+  });
+
+  it("submits the selected City option as plain text", async () => {
+    const user = userEvent.setup();
+    mockFetchOnce({
+      ok: true,
+      body: { remainingAttempts: 5, status: "REGISTERED" },
+    });
+
+    renderForm();
+    await fillRequiredFields(user);
+    await user.selectOptions(screen.getByLabelText("Ciudad"), "Guayaquil");
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [, requestInit] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse((requestInit as RequestInit).body as string);
+    expect(body.city).toBe("Guayaquil");
+  });
+
+  it("leaves Age and City unselected without blocking submission — both stay optional", async () => {
+    const user = userEvent.setup();
+    mockFetchOnce({
+      ok: true,
+      body: { remainingAttempts: 5, status: "REGISTERED" },
+    });
+
+    renderForm();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: /crear la canción/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [, requestInit] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse((requestInit as RequestInit).body as string);
+    expect(body.babyAge).toBeUndefined();
+    expect(body.city).toBeUndefined();
   });
 });

@@ -4,26 +4,20 @@ import { CampaignHeading } from "@/components/campaign/CampaignHeading";
 import { CampaignSection } from "@/components/campaign/CampaignSection";
 
 const STEPS = [
-  { title: "Regístrate", description: "Comparte tu correo y algunos datos sobre tu familia." },
   {
-    title: "Cuéntanos sobre tu bebé",
-    description: "Dinos el nombre de tu bebé y elige el estilo de la canción.",
+    title: "Regístrate",
+    description:
+      "Regístrate y llena el formulario. Comparte tu correo y cuéntanos algunos datos sobre ti y tu bebé para personalizar la canción.",
   },
   {
     title: "La IA escribe la letra",
-    description: "Escribimos, con cariño, una letra pensada solo para tu pequeño.",
-  },
-  {
-    title: "Tú apruebas la letra",
-    description: "Revisa la letra y apruébala, o pide una nueva versión.",
-  },
-  {
-    title: "La IA crea la canción",
-    description: "Una vez aprobada, la letra se convierte en una canción totalmente producida.",
+    description:
+      "La IA crea una letra personalizada para tu bebé. Revísala y apruébala o solicita una nueva versión.",
   },
   {
     title: "La recibes por correo",
-    description: "Tu canción terminada llega a tu correo, lista para escuchar y atesorar.",
+    description:
+      "Tu canción terminada llegará a tu correo, lista para escuchar, compartir y atesorar.",
   },
 ] as const;
 

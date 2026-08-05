@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { appConfig } from "@/config/app";
 import { ConsentBanner } from "@/features/consent/components/ConsentBanner";
-import { CampaignExplanation } from "@/features/landing/components/CampaignExplanation";
+import { CampaignProducts } from "@/features/landing/components/CampaignProducts";
 import { Faq } from "@/features/landing/components/Faq";
 import { GoogleTagManager } from "@/features/landing/components/GoogleTagManager";
 import { HeroSection } from "@/features/landing/components/HeroSection";
@@ -39,12 +39,20 @@ export const metadata: Metadata = {
  * marketing landing experience: a minimal `Navigation` (logo only), a
  * full-viewport `HeroSection` with the registration form embedded
  * directly inside it (reusing the existing `RegistrationForm` — see
- * `src/features/lead/`, not duplicated), then campaign explanation, how
- * it works, FAQ, legal disclaimer, and footer (see
+ * `src/features/lead/`, not duplicated), then campaign products, how it
+ * works, FAQ, legal disclaimer, and footer (see
  * docs/Product/User_Flow.md). There is no separate scrolled-to
  * registration section anymore — the Hero *is* the registration entry
  * point. Entirely Server Components: the only client-side island is
  * `RegistrationForm` itself.
+ *
+ * The former `CampaignExplanation` text section ("¿Qué es esta
+ * campaña?") was removed outright, not just hidden — `CampaignProducts`
+ * (previously nested at its bottom) is now its own top-level section
+ * directly under `HeroSection`, and `CampaignExplanation` itself was
+ * deleted since nothing else referenced it. A new campaign banner
+ * section belongs between `HeroSection` and `CampaignProducts` — deferred
+ * until the client's banner asset is available.
  *
  * `.theme-campaign` (Sprint UI-1) scopes the soft-blue/white/purple
  * brand palette to this page only; `.campaign-landing` (Sprint UI-3A)
@@ -63,7 +71,7 @@ export default function HomePage() {
       <main className="theme-campaign campaign-landing">
         <Navigation />
         <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
-        <CampaignExplanation />
+        <CampaignProducts />
         <HowItWorks />
         <Faq />
         <LegalDisclaimer />

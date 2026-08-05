@@ -14,31 +14,23 @@ describe("HomePage (Landing Page)", () => {
     expect(h1s).toHaveLength(1);
     expect(h1s[0]).toHaveTextContent(/canción/i);
 
-    expect(
-      screen.getByRole("heading", { level: 2, name: /qué es esta campaña/i }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /cómo funciona/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: /crea la canción de tu bebé/i }),
+      screen.getByRole("heading", { level: 3, name: /crea la canción de tu bebé/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: /preguntas frecuentes/i }),
     ).toBeInTheDocument();
   });
 
-  it("displays the six-step campaign flow in the documented order", () => {
+  it("displays the three-step campaign flow in the documented order", () => {
     render(<HomePage />);
 
-    const steps = [
-      "Regístrate",
-      "Cuéntanos sobre tu bebé",
-      "La IA escribe la letra",
-      "Tú apruebas la letra",
-      "La IA crea la canción",
-      "La recibes por correo",
-    ];
+    const steps = ["Regístrate", "La IA escribe la letra", "La recibes por correo"];
 
-    const stepHeadings = screen.getAllByRole("heading", { level: 3 });
+    const sectionHeading = screen.getByRole("heading", { level: 2, name: /cómo funciona/i });
+    const list = sectionHeading.parentElement?.querySelector("ol");
+    const stepHeadings = within(list as HTMLElement).getAllByRole("heading", { level: 3 });
     expect(stepHeadings.map((heading) => heading.textContent)).toEqual(steps);
   });
 

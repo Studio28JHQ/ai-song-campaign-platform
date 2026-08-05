@@ -14,7 +14,9 @@ import {
   PhoneIcon,
   UserIcon,
 } from "@/components/campaign/CampaignFieldIcons";
+import { CampaignSelectField } from "@/components/campaign/CampaignSelectField";
 import { TurnstileWidget, type TurnstileWidgetHandle } from "@/components/security/TurnstileWidget";
+import { Label } from "@/components/ui/label";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import {
   emailField,
@@ -32,6 +34,75 @@ import { useRegisterLead } from "../hooks/useRegisterLead";
  */
 const DEFAULT_CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
 
+/**
+ * The Age field is a fixed set of bands, not an exact number of months —
+ * each option's `value` is the exact integer the backend has always
+ * expected for `babyAge` (a plain months count; see `BabyAge`), so no
+ * separate mapping step is needed at submit time: `Number(value)` alone
+ * reproduces it. UI-only — the domain/API contract is untouched.
+ */
+const BABY_AGE_OPTIONS = [
+  { value: "12", label: "0 a 12 meses" },
+  { value: "24", label: "1 a 2 años" },
+  { value: "36", label: "2 a 3 años" },
+  { value: "48", label: "3 años en adelante" },
+] as const;
+
+/** Fixed city list for the (still optional) City field — replaces free text with a closed set. */
+const CITY_OPTIONS = [
+  "Quito",
+  "Guayaquil",
+  "Cuenca",
+  "Santo Domingo",
+  "Machala",
+  "Manta",
+  "Portoviejo",
+  "Ambato",
+  "Loja",
+  "Riobamba",
+  "Ibarra",
+  "Esmeraldas",
+  "Quevedo",
+  "Milagro",
+  "Babahoyo",
+  "Latacunga",
+  "Tulcán",
+  "Santa Elena",
+  "Salinas",
+  "La Libertad",
+  "Daule",
+  "Samborondón",
+  "Durán",
+  "El Carmen",
+  "Chone",
+  "Jipijapa",
+  "Bahía de Caráquez",
+  "Pedernales",
+  "Puyo",
+  "Tena",
+  "Macas",
+  "Nueva Loja (Lago Agrio)",
+  "Coca (Puerto Francisco de Orellana)",
+  "Zamora",
+  "Azogues",
+  "Guaranda",
+  "San Gabriel",
+  "Otavalo",
+  "Cayambe",
+  "Rumiñahui (Sangolquí)",
+  "Playas",
+  "Pasaje",
+  "Huaquillas",
+  "Vinces",
+  "Naranjal",
+  "Yaguachi",
+  "Pelileo",
+  "Baños de Agua Santa",
+  "Otros",
+] as const;
+
+const TERMS_URL = "https://bassa.com.ec/politica-de-privacidad/";
+
 // Client-side validation — instant feedback before a network round-trip,
 // built from the same Sprint 8.1 hardening rules (`@/shared/validation`)
 // enforced by the API and domain layers. The server remains the
@@ -45,16 +116,16 @@ const DEFAULT_CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
 const registrationFormSchema = z.object({
   parentName: plainTextField("Parent's name", FIELD_LIMITS.parentName),
   babyName: plainTextField("Baby's name", FIELD_LIMITS.babyName),
-  babyAge: z
-    .string()
-    .trim()
-    .refine((value) => value === "" || (/^\d+$/.test(value) && Number(value) > 0), {
-      message: "Ingresa un número entero positivo de meses.",
-    }),
+  // A closed set of band values from a native <select> — "" (unselected,
+  // the field stays optional) or one of `BABY_AGE_OPTIONS`'s values.
+  babyAge: z.string(),
   city: optionalPlainTextField("City", FIELD_LIMITS.city),
   email: emailField(),
   phone: optionalPhoneField(),
   turnstileToken: z.string().min(1, "Completa la verificación de seguridad."),
+  acceptedTerms: z.boolean().refine((value) => value === true, {
+    message: "Debes aceptar la política de privacidad para continuar.",
+  }),
 });
 
 type RegistrationFormInput = z.input<typeof registrationFormSchema>;
@@ -68,6 +139,7 @@ const defaultValues: RegistrationFormInput = {
   email: "",
   phone: "",
   turnstileToken: "",
+  acceptedTerms: false,
 };
 
 /**
@@ -127,6 +199,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
     handleSubmit,
     setError,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<RegistrationFormInput, unknown, RegistrationFormValues>({
     resolver: zodResolver(registrationFormSchema),
@@ -135,6 +208,7 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
   const { submit, isSubmitting } = useRegisterLead();
   const [formError, setFormError] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetHandle>(null);
+  const acceptedTerms = watch("acceptedTerms");
 
   async function onSubmit(values: RegistrationFormValues) {
     setFormError(null);
@@ -206,26 +280,33 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
           icon={<BabyIcon />}
         />
 
-        <CampaignField
-          label="Edad del bebé (meses)"
-          placeholder="6"
-          type="number"
-          inputMode="numeric"
-          autoComplete="off"
+        <CampaignSelectField
+          label="Edad del bebé"
           error={translateFieldError(errors.babyAge?.message)}
           registration={register("babyAge")}
           icon={<CalendarIcon />}
-        />
+        >
+          <option value="">Selecciona la edad</option>
+          {BABY_AGE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </CampaignSelectField>
 
-        <CampaignField
+        <CampaignSelectField
           label="Ciudad"
-          placeholder="Ej. Quito"
-          autoComplete="address-level2"
-          maxLength={FIELD_LIMITS.city}
           error={translateFieldError(errors.city?.message)}
           registration={register("city")}
           icon={<MapPinIcon />}
-        />
+        >
+          <option value="">Selecciona tu ciudad</option>
+          {CITY_OPTIONS.map((city) => (
+            <option key={city} value={city}>
+              {city}
+            </option>
+          ))}
+        </CampaignSelectField>
 
         <CampaignField
           label="Correo electrónico"
@@ -265,7 +346,44 @@ export function RegistrationForm({ turnstileSiteKey }: RegistrationFormProps) {
         ) : null}
       </div>
 
-      <CampaignButton type="submit" disabled={isSubmitting} className="mt-2.5 h-14 w-full text-lg">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="acceptedTerms" className="items-start gap-2 text-sm font-normal">
+          <input
+            id="acceptedTerms"
+            type="checkbox"
+            className="mt-0.5 size-4"
+            aria-invalid={Boolean(errors.acceptedTerms)}
+            aria-describedby={errors.acceptedTerms ? "acceptedTerms-error" : undefined}
+            {...register("acceptedTerms")}
+          />
+          <span>
+            Acepto la{" "}
+            <a
+              href={TERMS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
+              política de privacidad
+            </a>
+          </span>
+        </Label>
+        {errors.acceptedTerms ? (
+          <p
+            id="acceptedTerms-error"
+            role="alert"
+            className="text-sm text-[var(--destructive-text)]"
+          >
+            {errors.acceptedTerms.message}
+          </p>
+        ) : null}
+      </div>
+
+      <CampaignButton
+        type="submit"
+        disabled={isSubmitting || !acceptedTerms}
+        className="mt-2.5 h-14 w-full text-lg"
+      >
         {isSubmitting ? "Creando tu canción..." : "Crear la canción de mi bebé"}
       </CampaignButton>
     </form>
