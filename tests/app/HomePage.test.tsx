@@ -63,11 +63,10 @@ describe("HomePage (Landing Page)", () => {
     expect(list?.className).toContain("lg:grid-cols-3");
   });
 
-  it("accessibility smoke: main/footer/banner landmarks, single h1, and every image has alt text", () => {
+  it("accessibility smoke: main/footer landmarks, single h1, and every image has alt text", () => {
     render(<HomePage />);
 
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 
@@ -92,11 +91,17 @@ describe("HomePage (Landing Page)", () => {
     });
   });
 
-  it("the navigation bar renders only the campaign logo — no technical navigation links", () => {
+  it("CampaignBanner is the page's first element, full-bleed, with no logo header above it", () => {
     render(<HomePage />);
 
-    const nav = screen.getByRole("banner");
-    expect(nav.querySelectorAll("a, button")).toHaveLength(0);
-    expect(within(nav).getByRole("img", { name: "Bassa" })).toBeInTheDocument();
+    // The former logo-only header (an ARIA "banner" landmark) was removed
+    // outright — nothing renders above the campaign banner anymore.
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+
+    const main = screen.getByRole("main");
+    const banner = screen.getByAltText(/limpia y protege la piel delicada/i);
+    expect(main.firstElementChild).toBe(banner);
+    expect(banner.className).toContain("w-full");
+    expect(banner.className).not.toContain("rounded");
   });
 });

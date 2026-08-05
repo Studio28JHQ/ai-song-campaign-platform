@@ -15,6 +15,16 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.31.1] - 2026-08-05
+
+### Changed
+
+- **Landing Hero Adjustment**: `CampaignBanner` is now the very first element on the Landing page, above `HeroSection` (new order: Banner → Hero → Products → How It Works → FAQ → Legal Disclaimer → Footer). The logo-only `Navigation` header was removed from the Landing entirely (not hidden) so nothing sits above the banner — `Navigation` itself is untouched and still renders on `/generate`/`/song`. `CampaignBanner` no longer uses the shared `CampaignSection`/`CampaignContainer` shell (which added max-width, horizontal margins, and rounded corners): it's now a bare `next/image`, full-bleed edge-to-edge at 100% viewport width with no rounded corners, using `priority` since it's now the page's first visible element. `HeroSection` itself is unchanged — same registration form, Turnstile, validation, background artwork — only its position moved.
+
+### Maintenance
+
+- Updated `tests/app/HomePage.test.tsx` for the removed header: dropped the `role="banner"` landmark assertions (the landmark no longer exists on this page) and replaced the old "navigation renders only the logo" test with one asserting `CampaignBanner` is `<main>`'s first child, full-bleed, with no header above it.
+
 ## [1.31.0] - 2026-08-05
 
 ### Added

@@ -9,7 +9,6 @@ import { HeroSection } from "@/features/landing/components/HeroSection";
 import { HowItWorks } from "@/features/landing/components/HowItWorks";
 import { LandingFooter } from "@/features/landing/components/LandingFooter";
 import { LegalDisclaimer } from "@/features/landing/components/LegalDisclaimer";
-import { Navigation } from "@/features/landing/components/Navigation";
 
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — read directly here,
@@ -37,12 +36,11 @@ export const metadata: Metadata = {
 
 /**
  * The public campaign Landing Page — Sprint UI-3A rebuilt this into a
- * marketing landing experience: a minimal `Navigation` (logo only), a
- * full-viewport `HeroSection` with the registration form embedded
- * directly inside it (reusing the existing `RegistrationForm` — see
- * `src/features/lead/`, not duplicated), then campaign products, how it
- * works, FAQ, legal disclaimer, and footer (see
- * docs/Product/User_Flow.md). There is no separate scrolled-to
+ * marketing landing experience: a full-viewport `HeroSection` with the
+ * registration form embedded directly inside it (reusing the existing
+ * `RegistrationForm` — see `src/features/lead/`, not duplicated), then
+ * campaign products, how it works, FAQ, legal disclaimer, and footer
+ * (see docs/Product/User_Flow.md). There is no separate scrolled-to
  * registration section anymore — the Hero *is* the registration entry
  * point. Entirely Server Components: the only client-side island is
  * `RegistrationForm` itself.
@@ -51,9 +49,14 @@ export const metadata: Metadata = {
  * campaña?") was removed outright, not just hidden — `CampaignProducts`
  * (previously nested at its bottom) is now its own top-level section
  * directly under `HeroSection`, and `CampaignExplanation` itself was
- * deleted since nothing else referenced it. `CampaignBanner` (the
- * client's own campaign artwork) sits between `HeroSection` and
- * `CampaignProducts`.
+ * deleted since nothing else referenced it.
+ *
+ * `CampaignBanner` (the client's own campaign artwork) is now the very
+ * first thing on the page, full-bleed above `HeroSection` — the
+ * previous logo-only `Navigation` header was removed outright (not
+ * hidden) so nothing sits above the banner; `Navigation` itself still
+ * exists and is unchanged for `/generate`/`/song`, just no longer
+ * rendered here.
  *
  * `.theme-campaign` (Sprint UI-1) scopes the soft-blue/white/purple
  * brand palette to this page only; `.campaign-landing` (Sprint UI-3A)
@@ -70,9 +73,8 @@ export default function HomePage() {
     <>
       <GoogleTagManager />
       <main className="theme-campaign campaign-landing">
-        <Navigation />
-        <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
         <CampaignBanner />
+        <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
         <CampaignProducts />
         <HowItWorks />
         <Faq />
