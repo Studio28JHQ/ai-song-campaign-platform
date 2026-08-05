@@ -14,21 +14,21 @@ Ideas identified during development but deliberately not implemented, since they
 - Support Mureka's `melody_id`
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
-- New campaign banner section (between the Hero and Products) — deferred until the client's banner image asset is provided; not yet implemented.
 
 ## [1.31.0] - 2026-08-05
 
+### Added
+
+- **Campaign Banner**: a new `CampaignBanner` Landing section (`src/features/landing/components/`) renders the client's campaign artwork (`public/campaign/banners/banner-campaign.jpg`, a new per-kind asset folder alongside `backgrounds/`, `products/`, etc.) between the Hero and Products sections. Built on the same `CampaignSection`/`CampaignContainer` shell every other Landing section uses (same max-width, same vertical rhythm), with `next/image` given the asset's real intrinsic size (1920×1000) so it reserves the correct aspect ratio up front — no layout shift — while scaling fluidly to 100% of the container width (`w-full h-auto`) at every breakpoint. Rounded `24px` to match the existing card/section corner radius.
+- `CampaignSelect`/`CampaignSelectField` (`src/components/campaign/`): the `CampaignInput`/`CampaignField` pair's Select-field siblings — same sizing, focus ring, optional leading icon, and labeled/error-aware wiring, now used by the Age and City fields.
+
 ### Changed
 
-- **Landing Page Restructure**: removed the `CampaignExplanation` text section ("¿Qué es esta campaña?") outright — deleted, not hidden, since nothing referenced it once `CampaignProducts` (previously nested at its bottom) was promoted to its own top-level Landing section. New page order: Navigation → Hero (registration form) → Products → How It Works → FAQ → Legal Disclaimer → Footer. `CampaignProducts` now wraps itself in `CampaignSection` (`tone="soft"`) so it keeps the same `spacing="xl"` vertical rhythm every other Landing section uses, independent of its former parent.
+- **Landing Page Restructure**: removed the `CampaignExplanation` text section ("¿Qué es esta campaña?") outright — deleted, not hidden, since nothing referenced it once `CampaignProducts` (previously nested at its bottom) was promoted to its own top-level Landing section. New page order: Navigation → Hero (registration form) → Banner → Products → How It Works → FAQ → Legal Disclaimer → Footer. `CampaignProducts` now wraps itself in `CampaignSection` (`tone="soft"`) so it keeps the same `spacing="xl"` vertical rhythm every other Landing section uses, independent of its former parent.
 - **How It Works**: reduced from six steps to three ("Regístrate", "La IA escribe la letra", "La recibes por correo"), consolidating the registration/personalization and lyrics-approval steps into single cards. Visual style (grid, card, numbering) unchanged.
 - **Registration Form — Age field**: replaced the free numeric "months" input with a `<select>` of four fixed bands ("0 a 12 meses", "1 a 2 años", "2 a 3 años", "3 años en adelante"). UI-only: each option's value is the exact integer the backend already expected for `babyAge` (12/24/36/48), so `CreateLeadUseCase`, the `BabyAge` domain value object, the Prisma schema, the admin Lead Detail view, and the CSV export are all unchanged.
 - **Registration Form — City field**: replaced the free-text city input with a `<select>` populated from a fixed list of Ecuadorian cities plus an "Otros" catch-all. Still optional; still validated/sanitized through the existing shared `optionalPlainTextField`, so the API and domain layers needed no change.
 - **Registration Form — Terms & Conditions**: added a mandatory checkbox between the Turnstile widget and the submit button, linking to `https://bassa.com.ec/politica-de-privacidad/` (opens in a new tab). The submit button stays disabled until it's checked, and the checkbox's own zod validation blocks submission independently. Purely a client-side gate — acceptance is not persisted or sent to the backend, and does not duplicate or touch the existing cookie/privacy `Consent` module.
-
-### Added
-
-- `CampaignSelect`/`CampaignSelectField` (`src/components/campaign/`): the `CampaignInput`/`CampaignField` pair's Select-field siblings — same sizing, focus ring, optional leading icon, and labeled/error-aware wiring, now used by the Age and City fields.
 
 ### Maintenance
 

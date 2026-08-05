@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { appConfig } from "@/config/app";
 import { ConsentBanner } from "@/features/consent/components/ConsentBanner";
+import { CampaignBanner } from "@/features/landing/components/CampaignBanner";
 import { CampaignProducts } from "@/features/landing/components/CampaignProducts";
 import { Faq } from "@/features/landing/components/Faq";
 import { GoogleTagManager } from "@/features/landing/components/GoogleTagManager";
@@ -50,9 +51,9 @@ export const metadata: Metadata = {
  * campaña?") was removed outright, not just hidden — `CampaignProducts`
  * (previously nested at its bottom) is now its own top-level section
  * directly under `HeroSection`, and `CampaignExplanation` itself was
- * deleted since nothing else referenced it. A new campaign banner
- * section belongs between `HeroSection` and `CampaignProducts` — deferred
- * until the client's banner asset is available.
+ * deleted since nothing else referenced it. `CampaignBanner` (the
+ * client's own campaign artwork) sits between `HeroSection` and
+ * `CampaignProducts`.
  *
  * `.theme-campaign` (Sprint UI-1) scopes the soft-blue/white/purple
  * brand palette to this page only; `.campaign-landing` (Sprint UI-3A)
@@ -71,6 +72,7 @@ export default function HomePage() {
       <main className="theme-campaign campaign-landing">
         <Navigation />
         <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
+        <CampaignBanner />
         <CampaignProducts />
         <HowItWorks />
         <Faq />
