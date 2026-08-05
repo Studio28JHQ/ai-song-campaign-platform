@@ -77,6 +77,11 @@ export const metadata: Metadata = {
     template: `%s — ${appName}`,
   },
   description,
+  icons: {
+    icon: "/campaign/icons/favicon.png",
+    shortcut: "/campaign/icons/favicon.png",
+    apple: "/campaign/icons/favicon.png",
+  },
   openGraph: {
     type: "website",
     siteName: appName,
