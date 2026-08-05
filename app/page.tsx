@@ -74,9 +74,9 @@ export default function HomePage() {
       <GoogleTagManager />
       <main className="theme-campaign campaign-landing">
         <CampaignBanner />
+        <HowItWorks />
         <HeroSection turnstileSiteKey={appConfig.security.turnstile.siteKey} />
         <CampaignProducts />
-        <HowItWorks />
         <Faq />
         <LegalDisclaimer />
         <LandingFooter campaignName={appName} />

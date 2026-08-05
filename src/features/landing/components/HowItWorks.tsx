@@ -24,7 +24,7 @@ const STEPS = [
 /** The campaign flow, in order — see docs/Product/User_Flow.md — Happy Path. */
 export function HowItWorks() {
   return (
-    <CampaignSection tone="muted">
+    <CampaignSection tone="soft">
       <CampaignContainer>
         <CampaignHeading as="h2" variant="section" className="text-center">
           Cómo funciona
