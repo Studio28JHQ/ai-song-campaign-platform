@@ -41,9 +41,9 @@ const products = [
     image: "/campaign/products/packshot-sensyderm-crema.png",
     url: "https://bassa.com.ec/dermatologia/producto/sensy-derm-baby-crema-protectora-70g/",
     pillars: [
-      "Protege frente a la humedad y el roce",
-      "Forma una barrera protectora de larga duración",
-      "Ayuda a calmar e hidratar la piel sensible",
+      "Protege frente a la humedad",
+      "Forma una barrera protectora",
+      "Ayuda a calmar e hidratar",
     ],
     ingredients: ["Pantenol, ", "Ectoína, ", "Complejo de Probióticos"],
   },
