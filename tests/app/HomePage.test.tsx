@@ -99,9 +99,23 @@ describe("HomePage (Landing Page)", () => {
     expect(screen.queryByRole("banner")).not.toBeInTheDocument();
 
     const main = screen.getByRole("main");
-    const banner = screen.getByAltText(/limpia y protege la piel delicada/i);
+    const banner = main.querySelector("video");
+    expect(banner).not.toBeNull();
     expect(main.firstElementChild).toBe(banner);
-    expect(banner.className).toContain("w-full");
-    expect(banner.className).not.toContain("rounded");
+    expect(banner?.className).toContain("w-full");
+    expect(banner?.className).not.toContain("rounded");
+  });
+
+  it("CampaignBanner video autoplays muted, looped, inline, with no controls", () => {
+    render(<HomePage />);
+
+    const video = document.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute("src", "/campaign/banners/banner-campaign.mp4");
+    expect(video).toHaveAttribute("autoplay");
+    expect(video).toHaveAttribute("loop");
+    expect(video).toHaveAttribute("playsinline");
+    expect(video?.muted).toBe(true);
+    expect(video).not.toHaveAttribute("controls");
   });
 });
