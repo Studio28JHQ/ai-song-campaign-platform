@@ -3,6 +3,7 @@ import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { logger } from "@/shared/logger/logger";
 import type { AudioDownloader } from "../contracts/AudioDownloader";
+import type { AudioProcessor } from "../contracts/AudioProcessor";
 import type { AudioStorage } from "../contracts/AudioStorage";
 import type { AudioUrlResolver } from "../contracts/AudioUrlResolver";
 import type { CampaignGate } from "../contracts/CampaignGate";
@@ -29,14 +30,20 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
  *   (the port also still structurally supports a hypothetical
  *   synchronous provider's `completed` result, going through the exact
  *   same handler) — downloads the audio from the provider's own
- *   (short-lived) URL, uploads it to R2, persists only the resulting
- *   object key (`Song.audioStorageKey`) — never a signed URL, never the
- *   provider's URL (see `AudioUrlResolver`) — marks the Song
- *   `COMPLETED`, and only once all of that has already succeeded,
- *   delivers the "song ready" email (Gate 9.5 — Complete End-to-End Song
- *   Delivery), resolving a fresh signed URL at the moment it's needed
- *   and never persisting it. Never marks `COMPLETED` unless the upload
- *   actually succeeded.
+ *   (short-lived) URL, post-processes it via `AudioProcessor` (FFmpeg —
+ *   enforces the campaign's 60-second cap with a 55s-60s fade-out; a
+ *   shorter source is returned untouched, never padded), uploads the
+ *   *processed* bytes to R2, persists only the resulting object key
+ *   (`Song.audioStorageKey`) — never a signed URL, never the provider's
+ *   URL (see `AudioUrlResolver`) — marks the Song `COMPLETED` with the
+ *   processed audio's own measured duration (never the provider's
+ *   self-reported one), and only once all of that has already
+ *   succeeded, delivers the "song ready" email (Gate 9.5 — Complete
+ *   End-to-End Song Delivery), resolving a fresh signed URL at the
+ *   moment it's needed and never persisting it. Never marks `COMPLETED`
+ *   unless processing and the upload both actually succeeded — a
+ *   processing failure fails the Song exactly like a download or upload
+ *   failure already did, through the same catch block below.
  * - Finished with an error → marks the Song `FAILED` with the provider's
  *   reported error, same recovery path as before this split (manual
  *   admin retry via `RetryFailedSongUseCase`).
@@ -57,6 +64,7 @@ export class GenerationPoller {
     private readonly songRepository: SongRepository,
     private readonly songGenerator: SongGenerationProvider,
     private readonly audioDownloader: AudioDownloader,
+    private readonly audioProcessor: AudioProcessor,
     private readonly audioStorage: AudioStorage,
     private readonly audioUrlResolver: AudioUrlResolver,
     private readonly leadRepository: LeadRepository,
@@ -127,18 +135,19 @@ export class GenerationPoller {
   ): Promise<GenerationPollerResponse> {
     try {
       const audio = await this.audioDownloader.download(result.audioUrl);
+      const processed = await this.audioProcessor.process(audio.bytes);
       const storageKey = `songs/${song.id}.mp3`;
 
       await this.audioStorage.upload(
         storageKey,
-        audio.bytes,
+        processed.bytes,
         audio.contentType || AUDIO_STORAGE_CONTENT_TYPE_FALLBACK,
       );
 
       song.markCompleted({
         providerSongId: result.providerSongId,
         audioStorageKey: storageKey,
-        duration: result.duration,
+        duration: processed.durationSeconds,
       });
       const updated = await this.songRepository.update(song);
 

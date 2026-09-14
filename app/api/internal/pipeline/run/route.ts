@@ -14,7 +14,27 @@ import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloade
 import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
 import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
+import { FfmpegAudioProcessor } from "@/infrastructure/audio/FfmpegAudioProcessor";
 import { logger } from "@/shared/logger/logger";
+
+/**
+ * The only Vercel Function in this codebase that runs FFmpeg (see
+ * `GenerationPoller` → `FfmpegAudioProcessor`) — every other trigger
+ * site (`/api/lyrics/approve`, `/api/song/generate`,
+ * `/api/admin/songs/[songId]/retry`) only ever fires an authenticated
+ * HTTP call to this same route (`triggerPipelineTick`), never
+ * constructs its own dispatcher/poller. FFmpeg processing itself is a
+ * fast, in-memory, pipe-based operation (no `/tmp`, no extra network
+ * call), but it's additive on top of this route's existing Mureka
+ * poll + audio download + R2 upload + email chain, none of which
+ * previously had an explicit duration budget (see the repository
+ * audit — no route anywhere declares `maxDuration`). 60s comfortably
+ * covers that whole chain with margin and is a valid `maxDuration` on
+ * every Vercel plan (Hobby's own configurable maximum); raise it if
+ * the project is confirmed to run on a plan/Fluid Compute
+ * configuration that both allows and needs more.
+ */
+export const maxDuration = 60;
 
 /**
  * GET /api/internal/pipeline/run — RC-2 Production Hardening: the
@@ -84,6 +104,7 @@ const generationPoller = new GenerationPoller(
   songRepository,
   songGenerator,
   new HttpAudioDownloader(),
+  new FfmpegAudioProcessor(),
   new CloudflareR2Storage(),
   new R2AudioUrlResolver(),
   leadRepository,

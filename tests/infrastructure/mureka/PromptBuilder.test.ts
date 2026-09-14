@@ -8,24 +8,86 @@ const baseInput = {
   voice: "FEMALE" as const,
 };
 
+const VALIDATED_STYLE_SNIPPET = "acoustic folk-pop";
+
 describe("PromptBuilder.build", () => {
-  it("composes the prompt from the AI-generated musical direction (Sprint v1.1 — AI Musical Direction)", () => {
+  it("sends the fixed, validated STYLE as the prompt, plus the official contract's other fields", () => {
     const payload = PromptBuilder.build(baseInput);
 
     expect(payload.model).toBe("auto");
     expect(payload.n).toBe(1);
     expect(payload.stream).toBe(false);
-    expect(payload.prompt).toBe(
-      [
-        "Create an original children's song.",
-        "",
-        "Mood:",
-        "Warm, joyful and playful.",
-        "",
-        "Musical Direction:",
-        "Warm acoustic arrangement with gentle piano and ukulele.",
-      ].join("\n"),
+    expect(payload.prompt).toContain(VALIDATED_STYLE_SNIPPET);
+    expect(payload.prompt).toContain("86 BPM");
+  });
+
+  it("no longer names a brand phrase to pronounce — brand placement is governed by the lyrics themselves", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).not.toContain("Bassa Sensi-Derm Baby");
+    expect(payload.prompt).not.toContain("Sensyderm");
+    expect(payload.prompt).not.toContain("clearly pronounce");
+  });
+
+  it("names 'Pequeñas grandes historias' only as an emotional concept, not as mandatory sung text", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toContain('"Pequeñas grandes historias" as an emotional concept only');
+  });
+
+  it("treats 60 seconds as a maximum, not a target, and prefers a shorter complete performance over padding", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toMatch(/up to about 60 seconds, shorter is fine, never padded/i);
+    expect(payload.prompt).not.toMatch(/approximately 60 seconds/i);
+  });
+
+  it("forbids instrumental padding and filler vocalizations (humming, mmm, uh, ooh)", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toMatch(/no instrumental padding/i);
+    expect(payload.prompt).toMatch(/no filler vocalizations \(humming, mmm, uh, ooh\)/i);
+    expect(payload.prompt).toMatch(/no long instrumental intro/i);
+  });
+
+  it("instructs singing the provided lyrics continuously and naturally, using the vocal time for the story", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toMatch(
+      /sing the lyrics exactly once, continuously and naturally, using the vocal time for the story/i,
     );
+  });
+
+  it("describes the two-verse jingle shape, matching the Claude two-[Verse] structure", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toMatch(
+      /two compact narrative verses, one memorable chorus, a genuine emotional ending/i,
+    );
+  });
+
+  it("gives vocal-entry timing around second 5, not a deterministic guarantee, allowing only a brief pickup", () => {
+    const payload = PromptBuilder.build(baseInput);
+    expect(payload.prompt).toMatch(/lead vocals enter by about second 5/i);
+    expect(payload.prompt).toMatch(/only a brief musical pickup/i);
+    expect(payload.prompt).toMatch(/no long instrumental intro/i);
+    // The earlier, apparently-ineffective "within the first two seconds" wording must be gone.
+    expect(payload.prompt).not.toMatch(/within the first two seconds/i);
+  });
+
+  it("uses the exact same fixed STYLE regardless of the Lyrics version's own musicMood/musicDirection", () => {
+    // musicMood/musicDirection are still Claude-generated and still
+    // persisted (the admin panel displays them), but no longer flow
+    // into Mureka's request — the prompt is fixed and validated,
+    // identical for every submission.
+    const payloadA = PromptBuilder.build({
+      ...baseInput,
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
+    const payloadB = PromptBuilder.build({
+      ...baseInput,
+      musicMood: "Completely different mood.",
+      musicDirection: "A totally different musical direction.",
+    });
+
+    expect(payloadA.prompt).toBe(payloadB.prompt);
+    expect(payloadA.prompt).not.toContain("Warm acoustic arrangement");
+    expect(payloadA.prompt).not.toContain("Completely different mood.");
   });
 
   it("passes the lyrics text through verbatim as the top-level field, never regenerated or edited", () => {
@@ -58,18 +120,31 @@ describe("PromptBuilder.build", () => {
     expect(payload.prompt.length).toBeLessThan(1024);
   });
 
-  it("maps FEMALE to Mureka's dedicated gender field — never described inside the prompt text", () => {
+  it("maps FEMALE to Mureka's dedicated gender field", () => {
     const payload = PromptBuilder.build({ ...baseInput, voice: "FEMALE" });
     expect(payload.gender).toBe("female");
-    expect(payload.prompt).not.toContain("Voice");
-    expect(payload.prompt).not.toContain("female");
   });
 
-  it("maps MALE to Mureka's dedicated gender field — never described inside the prompt text", () => {
+  it("maps MALE to Mureka's dedicated gender field", () => {
     const payload = PromptBuilder.build({ ...baseInput, voice: "MALE" });
     expect(payload.gender).toBe("male");
-    expect(payload.prompt).not.toContain("Voice");
-    expect(payload.prompt).not.toContain("male");
+  });
+
+  /**
+   * The STYLE text no longer hardcodes "male" — `gender` (dynamic, from
+   * the lead's own Voice selection) is the only place a narrator's
+   * gender is expressed in the Mureka request, for either voice.
+   */
+  it("never describes an unconditional voice gender in the STYLE text — gender lives only in the dedicated field", () => {
+    const female = PromptBuilder.build({ ...baseInput, voice: "FEMALE" });
+    const male = PromptBuilder.build({ ...baseInput, voice: "MALE" });
+
+    expect(female.gender).toBe("female");
+    expect(male.gender).toBe("male");
+    expect(female.prompt).toBe(male.prompt); // the STYLE text itself never varies by voice
+    expect(female.prompt).not.toContain("male");
+    expect(female.prompt).not.toContain("female");
+    expect(female.prompt).toContain("warm Latin Spanish voice");
   });
 
   it("always requests exactly one song", () => {
@@ -82,12 +157,12 @@ describe("PromptBuilder.build", () => {
     expect(payload.stream).toBe(false);
   });
 
-  it("no longer reads Mood.sunoPrompt — the prompt is built entirely from the Lyrics version's musical direction", () => {
+  it("never reads Mood.sunoPrompt — the prompt is the fixed, validated STYLE, not any per-mood value", () => {
     const payload = PromptBuilder.build(baseInput);
     expect(payload.prompt).not.toContain("sunoPrompt");
   });
 
-  describe("Sprint v1.2 — AI Safety Hardening: Mureka isolation from the parent message", () => {
+  describe("AI Safety Hardening: Mureka isolation from the parent message", () => {
     it("never includes a Baby Context section", () => {
       const payload = PromptBuilder.build(baseInput);
       expect(payload.prompt).not.toContain("Baby Context");
@@ -105,14 +180,8 @@ describe("PromptBuilder.build", () => {
       expect(hasParentMessage).toBe(false);
     });
 
-    it("the prompt contains exactly the two creative-direction sections, in order, and nothing else", () => {
+    it("the prompt is the fixed STYLE text only — no Lyrics:/Voice: section of any kind", () => {
       const payload = PromptBuilder.build(baseInput);
-      const moodIndex = payload.prompt.indexOf("Mood:");
-      const directionIndex = payload.prompt.indexOf("Musical Direction:");
-
-      expect(payload.prompt.startsWith("Create an original children's song.")).toBe(true);
-      expect(moodIndex).toBeGreaterThan(0);
-      expect(directionIndex).toBeGreaterThan(moodIndex);
       expect(payload.prompt).not.toContain("Lyrics:");
       expect(payload.prompt).not.toContain("Voice:");
     });
@@ -128,38 +197,20 @@ describe("PromptBuilder.build", () => {
     });
   });
 
-  describe("Sprint v1.3 (AI Songwriting Quality): structured lyrics preservation", () => {
+  describe("structured lyrics preservation", () => {
     it("passes every official section label through to Mureka unchanged, in the top-level lyrics field", () => {
       const structuredLyrics = [
-        "[Intro]",
-        "La la la",
-        "",
-        "[Verse 1]",
+        "[Verse]",
         "Sofía llegó con luz de sol",
         "",
-        "[Pre-Chorus]",
-        "Y el corazón se llena de emoción",
-        "",
-        "[Chorus]",
-        "Sofía, Sofía, mi pequeño sol",
-        "",
-        "[Verse 2]",
+        "[Verse]",
         "Cada risa tuya es un tesoro",
         "",
-        "[Pre-Chorus]",
-        "Y el corazón se llena de emoción",
-        "",
         "[Chorus]",
         "Sofía, Sofía, mi pequeño sol",
         "",
-        "[Bridge]",
-        "Siempre estaré junto a ti",
-        "",
-        "[Final Chorus]",
-        "Sofía, Sofía, mi pequeño sol",
-        "",
-        "[Outro]",
-        "Duerme bien, mi amor",
+        "[Ending]",
+        "Sensyderm Baby",
       ].join("\n");
 
       const payload = PromptBuilder.build({ ...baseInput, lyrics: structuredLyrics });
@@ -168,33 +219,15 @@ describe("PromptBuilder.build", () => {
       // Not duplicated into prompt — see the 1024-character-limit tests above.
       expect(payload.prompt).not.toContain(structuredLyrics);
 
-      for (const label of [
-        "[Intro]",
-        "[Verse 1]",
-        "[Pre-Chorus]",
-        "[Chorus]",
-        "[Verse 2]",
-        "[Bridge]",
-        "[Final Chorus]",
-        "[Outro]",
-      ]) {
+      for (const label of ["[Verse]", "[Chorus]", "[Ending]"]) {
         expect(payload.lyrics).toContain(label);
       }
     });
 
-    it("does not change the current Mureka prompt shape — still exactly Mood/Musical Direction", () => {
-      const payload = PromptBuilder.build(baseInput);
-      expect(payload.prompt).toBe(
-        [
-          "Create an original children's song.",
-          "",
-          "Mood:",
-          baseInput.musicMood,
-          "",
-          "Musical Direction:",
-          baseInput.musicDirection,
-        ].join("\n"),
-      );
+    it("structured lyrics have no effect on the (fixed) prompt text", () => {
+      const structuredLyrics = "[Verse]\nLa la la\n\n[Chorus]\nSofía, mi sol";
+      const payload = PromptBuilder.build({ ...baseInput, lyrics: structuredLyrics });
+      expect(payload.prompt).toContain(VALIDATED_STYLE_SNIPPET);
     });
   });
 });

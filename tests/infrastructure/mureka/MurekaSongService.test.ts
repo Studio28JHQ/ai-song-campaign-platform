@@ -38,7 +38,7 @@ describe("MurekaSongService.submitGeneration", () => {
     expect(client.submitGeneration).toHaveBeenCalledWith({
       lyrics: "Title\n...",
       model: "auto",
-      prompt: expect.stringContaining("Warm acoustic arrangement with gentle piano and ukulele."),
+      prompt: expect.stringContaining("acoustic folk-pop"),
       n: 1,
       gender: "female",
       stream: false,

@@ -68,7 +68,7 @@ describe("PromptBuilder.build", () => {
     expect(prompt.system).toMatch(/sexual/i);
     expect(prompt.system).toMatch(/discrimination/i);
     expect(prompt.system).toMatch(/copyrighted/i);
-    expect(prompt.system).toMatch(/brands/i);
+    expect(prompt.system).toMatch(/brand/i);
     expect(prompt.system).toMatch(/medical or health/i);
     expect(prompt.system).toMatch(/children's song/i);
   });
@@ -79,17 +79,32 @@ describe("PromptBuilder.build", () => {
     expect(prompt.system).toMatch(/non-judgmental/i);
   });
 
-  it("includes the required writing structure (Sprint v1.3 — AI Songwriting Quality: the official ten-section structure)", () => {
+  it("includes the required writing structure — two [Verse] sections, [Chorus], [Ending]", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toContain("[Intro]");
-    expect(prompt.system).toContain("[Verse 1]");
-    expect(prompt.system).toContain("[Pre-Chorus]");
+    expect(prompt.system).toMatch(/\[Verse\]\s*\n\.\.\.\s*\n\s*\n\[Verse\]/);
     expect(prompt.system).toContain("[Chorus]");
-    expect(prompt.system).toContain("[Verse 2]");
-    expect(prompt.system).toContain("[Bridge]");
-    expect(prompt.system).toContain("[Final Chorus]");
-    expect(prompt.system).toContain("[Outro]");
+    expect(prompt.system).toContain("[Ending]");
     expect(prompt.system).toMatch(/plain text only/i);
+  });
+
+  it("does not declare any of the earlier, superseded section labels as part of the required structure (they appear only in the explicit 'do not add' prohibition)", () => {
+    const prompt = PromptBuilder.build(input);
+    const structureBlock = prompt.system.slice(
+      prompt.system.indexOf("Always write the lyrics using exactly this structure"),
+      prompt.system.indexOf("Follow these rules for each section:"),
+    );
+    expect(structureBlock).not.toContain("[Intro]");
+    expect(structureBlock).not.toContain("[Verse 1]");
+    expect(structureBlock).not.toContain("[Verse 2]");
+    expect(structureBlock).not.toContain("[Pre-Chorus]");
+    expect(structureBlock).not.toContain("[Bridge]");
+    expect(structureBlock).not.toContain("[Final Chorus]");
+    expect(structureBlock).not.toContain("[Outro]");
+
+    // They do appear once, but only inside the explicit prohibition telling Claude never to add them.
+    expect(prompt.system).toMatch(
+      /do not add \[intro\], \[pre-chorus\], \[bridge\], \[final chorus\], \[outro\], or any other section/i,
+    );
   });
 
   it("requests a single, structured JSON-only response", () => {
@@ -100,7 +115,7 @@ describe("PromptBuilder.build", () => {
     expect(prompt.system).toMatch(/no free text/i);
   });
 
-  it("requests musicMood and musicDirection in both response shapes (Sprint v1.1 — AI Musical Direction)", () => {
+  it("requests musicMood and musicDirection in both response shapes", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toContain('"musicMood"');
     expect(prompt.system).toContain('"musicDirection"');
@@ -122,7 +137,7 @@ describe("PromptBuilder.build", () => {
   });
 });
 
-describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): Immutable AI Safety Policy", () => {
+describe("PromptBuilder.build — Immutable AI Safety Policy", () => {
   it("always includes the immutable policy, unconditionally, for a harmless input", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toContain("=== IMMUTABLE AI SAFETY POLICY ===");
@@ -199,7 +214,7 @@ describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): Immutable A
   });
 });
 
-describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): parent message isolation", () => {
+describe("PromptBuilder.build — parent message isolation", () => {
   it("wraps the parent message in its own delimited block", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.user).toContain("<parent_message>");
@@ -232,7 +247,7 @@ describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): parent mess
   });
 });
 
-describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): adversarial parent-message payloads", () => {
+describe("PromptBuilder.build — adversarial parent-message payloads", () => {
   it.each(Object.entries(adversarialPayloads))(
     "isolates the payload (%s) inside <parent_message> and never lets it reach `system`",
     (_label, payload) => {
@@ -267,85 +282,189 @@ describe("PromptBuilder.build — Sprint v1.2 (AI Safety Hardening): adversarial
   );
 });
 
-describe("PromptBuilder.build — Sprint v1.3 (AI Songwriting Quality)", () => {
-  const OFFICIAL_STRUCTURE = [
-    "[Intro]",
-    "[Verse 1]",
-    "[Pre-Chorus]",
-    "[Chorus]",
-    "[Verse 2]",
-    "[Pre-Chorus]",
-    "[Chorus]",
-    "[Bridge]",
-    "[Final Chorus]",
-    "[Outro]",
-  ];
-
-  it("requires every official section label, each appearing the expected number of times", () => {
+describe("PromptBuilder.build — compact commercial jingle structure ([Verse][Verse][Chorus][Ending])", () => {
+  it("requires exactly the four section labels, in exactly this order, and none other", () => {
     const prompt = PromptBuilder.build(input);
-
-    for (const label of new Set(OFFICIAL_STRUCTURE)) {
-      expect(prompt.system).toContain(label);
-    }
-
-    // [Chorus] and [Pre-Chorus] are each required twice (verses 1 and 2).
-    const chorusOccurrences = prompt.system.split("[Chorus]").length - 1;
-    const preChorusOccurrences = prompt.system.split("[Pre-Chorus]").length - 1;
-    expect(chorusOccurrences).toBe(2);
-    expect(preChorusOccurrences).toBe(2);
-  });
-
-  it("requires the sections in exactly the official order", () => {
-    const prompt = PromptBuilder.build(input);
-    let structureBlock = prompt.system.slice(
-      prompt.system.indexOf("[Intro]"),
-      prompt.system.indexOf("[Outro]") + "[Outro]".length,
+    const structureIndex = prompt.system.indexOf(
+      "[Verse]\n...\n\n[Verse]\n...\n\n[Chorus]\n...\n\n[Ending]",
     );
-
-    const indices = OFFICIAL_STRUCTURE.map((label) => {
-      const index = structureBlock.indexOf(label);
-      // Advance past this occurrence so the second [Chorus]/[Pre-Chorus]
-      // is found after the first, not the same index twice.
-      structureBlock =
-        structureBlock.slice(0, index) +
-        " ".repeat(label.length) +
-        structureBlock.slice(index + label.length);
-      return index;
-    });
-
-    for (let i = 1; i < indices.length; i += 1) {
-      expect(indices[i]).toBeGreaterThan(indices[i - 1]);
-    }
+    expect(structureIndex).toBeGreaterThan(-1);
   });
 
-  it("forbids inventing, renaming, merging, or omitting sections", () => {
+  it("explicitly calls out that [Verse] appears twice, as two separate blocks", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/none invented, renamed, merged, or omitted/i);
-    expect(prompt.system).toMatch(/exactly this structure, in exactly this order/i);
+    expect(prompt.system).toMatch(/\[Verse\] appears twice/i);
+    expect(prompt.system).toMatch(/two separate, back-to-back verse blocks, not one longer verse/i);
   });
 
-  it("forbids explanatory text, notes, comments, or instructions inside the lyrics, with an explicit counter-example", () => {
+  it("forbids inventing extra sections and forbids repeating the Chorus or either Verse", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/never include explanations, notes, comments, or instructions/i);
-    expect(prompt.system).toContain("Never write:");
-    expect(prompt.system).toContain("(This verse talks about...)");
+    expect(prompt.system).toMatch(
+      /do not add \[Intro\], \[Pre-Chorus\], \[Bridge\], \[Final Chorus\], \[Outro\], or any other section/i,
+    );
+    expect(prompt.system).toMatch(/do not repeat the chorus/i);
+    expect(prompt.system).toMatch(/do not repeat either \[verse\]/i);
   });
 
-  it("targets a specific 2:00–2:30 minute duration, not a vague range", () => {
+  it("requires the second [Verse] to advance the story rather than repeat the first", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/2:00[–-]2:30 minutes/);
-    expect(prompt.system).not.toMatch(/2-3 minutes/);
+    expect(prompt.system).toMatch(
+      /second \[verse\]: the story's evolución — a new scene, action, or emotional advance/i,
+    );
+    expect(prompt.system).toMatch(/never the first verse's idea restated in different words/i);
   });
 
-  it("describes the chorus as the clearly identifiable emotional heart of the song (Sprint v1.4 wording)", () => {
+  it("describes the first [Verse] as the immediate hook with a real scene and an action", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/chorus: the emotional heart of the song/i);
-    expect(prompt.system).toMatch(/memorable, easy to sing/i);
-    expect(prompt.system).toMatch(/clear melodic hook/i);
-    expect(prompt.system).toMatch(/naturally including the child's name/i);
+    expect(prompt.system).toMatch(/first \[verse\]: the immediate hook/i);
+    expect(prompt.system).toMatch(/start singing immediately; do not build up to it/i);
   });
 
-  it("requires lyrics to be written for singing, not poetry, with concrete quality guidance (Sprint v1.4 wording)", () => {
+  it("describes the Chorus as connected to both verses, never a generic interchangeable phrase", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/chorus: the emotional heart of the song — the story's emoción/i);
+    expect(prompt.system).toMatch(
+      /never be a generic, interchangeable phrase that could belong to any other child's song/i,
+    );
+  });
+
+  it("describes the Ending as the story's resolution and the brand's natural commercial signature", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/ending: the story's cierre/i);
+    expect(prompt.system).toMatch(/closing with the brand as a natural commercial signature/i);
+  });
+
+  it("requires the internal five-beat story plan (Inicio, Acción, Evolución, Emoción, Cierre), never exposed in the output", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/inicio — what is happening right now/i);
+    expect(prompt.system).toMatch(/acción — a real action or discovery/i);
+    expect(prompt.system).toMatch(/evolución — a new scene, action, or emotional advance/i);
+    expect(prompt.system).toMatch(/emoción — what these two moments mean together/i);
+    expect(prompt.system).toMatch(/cierre — a warm, memorable resolution/i);
+    expect(prompt.system).toMatch(/do not output this planning/i);
+  });
+
+  it("warns against four disconnected 'pretty' phrases and requires concrete baby-specific actions", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/never a string of generic, disconnected "pretty" phrases/i);
+    expect(prompt.system).toMatch(
+      /looking, laughing, discovering something, crawling, reaching, playing/i,
+    );
+    expect(prompt.system).toMatch(/the exact story must come from the parent's own information/i);
+  });
+});
+
+describe("PromptBuilder.build — 360-character hard maximum", () => {
+  it("states the 360-character maximum as a hard cap, not an approximate target", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/must not exceed 360 characters/i);
+    expect(prompt.system).toMatch(/this is a hard maximum, not an approximate or soft target/i);
+  });
+
+  it("instructs counting every label, line break, space, and punctuation mark toward the limit", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /every section label, every line, every space, every line break, and every punctuation mark/i,
+    );
+  });
+
+  it("gives a 42–55 word creative guide with a ~35 word floor, as a quality floor rather than a padding target", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/aim for roughly 42–55 words of real content/i);
+    expect(prompt.system).toMatch(/a recommended floor of about 35 words/i);
+    expect(prompt.system).toMatch(/never add filler words purely to reach a word count/i);
+  });
+
+  it("states the explicit priority order when length, story, and emotional impact conflict", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/the song must sing naturally/i);
+    expect(prompt.system).toMatch(/it must tell a real, complete story/i);
+    expect(prompt.system).toMatch(/it must land emotionally/i);
+    expect(prompt.system).toMatch(/it must be memorable/i);
+    expect(prompt.system).toMatch(/it should be compact/i);
+  });
+
+  it("requires a shorter, complete song over a longer or truncated one", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /write a shorter, complete, and natural song instead — never a longer one, and never a truncated or cut-off one/i,
+    );
+  });
+});
+
+describe("PromptBuilder.build — brand placement (Sensyderm Baby)", () => {
+  it("requires the brand name exactly once, only inside [Ending]", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /the brand name, "sensyderm baby", must appear exactly once in the entire song — only inside the \[ending\] section/i,
+    );
+  });
+
+  it("forbids the brand name (in any variant) before [Ending]", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /do not mention "sensyderm", "sensyderm baby", "bassa sensi-derm baby", or any other variant.*before the \[ending\] section/i,
+    );
+  });
+
+  it("forbids the old 'Bassa Sensi-Derm Baby' phrasing explicitly", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/never "bassa sensi-derm baby"/i);
+  });
+
+  it("requires the brand to feel like a natural closing commercial signature, not a stapled-on label", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/natural closing commercial signature/i);
+    expect(prompt.system).toMatch(/not a label stapled onto an otherwise-finished line/i);
+  });
+
+  it("treats 'Pequeñas grandes historias' as an emotional concept only, never mandatory sung text", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /"pequeñas grandes historias" is an emotional concept behind the campaign, not mandatory sung text/i,
+    );
+    expect(prompt.system).toMatch(/must never be added as a required second closing line/i);
+  });
+
+  it("carves out the brand as an exception to the general no-brand-mentions campaign/safety rules", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /the one exception is the campaign's own required "sensyderm baby" commercial signature/i,
+    );
+    expect(prompt.system).toMatch(/which is never something to reject/i);
+  });
+});
+
+describe("PromptBuilder.build — general songwriting quality", () => {
+  it("requires the song to feel professionally handcrafted, never AI-generated or template-based", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/experienced professional songwriter/i);
+    expect(prompt.system).toMatch(
+      /never let it feel ai-generated, generic, or assembled from a template/i,
+    );
+    expect(prompt.system).toMatch(/handcrafted for this one specific child/i);
+    expect(prompt.system).toMatch(/not interchangeable with any other child's song/i);
+  });
+
+  it("requires a silent internal quality review before responding, that is never included in the output", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/before returning your response, internally verify/i);
+    expect(prompt.system).toMatch(
+      /both \[verse\] sections are present before \[chorus\] and \[ending\]/i,
+    );
+    expect(prompt.system).toMatch(/the lyrics are entirely in spanish/i);
+    expect(prompt.system).toMatch(
+      /the second \[verse\] advances the story rather than repeating the first/i,
+    );
+    expect(prompt.system).toMatch(/do not output this review/i);
+  });
+
+  it("still requires only the final JSON response, with no visible planning or review commentary", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/no free text, no markdown code fences, no commentary/i);
+  });
+
+  it("requires lyrics to be written for singing, not poetry, with concrete quality guidance", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toMatch(/write the lyrics to be sung, not read as poetry/i);
     expect(prompt.system).toMatch(/natural rhythm/i);
@@ -359,35 +478,18 @@ describe("PromptBuilder.build — Sprint v1.3 (AI Songwriting Quality)", () => {
     expect(prompt.system).toMatch(/unnecessary complexity/i);
   });
 
-  it("describes a rule for every section of the official structure (Sprint v1.4 wording)", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/intro: a short emotional opening/i);
-    expect(prompt.system).toMatch(
-      /verse 1: introduce the child's story through a meaningful scene/i,
-    );
-    expect(prompt.system).toMatch(/pre-chorus: increase emotional anticipation naturally/i);
-    expect(prompt.system).toMatch(/verse 2: expand the story with moments, memories/i);
-    expect(prompt.system).toMatch(/bridge: a unique emotional turn/i);
-    expect(prompt.system).toMatch(/avoid generic promises/i);
-    expect(prompt.system).toMatch(/final chorus: the emotional peak of the song/i);
-    expect(prompt.system).toMatch(
-      /outro: a gentle ending that leaves a lasting emotional feeling/i,
-    );
-  });
-
   it("still requires the baby's name to be woven in naturally (unchanged campaign rule)", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toMatch(/baby's name naturally/i);
   });
 
-  it("requires musicMood/musicDirection to stay aligned with the actual lyrics generated (Sprint v1.4 wording)", () => {
+  it("requires musicMood/musicDirection to stay aligned with the actual lyrics generated, referencing the new structure", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toMatch(
       /both fields must stay fully aligned with the lyrics you actually wrote/i,
     );
-    expect(prompt.system).toMatch(
-      /musical progression.*should mirror the lyrics' own emotional arc/i,
-    );
+    expect(prompt.system).toMatch(/a lift into the chorus/i);
+    expect(prompt.system).toMatch(/a warm settle through the ending/i);
   });
 
   it("keeps the Immutable AI Safety Policy as the first section of the system prompt, unaffected by the songwriting changes", () => {
@@ -402,81 +504,6 @@ describe("PromptBuilder.build — Sprint v1.3 (AI Songwriting Quality)", () => {
 
     expect(creativeIndex).toBeGreaterThan(policyIndex);
     expect(writingInstructionsIndex).toBeGreaterThan(creativeIndex);
-  });
-});
-
-describe("PromptBuilder.build — Sprint v1.4 (Professional Songwriting Quality)", () => {
-  it("requires the song to feel professionally handcrafted, never AI-generated or template-based", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/experienced professional songwriter/i);
-    expect(prompt.system).toMatch(
-      /never let it feel ai-generated, generic, or assembled from a template/i,
-    );
-    expect(prompt.system).toMatch(/handcrafted for this one specific child/i);
-    expect(prompt.system).toMatch(/not interchangeable with any other child's song/i);
-  });
-
-  it("requires a silent internal emotional-arc plan that is never included in the output", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/internally plan the song's emotional arc/i);
-    expect(prompt.system).toMatch(/emotional beginning, emotional growth, a climax, a resolution/i);
-    expect(prompt.system).toMatch(/do not output this planning/i);
-  });
-
-  it("requires a silent internal quality review before responding, that is never included in the output", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/before returning your response, internally verify/i);
-    expect(prompt.system).toMatch(/every section is present/i);
-    expect(prompt.system).toMatch(/the lyrics are entirely in spanish/i);
-    expect(prompt.system).toMatch(
-      /verse 2 introduces genuinely new content rather than restating verse 1/i,
-    );
-    expect(prompt.system).toMatch(/the bridge feels specific to this child rather than generic/i);
-    expect(prompt.system).toMatch(/do not output this review/i);
-  });
-
-  it("still requires only the final JSON response, with no visible planning or review commentary", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/no free text, no markdown code fences, no commentary/i);
-  });
-
-  it("requires the parent's description to be transformed into scenes, imagery, and emotion — not restated", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(
-      /the parent's description is your primary source of inspiration/i,
-    );
-    expect(prompt.system).toMatch(/turn memories into scenes, personality traits into imagery/i);
-    expect(prompt.system).toMatch(/never into a flat restatement of the input/i);
-    expect(prompt.system).toMatch(
-      /show the story through scenes, sensory details, nature, movement/i,
-    );
-  });
-
-  it("requires Verse 2 to introduce new content and forbids restating Verse 1", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(
-      /verse 2: expand the story with moments, memories, or personality traits that have not appeared yet/i,
-    );
-    expect(prompt.system).toMatch(/never restate verse 1 in different words/i);
-  });
-
-  it("requires the Bridge to avoid generic promises and connect to the child's own story", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/avoid generic promises/i);
-    expect(prompt.system).toMatch(/i will always love you/i);
-    expect(prompt.system).toMatch(
-      /connect the future specifically to this child's own dreams, personality, or family story/i,
-    );
-  });
-
-  it("requires every section to contribute something new, avoiding repeated emotional ideas across sections", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(
-      /each section must contribute something the song hasn't said yet/i,
-    );
-    expect(prompt.system).toMatch(
-      /avoid repeating the same emotional idea across multiple sections/i,
-    );
   });
 
   it("requires creative diversity across songs and warns against defaulting to stock endearments", () => {
@@ -513,17 +540,18 @@ describe("PromptBuilder.build — Sprint v1.4 (Professional Songwriting Quality)
     },
   );
 
-  it("requires the musical progression to mirror the lyrics' own emotional arc, e.g. building toward the chorus", () => {
-    const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/a build in intensity toward the chorus\/final chorus/i);
-    expect(prompt.system).toMatch(/softening at the outro/i);
-  });
+  it("does not vary the mandatory structure or length rules based on input", () => {
+    const promptA = PromptBuilder.build(input);
+    const promptB = PromptBuilder.build({
+      ...input,
+      babyName: "A completely different name",
+      parentMessage: "Something else entirely.",
+      mood: { name: "Calm" },
+    });
 
-  it("does not change the mandatory ten-section structure or its order", () => {
-    const prompt = PromptBuilder.build(input);
-    const structureIndex = prompt.system.indexOf(
-      "[Intro]\n[Verse 1]\n[Pre-Chorus]\n[Chorus]\n[Verse 2]\n[Pre-Chorus]\n[Chorus]\n[Bridge]\n[Final Chorus]\n[Outro]",
-    );
-    expect(structureIndex).toBeGreaterThan(-1);
+    const structureOf = (system: string) =>
+      system.slice(system.indexOf("Writing instructions:"), system.indexOf("Brand placement:"));
+
+    expect(structureOf(promptA.system)).toBe(structureOf(promptB.system));
   });
 });
