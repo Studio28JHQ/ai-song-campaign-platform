@@ -97,14 +97,17 @@ When rejecting, "reason" must be a short, neutral, non-judgmental explanation su
 //
 // Sprint v1.5 — Compact Commercial Jingle. Replaces the earlier
 // ten-section, 2:00-2:30-minute structure with a compact, four-section
-// commercial-jingle shape: `[Verse] [Verse] [Chorus] [Ending]`, capped
-// at 360 characters total (a real production constraint — the song is
-// a short social-media jingle, not a full-length lullaby) with a
-// mandatory second `[Verse]` that must advance the story into a new
-// moment rather than repeat the first, and with the brand's own
-// commercial signature folded into `[Ending]` (see
-// `BRAND_PLACEMENT_INSTRUCTIONS`). The single biggest failure mode this
-// guards against: four disconnected "pretty" phrases with no narrative
+// commercial-jingle shape: `[Verse] [Verse] [Chorus] [Ending]`, with a
+// normal target of ~300-330 characters and a hard cap of 360 (a real
+// production constraint — the song is a short social-media jingle, not
+// a full-length lullaby; see `ResponseParser`'s `LYRICS_MAX_LENGTH`,
+// which still enforces only the 360 hard cap — the 300-330 target is
+// prompt guidance, not a separately validated bound) with a mandatory
+// second `[Verse]` that must advance the story into a new moment rather
+// than repeat the first, and with the brand's own commercial signature
+// folded into `[Ending]` (see `BRAND_PLACEMENT_INSTRUCTIONS`). The
+// single biggest failure mode this guards against: four disconnected
+// "pretty" phrases with no narrative
 // or emotional throughline — every section must earn its place in an
 // actual micro-story, not just describe the baby in isolation.
 const WRITING_INSTRUCTIONS = `
@@ -138,9 +141,9 @@ Follow these rules for each section:
 
 Do not add [Intro], [Pre-Chorus], [Bridge], [Final Chorus], [Outro], or any other section. Do not repeat the Chorus. Do not repeat either [Verse]. Each section must contribute something the song hasn't said yet — let the listener feel the story genuinely evolve from the first [Verse] to [Ending].
 
-The complete lyric string you return in "lyrics" — every section label, every line, every space, every line break, and every punctuation mark, added together — must not exceed 360 characters. This is a hard maximum, not an approximate or soft target: 360 characters, no more, under any circumstance. If a natural, complete version of the song would be longer than that, write a shorter, complete, and natural song instead — never a longer one, and never a truncated or cut-off one. Count the entire string exactly as it will be returned, including the four section blocks ("[Verse]", "[Verse]", "[Chorus]", "[Ending]") and every line break between them, before responding.
+The complete lyric string you return in "lyrics" — every section label, every line, every space, every line break, and every punctuation mark, added together — should normally land at around 300–330 characters. 360 characters is the absolute hard maximum, never a target to write toward: 360 characters, no more, under any circumstance. If a natural, complete version of the song would still be longer than that, write a shorter, complete, and natural song instead — never a longer one, and never a truncated or cut-off one. Count the entire string exactly as it will be returned, including the four section blocks ("[Verse]", "[Verse]", "[Chorus]", "[Ending]") and every line break between them, and keep that running count within the normal 300–330 range internally, before responding — treat approaching 360 as a signal you've drifted past the normal range, not as a safe zone to write into.
 
-360 characters is a ceiling, not a creative goal — merely fitting under it is not enough on its own. A lyric that barely describes the baby in a few disconnected phrases is just as much a failure as one that runs over the limit. As a creative guide, not a rule to pad toward, aim for roughly 42–55 words of real content across the four sections (a recommended floor of about 35 words if an exceptionally tight story still tells itself completely) — enough to tell the actual micro-story (Inicio, Acción, Evolución, Emoción, Cierre) across two real verses, not a bare label with the baby's name attached. An exceptionally strong, shorter lyric that still tells a complete, emotionally resolved story is fine — never add filler words purely to reach a word count. This extra length compared to a single-verse structure exists specifically to fit a second narrative verse — spend it on that new scene, not on making either [Verse], the Chorus, or the Ending wordier than they need to be; each individual block should stay about as compact as it already was. If a strong story needs condensing to fit within 360 characters, condense the wording; never cut the story itself down to fit.
+Staying inside 300–330 characters must never come from removing the story, the emotional progression, or any required section — the structure, the two-scene narrative, and the emotional arc all stay exactly as demanded above; compactness comes only from tighter wording within that same complete story, never from cutting a beat out of it. Equally, do not pad the lyric with extra words, repeated ideas, or filler phrasing just to approach 300 characters or the 360 maximum — a lyric that barely describes the baby in a few disconnected phrases is just as much a failure as one that runs over the limit, and a shorter lyric that tells a complete, emotionally resolved story in fewer characters than 300 is fine. As a creative guide (not a rule to pad toward) that corresponds to that 300–330 character range, aim for roughly 42–55 words of real content across the four sections (a recommended floor of about 35 words if an exceptionally tight story still tells itself completely) — enough to tell the actual micro-story (Inicio, Acción, Evolución, Emoción, Cierre) across two real verses, not a bare label with the baby's name attached. This length compared to a single-verse structure exists specifically to fit a second narrative verse — spend it on that new scene, not on making either [Verse], the Chorus, or the Ending wordier than they need to be; each individual block should stay about as compact as it already was. If a strong story needs condensing to fit within the normal range, condense the wording; never cut the story itself down to fit.
 
 The priority order when these pressures conflict is: (1) the song must sing naturally, (2) it must tell a real, complete story, (3) it must land emotionally, (4) it must be memorable, and only last, (5) it should be compact — never sacrifice a higher priority purely to shave characters, and never sacrifice a lower one purely to pad toward the limit.
 
@@ -148,7 +151,7 @@ Write the lyrics to be sung, not read as poetry. Prioritize natural rhythm, bala
 
 Vary your vocabulary, sentence structure, imagery, metaphors, rhythm, emotional progression, and narrative style from song to song. Do not default to the same handful of endearments (for example "mi tesoro," "mi luz," "mi corazón," "mi angelito," "mi sol," "mi vida," "mi todo") or the same chorus pattern every time. These expressions are fine when they genuinely serve one specific song, but must never become your reflexive default — let each child's own details produce a genuinely different song.
 
-Before returning your response, internally verify: both [Verse] sections are present before [Chorus] and [Ending], in that order, and none other; the second [Verse] advances the story rather than repeating the first; the lyrics are entirely in Spanish; the child's name is naturally integrated; the complete lyric string is 360 characters or fewer, counted exactly as specified above; the song actually tells a small, complete story rather than a string of generic, disconnected phrases; the Chorus connects to what both [Verse] sections established rather than standing alone; the Ending follows the Brand Placement rules below; and the song still feels personal rather than generic despite its length. Do not output this review — only the final JSON response.
+Before returning your response, internally verify: both [Verse] sections are present before [Chorus] and [Ending], in that order, and none other; the second [Verse] advances the story rather than repeating the first; the lyrics are entirely in Spanish; the child's name is naturally integrated; the complete lyric string, counted exactly as specified above, is normally around 300–330 characters and never more than 360 under any circumstance; the song actually tells a small, complete story rather than a string of generic, disconnected phrases; the Chorus connects to what both [Verse] sections established rather than standing alone; the Ending follows the Brand Placement rules below; and the song still feels personal rather than generic despite its length. Do not output this review — only the final JSON response.
 
 Return the lyrics as plain text only — no markdown, no explanations, no additional section labels beyond [Verse], [Chorus], and [Ending] as used above.
 `.trim();

@@ -355,10 +355,12 @@ describe("PromptBuilder.build — compact commercial jingle structure ([Verse][V
 });
 
 describe("PromptBuilder.build — 360-character hard maximum", () => {
-  it("states the 360-character maximum as a hard cap, not an approximate target", () => {
+  it("gives a normal 300-330 character target with 360 as the absolute hard cap, never a target to write toward", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/must not exceed 360 characters/i);
-    expect(prompt.system).toMatch(/this is a hard maximum, not an approximate or soft target/i);
+    expect(prompt.system).toMatch(/should normally land at around 300–330 characters/i);
+    expect(prompt.system).toMatch(
+      /360 characters is the absolute hard maximum, never a target to write toward/i,
+    );
   });
 
   it("instructs counting every label, line break, space, and punctuation mark toward the limit", () => {
@@ -372,7 +374,19 @@ describe("PromptBuilder.build — 360-character hard maximum", () => {
     const prompt = PromptBuilder.build(input);
     expect(prompt.system).toMatch(/aim for roughly 42–55 words of real content/i);
     expect(prompt.system).toMatch(/a recommended floor of about 35 words/i);
-    expect(prompt.system).toMatch(/never add filler words purely to reach a word count/i);
+    expect(prompt.system).toMatch(
+      /do not pad the lyric with extra words, repeated ideas, or filler phrasing just to approach 300 characters or the 360 maximum/i,
+    );
+  });
+
+  it("requires that staying within 300-330 characters never comes at the cost of the story, emotional progression, or required structure", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      /staying inside 300–330 characters must never come from removing the story, the emotional progression, or any required section/i,
+    );
+    expect(prompt.system).toMatch(
+      /compactness comes only from tighter wording within that same complete story, never from cutting a beat out of it/i,
+    );
   });
 
   it("states the explicit priority order when length, story, and emotional impact conflict", () => {

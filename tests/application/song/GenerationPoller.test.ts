@@ -10,7 +10,6 @@ import type {
   AudioDownloader,
   DownloadedAudio,
 } from "@/application/song/contracts/AudioDownloader";
-import type { AudioProcessor, ProcessedAudio } from "@/application/song/contracts/AudioProcessor";
 import type { AudioStorage } from "@/application/song/contracts/AudioStorage";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
@@ -132,24 +131,6 @@ function fakeAudioDownloader(
   };
 }
 
-/**
- * Default: passes bytes through unchanged with a fixed, deliberately
- * distinctive duration (58 — not a plausible Mureka-reported value like
- * 90/120/128 already used elsewhere in this file) so any assertion
- * still checking a Mureka-sourced duration would fail loudly rather
- * than silently pass by coincidence.
- */
-function fakeAudioProcessor(
-  result: ProcessedAudio | Error = { bytes: new Uint8Array([9, 9, 9]), durationSeconds: 58 },
-): AudioProcessor {
-  return {
-    process:
-      result instanceof Error
-        ? vi.fn().mockRejectedValue(result)
-        : vi.fn().mockResolvedValue(result),
-  };
-}
-
 function fakeAudioStorage(error?: Error): AudioStorage {
   return {
     upload: error ? vi.fn().mockRejectedValue(error) : vi.fn().mockResolvedValue(undefined),
@@ -215,7 +196,6 @@ describe("GenerationPoller", () => {
     options: {
       songGenerator?: SongGenerationProvider;
       audioDownloader?: AudioDownloader;
-      audioProcessor?: AudioProcessor;
       audioStorage?: AudioStorage;
       audioUrlResolver?: AudioUrlResolver;
       emailSender?: SongEmailSender;
@@ -227,7 +207,6 @@ describe("GenerationPoller", () => {
       songRepository,
       options.songGenerator ?? fakeSongGenerator({ status: "pending" }),
       options.audioDownloader ?? fakeAudioDownloader(),
-      options.audioProcessor ?? fakeAudioProcessor(),
       options.audioStorage ?? fakeAudioStorage(),
       options.audioUrlResolver ?? fakeAudioUrlResolver(),
       leadRepository,
@@ -285,10 +264,11 @@ describe("GenerationPoller", () => {
       });
     }
 
-    it("downloads the audio, uploads it to R2, persists only the storage key, and marks the song COMPLETED", async () => {
+    it("downloads the audio, uploads it to R2 unmodified, persists only the storage key, and marks the song COMPLETED", async () => {
       const song = seedGeneratingSong(lead.id, songRepository);
+      const downloadedBytes = new Uint8Array([4, 5, 6]);
       const audioDownloader = fakeAudioDownloader({
-        bytes: new Uint8Array([4, 5, 6]),
+        bytes: downloadedBytes,
         contentType: "audio/mpeg",
       });
       const audioStorage = fakeAudioStorage();
@@ -301,9 +281,12 @@ describe("GenerationPoller", () => {
       expect(audioDownloader.download).toHaveBeenCalledWith(
         "https://provider.example.com/short-lived.mp3",
       );
+      // No audio post-processing step in the active path right now (see
+      // GenerationPoller's own doc comment) — R2 receives exactly the
+      // bytes the downloader returned, the same reference, untouched.
       expect(audioStorage.upload).toHaveBeenCalledWith(
         `songs/${song.id}.mp3`,
-        expect.any(Uint8Array),
+        downloadedBytes,
         "audio/mpeg",
       );
 
@@ -311,48 +294,10 @@ describe("GenerationPoller", () => {
       expect(persisted?.status).toBe(SongStatus.COMPLETED);
       expect(persisted?.audioStorageKey).toBe(`songs/${song.id}.mp3`);
       expect(persisted?.providerSongId).toBe("mureka-123");
-      // 58, the fake AudioProcessor's own measured duration — never the
-      // provider's raw self-reported 90 above, which is deliberately
-      // never trusted for this field (see GenerationPoller/AudioProcessor).
-      expect(persisted?.duration).toBe(58);
+      // The provider's own self-reported duration (90) — there is no
+      // AudioProcessor in this path to measure a different value.
+      expect(persisted?.duration).toBe(90);
       expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("provider.example.com");
-    });
-
-    it("uploads the AudioProcessor's processed bytes to R2, not the raw downloaded audio", async () => {
-      seedGeneratingSong(lead.id, songRepository);
-      const audioDownloader = fakeAudioDownloader({
-        bytes: new Uint8Array([4, 5, 6]),
-        contentType: "audio/mpeg",
-      });
-      const processedBytes = new Uint8Array([7, 7, 7, 7]);
-      const audioProcessor = fakeAudioProcessor({ bytes: processedBytes, durationSeconds: 42 });
-      const audioStorage = fakeAudioStorage();
-      const poller = readyToDownloadPoller({ audioDownloader, audioProcessor, audioStorage });
-
-      await poller.execute();
-
-      expect(audioProcessor.process).toHaveBeenCalledWith(new Uint8Array([4, 5, 6]));
-      expect(audioStorage.upload).toHaveBeenCalledWith(
-        expect.any(String),
-        processedBytes,
-        "audio/mpeg",
-      );
-    });
-
-    it("marks the song FAILED and re-throws, without uploading anything, when audio processing fails", async () => {
-      const song = seedGeneratingSong(lead.id, songRepository);
-      const audioStorage = fakeAudioStorage();
-      const poller = readyToDownloadPoller({
-        audioProcessor: fakeAudioProcessor(new Error("ffmpeg exited with code 1.")),
-        audioStorage,
-      });
-
-      await expect(poller.execute()).rejects.toThrow("ffmpeg exited with code 1.");
-
-      expect(audioStorage.upload).not.toHaveBeenCalled();
-      const persisted = await songRepository.findById(song.id);
-      expect(persisted?.status).toBe(SongStatus.FAILED);
-      expect(persisted?.audioStorageKey).toBeNull();
     });
 
     it("increments the campaign's songsGenerated counter once the song completes", async () => {
@@ -379,7 +324,7 @@ describe("GenerationPoller", () => {
       expect(input.parentName).toBe("Jane Doe");
       expect(input.babyName).toBe("Baby Doe");
       expect(input.audioUrl).toMatch(/^https:\/\/signed\.example\.com\/songs\//);
-      expect(input.duration).toBe(58);
+      expect(input.duration).toBe(90);
     });
 
     it("resolves the signed URL only through AudioUrlResolver, and never persists it", async () => {
@@ -461,10 +406,11 @@ describe("GenerationPoller", () => {
     expect(campaignGate.incrementSongsGenerated).not.toHaveBeenCalled();
   });
 
-  it("downloads the audio, uploads it to R2, and persists only the storage key — never a URL", async () => {
+  it("downloads the audio, uploads it to R2 unmodified, and persists only the storage key — never a URL", async () => {
     const song = seedGeneratingSong(lead.id, songRepository);
+    const downloadedBytes = new Uint8Array([1, 2, 3]);
     const audioDownloader = fakeAudioDownloader({
-      bytes: new Uint8Array([1, 2, 3]),
+      bytes: downloadedBytes,
       contentType: "audio/mpeg",
     });
     const audioStorage = fakeAudioStorage();
@@ -488,16 +434,14 @@ describe("GenerationPoller", () => {
     );
     expect(audioStorage.upload).toHaveBeenCalledWith(
       `songs/${song.id}.mp3`,
-      expect.any(Uint8Array),
+      downloadedBytes,
       "audio/mpeg",
     );
 
     const persisted = await songRepository.findById(song.id);
     expect(persisted?.audioStorageKey).toBe(`songs/${song.id}.mp3`);
     expect(persisted?.providerSongId).toBe("suno-123");
-    // 58, the fake AudioProcessor's measured duration — never the
-    // provider's raw self-reported 120 above.
-    expect(persisted?.duration).toBe(58);
+    expect(persisted?.duration).toBe(120);
     expect(JSON.stringify(persisted?.toSnapshot())).not.toContain("provider.example.com");
   });
 
@@ -560,7 +504,7 @@ describe("GenerationPoller", () => {
       expect(input.parentName).toBe("Jane Doe");
       expect(input.babyName).toBe("Baby Doe");
       expect(input.audioUrl).toMatch(/^https:\/\/signed\.example\.com\/songs\//);
-      expect(input.duration).toBe(58);
+      expect(input.duration).toBe(120);
     });
 
     it("never sends an email when generation fails", async () => {

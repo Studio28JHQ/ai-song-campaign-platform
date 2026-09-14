@@ -71,6 +71,12 @@ export class ClaudeClient {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         max_tokens: CLAUDE_MAX_TOKENS,
+        // Sonnet 5 runs adaptive thinking by default at `effort: "high"`,
+        // which was consuming the entire `max_tokens` budget on thinking
+        // alone for this prompt, truncating the (short, ~360-char) actual
+        // output. Lower effort, not a bigger budget or manual `thinking`
+        // config (Sonnet 5 rejects `thinking.budget_tokens` with a 400).
+        output_config: { effort: "low" },
         system: request.system,
         messages: [{ role: "user", content: request.user }],
       }),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ResponseParser } from "@/infrastructure/ai/claude/ResponseParser";
 import type { ClaudeMessageResponse } from "@/infrastructure/ai/claude/types";
+import { ExternalApiError } from "@/shared/errors";
 
 function textResponse(text: string): ClaudeMessageResponse {
   return { content: [{ type: "text", text }] };
@@ -181,6 +182,111 @@ describe("ResponseParser.parse — Sprint v1.2 (AI Safety Hardening): musicMood/
     let thrown = false;
     try {
       ResponseParser.parse(approvedResponse({ musicMood: "" }));
+    } catch {
+      thrown = true;
+    }
+    expect(thrown).toBe(true);
+  });
+});
+
+describe("ResponseParser.parse — Sprint v1.5 (Compact Commercial Jingle): 360-character lyrics maximum", () => {
+  function approvedResponse(overrides: Record<string, unknown> = {}) {
+    return textResponse(
+      JSON.stringify({
+        approved: true,
+        reason: null,
+        lyrics: "[Verse]\n...\n\n[Verse]\n...\n\n[Chorus]\n...\n\n[Ending]\nSensyderm Baby",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+        ...overrides,
+      }),
+    );
+  }
+
+  it("accepts lyrics exactly at the 360-character maximum", () => {
+    const lyrics = "a".repeat(360);
+    const result = ResponseParser.parse(approvedResponse({ lyrics }));
+    expect(result.lyrics).toBe(lyrics);
+    expect(result.lyrics).toHaveLength(360);
+  });
+
+  it("accepts lyrics comfortably under the 360-character maximum", () => {
+    const lyrics =
+      "[Verse]\nCorto y dulce\n\n[Verse]\nSigue el juego\n\n[Chorus]\nMi amor\n\n[Ending]\nSensyderm Baby";
+    const result = ResponseParser.parse(approvedResponse({ lyrics }));
+    expect(result.lyrics).toBe(lyrics);
+    expect(lyrics.length).toBeLessThan(360);
+  });
+
+  it("accepts lyrics within the new normal 300-330 character target range", () => {
+    const lyrics = "a".repeat(315);
+    const result = ResponseParser.parse(approvedResponse({ lyrics }));
+    expect(result.lyrics).toBe(lyrics);
+    expect(lyrics.length).toBeGreaterThanOrEqual(300);
+    expect(lyrics.length).toBeLessThanOrEqual(330);
+  });
+
+  it("rejects lyrics one character over the 360-character maximum, exactly the observed real-world failure (456 chars), with the specific claude.lyrics_too_long code", () => {
+    expect(() => ResponseParser.parse(approvedResponse({ lyrics: "a".repeat(361) }))).toThrow();
+    expect(() => ResponseParser.parse(approvedResponse({ lyrics: "a".repeat(456) }))).toThrow();
+
+    const error = ((): unknown => {
+      try {
+        ResponseParser.parse(approvedResponse({ lyrics: "a".repeat(390) }));
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(error).toBeInstanceOf(ExternalApiError);
+    expect((error as ExternalApiError).code).toBe("claude.lyrics_too_long");
+    expect((error as ExternalApiError).context).toEqual({ lyricsLength: 390, maxLength: 360 });
+  });
+
+  it("distinguishes the lyrics-too-long case (claude.lyrics_too_long) from every other malformed-response case (claude.malformed_response) — a retry-triggering signal only for this one cause", () => {
+    const tooLongError = ((): unknown => {
+      try {
+        ResponseParser.parse(approvedResponse({ lyrics: "a".repeat(400) }));
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect((tooLongError as ExternalApiError).code).toBe("claude.lyrics_too_long");
+
+    // A missing musicMood is unrelated to lyric length — must never be
+    // reported as claude.lyrics_too_long, since retrying wouldn't fix it.
+    const missingMoodError = ((): unknown => {
+      try {
+        ResponseParser.parse(approvedResponse({ musicMood: null }));
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect((missingMoodError as ExternalApiError).code).toBe("claude.malformed_response");
+
+    // An over-limit musicDirection is also unrelated to lyric length.
+    const directionTooLongError = ((): unknown => {
+      try {
+        ResponseParser.parse(approvedResponse({ musicDirection: "a".repeat(401) }));
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect((directionTooLongError as ExternalApiError).code).toBe("claude.malformed_response");
+  });
+
+  it("counts the raw string exactly as returned — labels, spaces, punctuation, and line breaks all count, never trimmed before the length check", () => {
+    // 350 real characters plus 11 trailing spaces = 361 — over the
+    // limit only because of trailing whitespace, which must still count
+    // (the prompt itself specifies counting "every space").
+    const lyrics = "a".repeat(350) + " ".repeat(11);
+    expect(lyrics).toHaveLength(361);
+    expect(() => ResponseParser.parse(approvedResponse({ lyrics }))).toThrow();
+  });
+
+  it("an over-limit lyric is rejected outright — never truncated, silently persisted, or returned", () => {
+    let thrown = false;
+    try {
+      ResponseParser.parse(approvedResponse({ lyrics: "a".repeat(400) }));
     } catch {
       thrown = true;
     }

@@ -3,7 +3,6 @@ import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { logger } from "@/shared/logger/logger";
 import type { AudioDownloader } from "../contracts/AudioDownloader";
-import type { AudioProcessor } from "../contracts/AudioProcessor";
 import type { AudioStorage } from "../contracts/AudioStorage";
 import type { AudioUrlResolver } from "../contracts/AudioUrlResolver";
 import type { CampaignGate } from "../contracts/CampaignGate";
@@ -30,20 +29,26 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
  *   (the port also still structurally supports a hypothetical
  *   synchronous provider's `completed` result, going through the exact
  *   same handler) — downloads the audio from the provider's own
- *   (short-lived) URL, post-processes it via `AudioProcessor` (FFmpeg —
- *   enforces the campaign's 60-second cap with a 55s-60s fade-out; a
- *   shorter source is returned untouched, never padded), uploads the
- *   *processed* bytes to R2, persists only the resulting object key
- *   (`Song.audioStorageKey`) — never a signed URL, never the provider's
- *   URL (see `AudioUrlResolver`) — marks the Song `COMPLETED` with the
- *   processed audio's own measured duration (never the provider's
- *   self-reported one), and only once all of that has already
- *   succeeded, delivers the "song ready" email (Gate 9.5 — Complete
- *   End-to-End Song Delivery), resolving a fresh signed URL at the
- *   moment it's needed and never persisting it. Never marks `COMPLETED`
- *   unless processing and the upload both actually succeeded — a
- *   processing failure fails the Song exactly like a download or upload
- *   failure already did, through the same catch block below.
+ *   (short-lived) URL and uploads those bytes to R2 unmodified, persists
+ *   only the resulting object key (`Song.audioStorageKey`) — never a
+ *   signed URL, never the provider's URL (see `AudioUrlResolver`) —
+ *   marks the Song `COMPLETED` with the provider's own self-reported
+ *   duration, and only once all of that has already succeeded, delivers
+ *   the "song ready" email (Gate 9.5 — Complete End-to-End Song
+ *   Delivery), resolving a fresh signed URL at the moment it's needed
+ *   and never persisting it. Never marks `COMPLETED` unless the upload
+ *   actually succeeded.
+ *
+ *   TEMPORARY — isolated stabilization experiment: audio post-processing
+ *   (`AudioProcessor`/`FfmpegAudioProcessor`, which enforced the
+ *   campaign's 60-second cap with a 55s-60s fade-out) is intentionally
+ *   not wired into this path right now, pending a fix for the FFmpeg
+ *   binary resolving to the wrong path under the current bundler (see
+ *   `FfmpegAudioProcessor`'s own doc comment and CHANGELOG.md). The
+ *   `AudioProcessor` contract and `FfmpegAudioProcessor` implementation
+ *   are unchanged and still present in the repository for when this is
+ *   reintroduced — this class just doesn't depend on or call either
+ *   right now.
  * - Finished with an error → marks the Song `FAILED` with the provider's
  *   reported error, same recovery path as before this split (manual
  *   admin retry via `RetryFailedSongUseCase`).
@@ -64,7 +69,6 @@ export class GenerationPoller {
     private readonly songRepository: SongRepository,
     private readonly songGenerator: SongGenerationProvider,
     private readonly audioDownloader: AudioDownloader,
-    private readonly audioProcessor: AudioProcessor,
     private readonly audioStorage: AudioStorage,
     private readonly audioUrlResolver: AudioUrlResolver,
     private readonly leadRepository: LeadRepository,
@@ -111,14 +115,16 @@ export class GenerationPoller {
    * Shared terminal-success handling for both `SongGenerationPollResult`
    * variants that mean "the provider has finished, here is the audio"
    * (`ready_to_download` — Mureka's async result — and `completed`, a
-   * hypothetical synchronous provider's result). Downloads the audio,
-   * uploads it to R2, persists only the resulting object key — never a
-   * signed URL, never the provider's URL — and marks the Song
-   * `COMPLETED`. `COMPLETED` already means "the audio is safely stored,"
-   * decoupled from whether an email was ever sent (see
-   * `prisma/schema.prisma`'s reserved, unused `DELIVERED` value and
-   * `SongMapper`'s collapse-to-`COMPLETED` comment), so no new
-   * `SongStatus` exists for this.
+   * hypothetical synchronous provider's result). Downloads the audio and
+   * uploads those same bytes to R2 unmodified (see this class's own doc
+   * comment — audio post-processing is temporarily not wired into this
+   * path), persists only the resulting object key — never a signed URL,
+   * never the provider's URL — and marks the Song `COMPLETED`.
+   * `COMPLETED` already means "the audio is safely stored," decoupled
+   * from whether an email was ever sent (see `prisma/schema.prisma`'s
+   * reserved, unused `DELIVERED` value and `SongMapper`'s
+   * collapse-to-`COMPLETED` comment), so no new `SongStatus` exists for
+   * this.
    *
    * The email is sent only after the download, the R2 upload, and the
    * repository `update` (the "database transaction committed" moment)
@@ -135,19 +141,18 @@ export class GenerationPoller {
   ): Promise<GenerationPollerResponse> {
     try {
       const audio = await this.audioDownloader.download(result.audioUrl);
-      const processed = await this.audioProcessor.process(audio.bytes);
       const storageKey = `songs/${song.id}.mp3`;
 
       await this.audioStorage.upload(
         storageKey,
-        processed.bytes,
+        audio.bytes,
         audio.contentType || AUDIO_STORAGE_CONTENT_TYPE_FALLBACK,
       );
 
       song.markCompleted({
         providerSongId: result.providerSongId,
         audioStorageKey: storageKey,
-        duration: processed.durationSeconds,
+        duration: result.duration,
       });
       const updated = await this.songRepository.update(song);
 

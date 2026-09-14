@@ -15,6 +15,23 @@ const MUSIC_MOOD_MAX_LENGTH = 150;
 const MUSIC_DIRECTION_MIN_LENGTH = 15;
 const MUSIC_DIRECTION_MAX_LENGTH = 400;
 
+// Sprint v1.5 — Compact Commercial Jingle. Mirrors the same
+// length-bounding pattern already used for musicMood/musicDirection
+// above, extended to `lyrics`: the prompt's own 360-character hard
+// maximum (see `ai/claude/PromptBuilder`'s `WRITING_INSTRUCTIONS` —
+// "every section label, every line, every space, every line break, and
+// every punctuation mark") is a prose instruction only, with nothing
+// upstream enforcing it — a real generation was observed exceeding it
+// (456 characters). Counted the same way the prompt itself specifies:
+// the raw string, untrimmed, including every label/space/line
+// break/punctuation mark — never `.trim()`ed before this check, unlike
+// the emptiness check below, since trimming could hide a lyric that is
+// only over the limit because of leading/trailing whitespace Claude
+// itself produced. An over-limit lyric is rejected here exactly like
+// any other schema violation (`claude.malformed_response`) — never
+// truncated, which could cut a lyric off mid-word or mid-section.
+const LYRICS_MAX_LENGTH = 360;
+
 const claudeLyricsResponseSchema = z
   .object({
     approved: z.boolean(),
@@ -30,7 +47,10 @@ const claudeLyricsResponseSchema = z
         return typeof value.reason === "string" && value.reason.trim().length > 0;
       }
 
-      const lyricsOk = typeof value.lyrics === "string" && value.lyrics.trim().length > 0;
+      const lyricsOk =
+        typeof value.lyrics === "string" &&
+        value.lyrics.trim().length > 0 &&
+        value.lyrics.length <= LYRICS_MAX_LENGTH;
 
       const moodOk =
         typeof value.musicMood === "string" &&
@@ -46,7 +66,7 @@ const claudeLyricsResponseSchema = z
     },
     {
       message:
-        "an approved response requires non-empty lyrics and a musicMood/musicDirection within their configured length bounds; a rejected response requires a non-empty reason.",
+        "an approved response requires non-empty lyrics within the 360-character maximum and a musicMood/musicDirection within their configured length bounds; a rejected response requires a non-empty reason.",
     },
   );
 
@@ -92,6 +112,34 @@ export class ResponseParser {
   }
 
   private static validate(json: unknown): ClaudeLyricsResult {
+    // Checked ahead of the general schema validation below, as its own
+    // distinctly-coded error, so callers (see `ClaudeLyricsService`) can
+    // tell "the lyrics themselves were the only problem, and a fresh
+    // generation is likely to succeed" apart from every other kind of
+    // malformed response (missing fields, out-of-bounds musicMood/
+    // musicDirection, wrong types) — none of which a retry would fix.
+    // The general schema's own `lyricsOk` length check further below
+    // still independently enforces the same 360-character hard cap as a
+    // backstop; this only adds a more specific signal for this one case.
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "approved" in json &&
+      (json as { approved: unknown }).approved === true &&
+      "lyrics" in json &&
+      typeof (json as { lyrics: unknown }).lyrics === "string" &&
+      (json as { lyrics: string }).lyrics.length > LYRICS_MAX_LENGTH
+    ) {
+      const lyricsLength = (json as { lyrics: string }).lyrics.length;
+      throw new ExternalApiError(
+        `Claude's lyrics were ${lyricsLength} characters, over the ${LYRICS_MAX_LENGTH}-character maximum.`,
+        {
+          code: "claude.lyrics_too_long",
+          context: { lyricsLength, maxLength: LYRICS_MAX_LENGTH },
+        },
+      );
+    }
+
     const result = claudeLyricsResponseSchema.safeParse(json);
 
     if (!result.success) {

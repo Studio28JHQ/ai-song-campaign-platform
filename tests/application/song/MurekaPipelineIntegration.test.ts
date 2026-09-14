@@ -10,7 +10,6 @@ import { SongStatus } from "@/domain/song/types";
 import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
 import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import type { AudioDownloader } from "@/application/song/contracts/AudioDownloader";
-import type { AudioProcessor } from "@/application/song/contracts/AudioProcessor";
 import type { AudioStorage } from "@/application/song/contracts/AudioStorage";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
@@ -180,16 +179,6 @@ function fakeAudioStorage(): AudioStorage {
   return { upload: vi.fn().mockResolvedValue(undefined) };
 }
 
-/** Passes bytes through unchanged — this suite exercises the Mureka wiring, not FFmpeg itself (see FfmpegAudioProcessor's own tests). */
-function fakeAudioProcessor(): AudioProcessor {
-  return {
-    process: vi.fn().mockImplementation(async (bytes: Uint8Array) => ({
-      bytes,
-      durationSeconds: 58,
-    })),
-  };
-}
-
 function fakeAudioUrlResolver(): AudioUrlResolver {
   return {
     resolve: vi.fn().mockImplementation(async (key: string) => `https://signed.example.com/${key}`),
@@ -307,7 +296,6 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       songRepository,
       murekaSongService,
       audioDownloader,
-      fakeAudioProcessor(),
       audioStorage,
       fakeAudioUrlResolver(),
       leadRepository,
@@ -334,11 +322,10 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
     expect(pollResult?.outcome).toBe("ready");
     expect(pollResult?.song.status).toBe(SongStatus.COMPLETED);
     expect(pollResult?.song.providerSongId).toBe("mureka-song-456");
-    // 58 — the (fake) AudioProcessor's own measured duration, never
-    // Mureka's raw self-reported 128000ms/128s above; see
-    // GenerationPoller/AudioProcessor and FfmpegAudioProcessor's own
-    // test suite for the real ffmpeg-measured behavior.
-    expect(pollResult?.song.duration).toBe(58);
+    // No audio post-processing step in the active path right now (see
+    // GenerationPoller's own doc comment) — the persisted duration is
+    // Mureka's own self-reported 128000ms, converted to whole seconds.
+    expect(pollResult?.song.duration).toBe(128);
 
     // Only the R2 object key is persisted — never Mureka's own URL.
     expect(pollResult?.song.audioStorageKey).toBe(`songs/${song.id}.mp3`);
@@ -399,7 +386,6 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       songRepository,
       murekaSongService,
       fakeAudioDownloader(),
-      fakeAudioProcessor(),
       fakeAudioStorage(),
       fakeAudioUrlResolver(),
       leadRepository,
