@@ -15,6 +15,16 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.31.2] - 2026-09-15
+
+### Fixed
+
+- **Restored FFmpeg audio post-processing in the song pipeline**: `FfmpegAudioProcessor` is reconnected to `GenerationPoller` (`downloadStoreAndDeliver`) after the temporary rollback in `1670806`, so Mureka songs longer than 60 seconds are once again faded out from second 55 for 5 seconds and hard-capped at 60 seconds before upload to R2 — a song at or under 60 seconds is still stored byte-for-byte untouched, and `Song.duration` is once again the processor's own measured value, never Mureka's self-reported one. Root cause of the earlier production breakage: `ffmpeg-static` resolves its binary path as `path.join(__dirname, 'ffmpeg')` at module-eval time, but the App Router's server compiler bundles `node_modules` dependencies into each route's own output file by default, which rewrites that `__dirname` to the route's bundle location instead of `node_modules/ffmpeg-static/` — the deployed function then tried to spawn a binary at a path that was never actually there, even though `outputFileTracingIncludes` had correctly copied it elsewhere. Fixed by declaring `serverExternalPackages: ["ffmpeg-static"]` in `next.config.ts`, which keeps the package a real, unbundled `require()` resolved against the function's own `node_modules` at runtime — `__dirname` stays correct, and the binary `outputFileTracingIncludes` already force-includes (unchanged, still scoped to `/api/internal/pipeline/run`) is now found exactly where the code looks for it. `FfmpegAudioProcessor` itself, its `AudioProcessor` contract, and the Mureka prompt's existing "close to 60s" optimization are all unchanged — this is a wiring and bundler-configuration fix, not a behavior change to either.
+
+### Maintenance
+
+- Restored the `AudioProcessor`/`FfmpegAudioProcessor` fakes and assertions in `tests/application/song/GenerationPoller.test.ts` and `tests/application/song/MurekaPipelineIntegration.test.ts` that were removed alongside the temporary rollback, matching the pre-rollback coverage (processed bytes/duration reach R2 and `Song`, a processing failure fails the Song and uploads nothing).
+
 ## [1.31.1] - 2026-08-05
 
 ### Changed
