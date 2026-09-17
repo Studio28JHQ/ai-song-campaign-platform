@@ -6,7 +6,7 @@ import { appConfig } from "@/config/app";
 import { SongResultView } from "@/features/song/components/SongResultView";
 
 export const metadata: Metadata = {
-  title: "Tu canción — AI Song Campaign",
+  title: "Tu canción — Mi primera canción",
 };
 
 export default function SongPage() {

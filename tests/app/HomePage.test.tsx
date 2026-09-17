@@ -111,7 +111,7 @@ describe("HomePage (Landing Page)", () => {
 
     const video = document.querySelector("video");
     expect(video).not.toBeNull();
-    expect(video).toHaveAttribute("src", "/campaign/banners/banner-campaign.mp4");
+    expect(video).toHaveAttribute("src", "/campaign/banners/banner-campaign-v2.mp4");
     expect(video).toHaveAttribute("autoplay");
     expect(video).toHaveAttribute("loop");
     expect(video).toHaveAttribute("playsinline");

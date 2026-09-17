@@ -13,7 +13,7 @@ import { LegalDisclaimer } from "@/features/landing/components/LegalDisclaimer";
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — read directly here,
 // same as `app/layout.tsx`.
-const appName = process.env.NEXT_PUBLIC_APP_NAME || "AI Song Campaign";
+const appName = process.env.NEXT_PUBLIC_APP_NAME || "Mi primera canción";
 const description =
   "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
 

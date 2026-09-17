@@ -19,33 +19,68 @@ const products = [
   {
     name: "Sensyderm Baño Shampoo Infant",
     whyDifferent:
-      "Protección dermo-pediátrica ideal para recién nacidos: sin fragancia, cuida el microbioma y protege desde el día uno.",
+      "Baño & Shampoo 2 en 1 sin fragancia, ideal para la piel más delicada. Su fórmula hipoalergénica con probióticos y sin lágrimas limpia suavemente cuerpo y cabello sin irritar los ojos, mientras ayuda a proteger y fortalecer la barrera natural de la piel desde el primer baño",
     image: "/campaign/products/sensy-derm-infant.png",
     url: "https://bassa.com.ec/dermatologia/producto/sensy-derm-infant-bano-shampoo-300-ml/",
-    pillars: ["Protege la barrera natural", "Limpia suavemente", "Respeta la piel sensible"],
-    ingredients: ["Probióticos, ", "Ectoína, ", "Hipoalergénico"],
+    pillars: [
+      {
+        bold: "Protege",
+        text: "Ayuda a fortalecer la barrera natural.",
+      },
+      {
+        bold: "Sensación ligera",
+        text: "Cuerpo y cabello en un solo paso.",
+      },
+      {
+        bold: "Calma + hidrata",
+        text: "Pensado para pieles sensibles y delicadas.",
+      },
+    ],
+    ingredients: ["Probióticos + Ectoína + Ácido Hialurónico"],
   },
   {
     name: "Sensyderm Baño Shampoo Baby",
     whyDifferent:
-      "Fue desarrollado para acompañar el desarrollo natural de la piel del bebé, ayudando a proteger su equilibrio desde el primer baño.",
+      "Baño & Shampoo 2 en 1, ideal para el cuidado diario de la piel del bebé. Su fórmula hipoalergénica con probióticos y sin lágrimas limpia suavemente cuerpo y cabello sin irritar los ojos, mientras ayuda a proteger y fortalecer la barrera natural de la piel desde el primer baño.",
     image: "/campaign/products/packshot-sensyderm.png",
     url: "https://bassa.com.ec/dermatologia/producto/sensy-derm-baby-bano-shampoo-400-ml/",
-    pillars: ["Protege el microbioma", "Fortalece la defensa natural", "Respeta la piel sensible"],
-    ingredients: ["Probióticos, ", "Ectoína, ", "Hipoalergénico"],
+    pillars: [
+      {
+        bold: "Protege",
+        text: "Ayuda a fortalecer la barrera natural.",
+      },
+      {
+        bold: "Sensación ligera",
+        text: "Cuerpo y cabello en un solo paso.",
+      },
+      {
+        bold: "Calma + hidrata",
+        text: "Pensado para pieles sensibles y delicadas.",
+      },
+    ],
+    ingredients: ["Probióticos + Ectoína + Ácido Hialurónico"],
   },
   {
     name: "Sensyderm Baby Crema Protectora",
     whyDifferent:
-      "Escudo antiescaldaduras de rápida absorción: protege la zona del pañal sin pesadez y sin dejar la piel blanca.",
+      "Una crema protectora de nueva generación que cuida la piel sin dejar residuo blanco, gracias a su agradable textura. Formulada para el cuidado preventivo del área del pañal frente a las molestias causadas por la humedad y el roce.",
     image: "/campaign/products/packshot-sensyderm-crema.png",
     url: "https://bassa.com.ec/dermatologia/producto/sensy-derm-baby-crema-protectora-70g/",
     pillars: [
-      "Protege frente a la humedad",
-      "Forma una barrera protectora",
-      "Ayuda a calmar e hidratar",
+      {
+        bold: "Protege",
+        text: "Ayuda a fortalecer la barrera natural.",
+      },
+      {
+        bold: "Sensación ligera",
+        text: "Cuerpo y cabello en un solo paso.",
+      },
+      {
+        bold: "Calma + hidrata",
+        text: "Pensado para pieles sensibles y delicadas.",
+      },
     ],
-    ingredients: ["Pantenol, ", "Ectoína, ", "Complejo de Probióticos"],
+    ingredients: ["Pantenol + Ectoína + Probióticos"],
   },
 ];
 
@@ -90,7 +125,11 @@ export function CampaignProducts() {
                   <h4 className="text-body font-semibold text-violet-600">3 Pilares</h4>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-body text-muted-foreground">
                     {product.pillars.map((pillar, index) => (
-                      <li key={`${product.name}-pillar-${index}`}>{pillar}</li>
+                      <li key={`${product.name}-pillar-${index}`}>
+                        <strong className="font-semibold text-slate-900">{pillar.bold}</strong>
+                        <br />
+                        {pillar.text}
+                      </li>
                     ))}
                   </ul>
                 </div>

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The AI Song Campaign Platform exists to power a one-month marketing campaign: a Landing Page where parents can generate a personalized AI song for their baby. The campaign objective is to turn visitors into leads by offering a unique, emotionally resonant deliverable, at a scale of up to 3,000 personalized songs, without building a permanent product or platform.
+The Mi primera canción exists to power a one-month marketing campaign: a Landing Page where parents can generate a personalized AI song for their baby. The campaign objective is to turn visitors into leads by offering a unique, emotionally resonant deliverable, at a scale of up to 3,000 personalized songs, without building a permanent product or platform.
 
 ## Target Users
 

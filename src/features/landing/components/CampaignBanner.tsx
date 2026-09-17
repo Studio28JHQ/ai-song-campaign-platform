@@ -19,7 +19,7 @@ const BANNER_HEIGHT = 1000;
 export function CampaignBanner() {
   return (
     <video
-      src="/campaign/banners/banner-campaign.mp4"
+      src="/campaign/banners/banner-campaign-v2.mp4"
       width={BANNER_WIDTH}
       height={BANNER_HEIGHT}
       autoPlay

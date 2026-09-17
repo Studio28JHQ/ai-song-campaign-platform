@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter });
 
-  const name = process.env.CAMPAIGN_NAME || "AI Song Campaign";
+  const name = process.env.CAMPAIGN_NAME || "Mi primera canción";
   const maximumSongs = Number(process.env.CAMPAIGN_MAX_SONGS) || 3000;
   const startsAt = new Date();
   const endsAt = new Date(startsAt.getTime() + ONE_MONTH_MS);

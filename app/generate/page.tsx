@@ -14,10 +14,10 @@ import { LyricsWorkflow } from "@/features/lyrics/components/LyricsWorkflow";
 // `app/` is exempt from the `no-restricted-properties` ESLint rule that
 // forces `src/**` to go through `@/config/env` — same pattern already
 // used in `app/layout.tsx`/`app/page.tsx`.
-const appName = process.env.NEXT_PUBLIC_APP_NAME || "AI Song Campaign";
+const appName = process.env.NEXT_PUBLIC_APP_NAME || "Mi primera canción";
 
 export const metadata: Metadata = {
-  title: "Revisa la letra de tu canción — AI Song Campaign",
+  title: "Revisa la letra de tu canción — Mi primera canción",
 };
 
 /**

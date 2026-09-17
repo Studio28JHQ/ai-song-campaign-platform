@@ -65,7 +65,7 @@ const gothamBook = localFont({
 // forces `src/**` to go through `@/config/env` — reading the two
 // NEXT_PUBLIC_ variables directly here is the one place metadata needs
 // them, without pulling in the server-only config module.
-const appName = process.env.NEXT_PUBLIC_APP_NAME || "AI Song Campaign";
+const appName = process.env.NEXT_PUBLIC_APP_NAME || "Mi primera canción";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const description =
   "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
