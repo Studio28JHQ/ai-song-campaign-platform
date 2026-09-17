@@ -54,6 +54,17 @@ const MOODS = [
   },
 ] as const;
 
+/**
+ * The single place `moodId` becomes the `moodName`/`moodDescription` the
+ * API is sent — extracted verbatim from `submit` below (same `MOODS`
+ * lookup, same `?? MOODS[0]` fallback) so `LyricsWorkflow` can rebuild a
+ * restored generation request through the exact same mapping the form
+ * itself uses, instead of a second, drifting copy of this list.
+ */
+export function resolveMood(moodId: string): (typeof MOODS)[number] {
+  return MOODS.find((candidate) => candidate.id === moodId) ?? MOODS[0];
+}
+
 // Client-side validation built from the same Sprint 8.1 hardening rules
 // (`@/shared/validation`) enforced by the API and application layers.
 const formSchema = z.object({
@@ -71,7 +82,14 @@ export interface LyricsGenerationSubmitValues {
   moodName: string;
   moodDescription?: string;
   parentMessage: string;
-  turnstileToken: string;
+  /**
+   * Absent for a regeneration rebuilt from a restored version: the route
+   * verifies Turnstile only on a lead's *first* generation (see
+   * `app/api/lyrics/generate/route.ts`), and its schema accepts the field
+   * as optional but rejects an empty string. The form itself always
+   * supplies one — this is required client-side by `formSchema` below.
+   */
+  turnstileToken?: string;
   /** Sprint v1.1 — AI Musical Direction. Only ever used to build the Mureka prompt — never sent to Claude. */
   voice: Voice;
 }
@@ -149,7 +167,7 @@ export function LyricsGenerationForm({
   }, [errorMessage, setValue]);
 
   function submit(values: FormValues) {
-    const mood = MOODS.find((candidate) => candidate.id === values.moodId) ?? MOODS[0];
+    const mood = resolveMood(values.moodId);
     onSubmit({
       moodId: mood.id,
       moodName: mood.name,

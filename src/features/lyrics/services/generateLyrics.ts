@@ -3,7 +3,13 @@ export interface GenerateLyricsInput {
   moodName: string;
   moodDescription?: string;
   parentMessage: string;
-  turnstileToken: string;
+  /**
+   * Omitted for a regeneration — `POST /api/lyrics/generate` only
+   * verifies Turnstile on a lead's first generation, and its schema
+   * treats the field as optional. `JSON.stringify` drops it when
+   * `undefined`, so nothing empty is ever sent.
+   */
+  turnstileToken?: string;
   /** Sprint v1.1 — AI Musical Direction. */
   voice: "FEMALE" | "MALE";
 }

@@ -105,14 +105,33 @@ describe("ClaudeLyricsService.generateAndModerate — Sprint v1.6 (300-330 chara
     expect(result.lyrics).toHaveLength(315);
   });
 
-  it("does not retry a second time — the retry is bounded, never unbounded — when every attempt keeps exceeding 360 characters", async () => {
+  it("stops after the bounded number of retries — never unbounded — when every attempt keeps exceeding 360 characters", async () => {
     const sendMessage = vi.fn().mockResolvedValue(responseWith({ lyrics: "a".repeat(400) }));
     const client = { sendMessage } as unknown as ClaudeClient;
     const service = new ClaudeLyricsService(client);
 
     await expect(service.generateAndModerate(baseInput)).rejects.toThrow();
-    // 1 initial attempt + 1 retry = 2 total calls, never more.
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    // 1 initial attempt + `LYRICS_TOO_LONG_RETRY_LIMIT` (2) retries = 3
+    // total calls, never more. The bound was raised from 1 to 2 after a
+    // live re-measurement put the single-call overshoot rate at ~1 in 8;
+    // what this test guards is that the retry stays *bounded*.
+    expect(sendMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it("succeeds on the second retry when the first two attempts both exceed 360 characters", async () => {
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce(responseWith({ lyrics: "a".repeat(400) }))
+      .mockResolvedValueOnce(responseWith({ lyrics: "b".repeat(400) }))
+      .mockResolvedValue(responseWith({ lyrics: "c".repeat(300) }));
+    const client = { sendMessage } as unknown as ClaudeClient;
+    const service = new ClaudeLyricsService(client);
+
+    const result = await service.generateAndModerate(baseInput);
+
+    expect(result.approved).toBe(true);
+    expect(result.lyrics).toBe("c".repeat(300));
+    expect(sendMessage).toHaveBeenCalledTimes(3);
   });
 
   it("never retries for an unrelated malformed response (e.g. a missing musicMood) — only an over-limit lyric triggers a retry", async () => {

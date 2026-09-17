@@ -69,7 +69,12 @@ class InMemoryLyricsRepository implements LyricsRepository {
     return this.records.get(id) ?? null;
   }
   async findAllByLead(leadId: string): Promise<Lyrics[]> {
-    return [...this.records.values()].filter((lyrics) => lyrics.leadId === leadId);
+    // Ordered by version ascending, exactly as `PrismaLyricsRepository`
+    // documents and `GetLeadSessionStateUseCase` relies on — a fake that
+    // returned insertion order would let an ordering regression pass.
+    return [...this.records.values()]
+      .filter((lyrics) => lyrics.leadId === leadId)
+      .sort((a, b) => a.version - b.version);
   }
   async findApprovedByLead(leadId: string): Promise<Lyrics | null> {
     return (
@@ -169,6 +174,7 @@ describe("GetLeadSessionStateUseCase", () => {
     expect(result.babyName).toBe("Baby Doe");
     expect(result.remainingAttempts).toBe(5);
     expect(result.approvedLyrics).toBeNull();
+    expect(result.pendingLyrics).toBeNull();
     expect(result.song).toBeNull();
   });
 
@@ -219,6 +225,139 @@ describe("GetLeadSessionStateUseCase", () => {
       status: "COMPLETED",
       audioUrl: "https://signed.example.com/songs/song-1.mp3",
       duration: 90,
+    });
+  });
+  describe("resuming a version the parent generated but never approved", () => {
+    function buildVersion(leadId: string, version: number, content: string): Lyrics {
+      return Lyrics.create({
+        leadId,
+        moodId: "mood-1",
+        prompt: "prompt",
+        content,
+        version,
+        parentMessage: "A gentle song about bedtime.",
+        musicMood: "Warm, joyful and playful.",
+        musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+        voice: "FEMALE",
+      });
+    }
+
+    it("B — returns the only version when it has never been approved, with everything needed to regenerate from it", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      const pending = buildVersion(lead.id, 1, "Title\nVerse 1");
+      lyricsRepository.seed(pending);
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.pendingLyrics).toEqual({
+        id: pending.id,
+        content: "Title\nVerse 1",
+        version: 1,
+        moodId: "mood-1",
+        parentMessage: "A gentle song about bedtime.",
+        voice: "FEMALE",
+      });
+      expect(result.approvedLyrics).toBeNull();
+    });
+
+    it("never exposes the Claude-authored prompt or musical direction alongside it", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      lyricsRepository.seed(buildVersion(lead.id, 1, "Title\nVerse 1"));
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(Object.keys(result.pendingLyrics ?? {}).sort()).toEqual([
+        "content",
+        "id",
+        "moodId",
+        "parentMessage",
+        "version",
+        "voice",
+      ]);
+    });
+
+    it("B — returns the latest version when several were generated and none approved", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      lyricsRepository.seed(buildVersion(lead.id, 1, "First"));
+      const latest = buildVersion(lead.id, 2, "Second");
+      lyricsRepository.seed(latest);
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.pendingLyrics).toMatchObject({
+        id: latest.id,
+        content: "Second",
+        version: 2,
+      });
+    });
+
+    it("C — reports nothing pending when the newest version is the approved one", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      lyricsRepository.seed(buildVersion(lead.id, 1, "First"));
+      const approved = buildVersion(lead.id, 2, "Second");
+      approved.approve();
+      lyricsRepository.seed(approved);
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.approvedLyrics).toEqual({ id: approved.id, content: "Second", version: 2 });
+      // v1 is unapproved, but it sits *behind* the approval — approval is
+      // terminal, so there is no step left to resume.
+      expect(result.pendingLyrics).toBeNull();
+    });
+
+    it("D — reports a version created after an approval as pending, without displacing the approved one", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      lyricsRepository.seed(buildVersion(lead.id, 1, "First"));
+      const approved = buildVersion(lead.id, 2, "Second");
+      approved.approve();
+      lyricsRepository.seed(approved);
+      const newer = buildVersion(lead.id, 3, "Third");
+      lyricsRepository.seed(newer);
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.approvedLyrics).toEqual({ id: approved.id, content: "Second", version: 2 });
+      expect(result.pendingLyrics).toMatchObject({ id: newer.id, content: "Third", version: 3 });
+    });
+
+    it("derives the approved version from the same single read, with no second repository call", async () => {
+      const lead = buildLead();
+      leadRepository.seed(lead);
+      const approved = buildVersion(lead.id, 1, "Only");
+      approved.approve();
+      lyricsRepository.seed(approved);
+      const findApprovedSpy = vi.spyOn(lyricsRepository, "findApprovedByLead");
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.approvedLyrics).toEqual({ id: approved.id, content: "Only", version: 1 });
+      expect(findApprovedSpy).not.toHaveBeenCalled();
+    });
+
+    it("never leaks another lead's pending version", async () => {
+      const lead = buildLead();
+      const otherLead = Lead.create(
+        {
+          campaignId: "campaign-1",
+          parentName: "John Roe",
+          babyName: "Baby Roe",
+          email: "john@example.com",
+        },
+        5,
+      );
+      leadRepository.seed(lead);
+      leadRepository.seed(otherLead);
+      lyricsRepository.seed(buildVersion(otherLead.id, 1, "Somebody else's song"));
+
+      const result = await useCase.execute({ leadId: lead.id });
+
+      expect(result.pendingLyrics).toBeNull();
     });
   });
 });

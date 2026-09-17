@@ -12,13 +12,20 @@ import type { ClaudeLyricsResult } from "./types";
  * Every other rejection (missing fields, out-of-bounds musicMood/
  * musicDirection, invalid JSON, an unparseable response) is never
  * retried here — a fresh generation wouldn't fix any of those the way it
- * plausibly fixes an isolated length overshoot. 1 keeps this bounded (2
- * Claude calls total, worst case) — the smallest retry that gives a real
- * second chance without risking a long chain of paid API calls for what
- * is normally a rare, single-attempt overshoot (observed at roughly 2 in
- * 21 real generations).
+ * plausibly fixes an isolated length overshoot. This stays deliberately
+ * small so a length overshoot can never turn into a long chain of paid
+ * API calls for what is normally a rare, single-attempt overshoot.
+ *
+ * Raised from 1 to 2 after a live re-measurement of the current prompt
+ * put the single-call overshoot rate at roughly 1 in 8 (one 454-character
+ * lyric in 8 consecutive generations) rather than the ~2 in 21 observed
+ * when this constant was introduced. At that rate a single retry still
+ * surfaces `claude_unavailable` to the parent on roughly 1.5% of
+ * generations; a second one takes that to roughly 0.2%, for a worst case
+ * of 3 Claude calls — still bounded, and still only ever spent on the one
+ * failure mode a fresh generation actually fixes.
  */
-const LYRICS_TOO_LONG_RETRY_LIMIT = 1;
+const LYRICS_TOO_LONG_RETRY_LIMIT = 2;
 
 /**
  * Single-request moderation + lyrics generation, with one narrow

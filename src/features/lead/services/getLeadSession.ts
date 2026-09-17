@@ -13,11 +13,26 @@ export interface LeadSessionSong {
   duration?: number | null;
 }
 
+/**
+ * A generated version still awaiting the parent's approval. Carries the
+ * three extra fields needed to rebuild the request that produced it, so
+ * "Quiero otra versión" regenerates with the same parameters after a
+ * resume — see `PendingLyricsSummary` (application layer) for why these
+ * three and no others.
+ */
+export interface LeadSessionPendingLyrics extends LeadSessionApprovedLyrics {
+  moodId: string;
+  /** `null` for a version generated before the message was persisted — it cannot be regenerated from. */
+  parentMessage: string | null;
+  voice: "FEMALE" | "MALE";
+}
+
 export interface LeadSessionState {
   babyName: string;
   remainingAttempts: number;
   leadStatus: string;
   approvedLyrics: LeadSessionApprovedLyrics | null;
+  pendingLyrics: LeadSessionPendingLyrics | null;
   song: LeadSessionSong | null;
 }
 

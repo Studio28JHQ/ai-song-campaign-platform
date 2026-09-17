@@ -9,7 +9,11 @@ import {
 import { useApproveLyrics } from "../hooks/useApproveLyrics";
 import { useGenerateLyrics } from "../hooks/useGenerateLyrics";
 import { ApprovedLyricsStatus } from "./ApprovedLyricsStatus";
-import { LyricsGenerationForm, type LyricsGenerationSubmitValues } from "./LyricsGenerationForm";
+import {
+  LyricsGenerationForm,
+  resolveMood,
+  type LyricsGenerationSubmitValues,
+} from "./LyricsGenerationForm";
 import { LyricsReviewPanel } from "./LyricsReviewPanel";
 
 interface Session {
@@ -39,7 +43,11 @@ interface LyricsWorkflowProps {
  * GATE 6.6), drives generation/regeneration through `useGenerateLyrics`,
  * and approval through `useApproveLyrics`. Renders the input form until a
  * version is approved by Claude (see docs/Product/User_Flow.md — Lyrics
- * Review), then the review panel.
+ * Review), then the review panel. A version generated in an earlier visit
+ * but never approved is restored from that same backend state — along
+ * with the request that produced it — so the emailed resume link returns
+ * the parent to the step they actually left off at, with every action
+ * there behaving exactly as it would have in the uninterrupted flow.
  *
  * Once a version has been approved, it is immutable — and the backend,
  * not client-side storage, is what makes this true: the Lead is
@@ -84,6 +92,33 @@ export function LyricsWorkflow({
       setSession({ babyName: state.babyName });
       setRemainingAttempts(state.remainingAttempts);
       setApprovedLyrics(state.approvedLyrics);
+      // Restores a version generated in an earlier visit that the parent
+      // never approved, so arriving here again — a refresh, a new device,
+      // or the emailed resume link — shows the review panel for that exact
+      // version instead of an empty form that would silently spend another
+      // attempt re-generating what they already had. `approvedLyrics` is
+      // still checked first when rendering below.
+      const pending = state.pendingLyrics ?? null;
+      setLyrics(pending);
+
+      // Rebuilds the request that produced that version, so "Quiero otra
+      // versión" regenerates with the same parameters here exactly as it
+      // does in the uninterrupted flow — same mood, same message, same
+      // voice. `moodName`/`moodDescription` come from `resolveMood`, the
+      // same mapping `LyricsGenerationForm` applies to its own submit, so
+      // the rebuilt request is indistinguishable from one the form sent.
+      // No `turnstileToken`: the route verifies Turnstile only on a
+      // lead's first generation, and this lead already has a version.
+      if (pending?.parentMessage) {
+        const mood = resolveMood(pending.moodId);
+        setLastRequest({
+          moodId: mood.id,
+          moodName: mood.name,
+          moodDescription: mood.description,
+          parentMessage: pending.parentMessage,
+          voice: pending.voice,
+        });
+      }
       setSongStatus(state.song?.status ?? null);
     });
 
@@ -124,6 +159,11 @@ export function LyricsWorkflow({
   }
 
   async function handleGenerateAgain() {
+    // `lastRequest` is set both by a generation made in this session and
+    // by restoring a pending version above, so this needs no special
+    // case for a resumed visit. It stays null only for a version
+    // generated before `parentMessage` was persisted (see
+    // `PendingLyricsSummary`), which cannot be regenerated from at all.
     if (lastRequest) {
       await handleGenerate(lastRequest);
     }

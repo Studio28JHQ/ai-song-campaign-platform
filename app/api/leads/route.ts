@@ -21,7 +21,7 @@ import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/P
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
 import { TurnstileVerifier } from "@/infrastructure/security/turnstile/TurnstileVerifier";
-import { BusinessRuleError, ExternalApiError, ValidationError } from "@/shared/errors";
+import { AppError, BusinessRuleError, ExternalApiError, ValidationError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { FIELD_LIMITS } from "@/shared/validation/text";
 import {
@@ -199,8 +199,18 @@ export async function POST(request: Request): Promise<NextResponse> {
           resumeUrl,
         });
       } catch (error) {
+        // `code`/`context` carry the provider's own rejection detail (see
+        // `ResendClient`, which attaches the HTTP status and Resend's
+        // parsed error body). Without them a delivery failure is
+        // indistinguishable from any other — in particular an unverified
+        // sender domain, which Resend rejects with a 403 and an
+        // explanatory body rather than a bounce. Mirrors `logDiagnostics`
+        // in `app/api/lyrics/generate/route.ts`. Registration still never
+        // fails because of email delivery — this only widens the log.
         logger.error("Failed to send welcome email", {
           error: error instanceof Error ? error.message : String(error),
+          code: error instanceof AppError ? error.code : undefined,
+          context: error instanceof AppError ? error.context : undefined,
         });
       }
     });

@@ -18,7 +18,8 @@ import { toPublicSongStatus } from "../../song/publicSongStatus";
 /**
  * GET /api/leads/session — reconstructs everything the parent-facing UI
  * needs to resume the flow, entirely from the database: remaining
- * attempts, the approved Lyrics version (if any), and the current Song
+ * attempts, the approved Lyrics version (if any), the latest version
+ * still awaiting the parent's approval (if any), and the current Song
  * (if any). The Lead is identified only via the session cookie (see
  * `getLeadSession`) — the browser never supplies a Lead id. This is the
  * backend-authority endpoint GATE 6.6 introduces; the frontend no longer
@@ -71,6 +72,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         remainingAttempts: result.remainingAttempts,
         leadStatus: result.leadStatus,
         approvedLyrics: result.approvedLyrics,
+        pendingLyrics: result.pendingLyrics,
         song: result.song
           ? {
               songId: result.song.id,

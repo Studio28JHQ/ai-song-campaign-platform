@@ -104,12 +104,25 @@ function buildLead(overrides: Partial<{ babyName: string; remainingAttempts: num
   );
 }
 
+/**
+ * The three columns a pending version carries beyond an approved one —
+ * what `LyricsWorkflow` rebuilds the original generation request from.
+ */
+const RESTORABLE = {
+  moodId: "mood-1",
+  parentMessage: "A gentle bedtime song.",
+  voice: "FEMALE" as const,
+};
+
 describe("GET /api/leads/session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveAudioUrl.mockImplementation(
       async (key: string) => `https://signed.example.com/${key}`,
     );
+    // The default for every test that isn't specifically about a pending
+    // version: this lead has generated nothing yet.
+    mockLyricsRepository.findAllByLead.mockResolvedValue([]);
   });
 
   it("returns 401 when there is no active session", async () => {
@@ -127,7 +140,6 @@ describe("GET /api/leads/session", () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockSongRepository.findByLead.mockResolvedValue(null);
 
     const response = await GET(sessionRequest());
@@ -137,18 +149,75 @@ describe("GET /api/leads/session", () => {
     expect(body.babyName).toBe("Baby Doe");
     expect(body.remainingAttempts).toBe(5);
     expect(body.approvedLyrics).toBeNull();
+    expect(body.pendingLyrics).toBeNull();
     expect(body.song).toBeNull();
+  });
+
+  it("exposes the latest never-approved version as pendingLyrics, so an emailed resume link can restore it", async () => {
+    const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockLyricsRepository.findAllByLead.mockResolvedValue([
+      { id: "lyrics-1", content: "First", version: 1, approved: false, ...RESTORABLE },
+      { id: "lyrics-2", content: "Second", version: 2, approved: false, ...RESTORABLE },
+    ]);
+    mockSongRepository.findByLead.mockResolvedValue(null);
+
+    const response = await GET(sessionRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.pendingLyrics).toEqual({
+      id: "lyrics-2",
+      content: "Second",
+      version: 2,
+      ...RESTORABLE,
+    });
+    expect(body.approvedLyrics).toBeNull();
+  });
+
+  it("reports no pendingLyrics when the newest version is the approved one", async () => {
+    const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockLyricsRepository.findAllByLead.mockResolvedValue([
+      { id: "lyrics-1", content: "First", version: 1, approved: false },
+      { id: "lyrics-2", content: "Second", version: 2, approved: true },
+    ]);
+    mockSongRepository.findByLead.mockResolvedValue(null);
+
+    const response = await GET(sessionRequest());
+    const body = await response.json();
+
+    expect(body.approvedLyrics).toEqual({ id: "lyrics-2", content: "Second", version: 2 });
+    expect(body.pendingLyrics).toBeNull();
+  });
+
+  it("reports a version created after an approval as pending, alongside the approved one", async () => {
+    const lead = buildLead();
+    mockGetLeadSession.mockResolvedValue(lead.id);
+    mockLeadRepository.findById.mockResolvedValue(lead);
+    mockLyricsRepository.findAllByLead.mockResolvedValue([
+      { id: "lyrics-1", content: "First", version: 1, approved: false },
+      { id: "lyrics-2", content: "Second", version: 2, approved: true },
+      { id: "lyrics-3", content: "Third", version: 3, approved: false, ...RESTORABLE },
+    ]);
+    mockSongRepository.findByLead.mockResolvedValue(null);
+
+    const response = await GET(sessionRequest());
+    const body = await response.json();
+
+    expect(body.approvedLyrics).toEqual({ id: "lyrics-2", content: "Second", version: 2 });
+    expect(body.pendingLyrics).toMatchObject({ id: "lyrics-3", content: "Third", version: 3 });
   });
 
   it("includes the approved lyrics and the current song, using the same public vocabulary", async () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue({
-      id: "lyrics-1",
-      content: "Title\n...",
-      version: 2,
-    });
+    mockLyricsRepository.findAllByLead.mockResolvedValue([
+      { id: "lyrics-1", content: "Title\n...", version: 2, approved: true },
+    ]);
     mockSongRepository.findByLead.mockResolvedValue({
       id: "song-1",
       status: "COMPLETED",
@@ -173,7 +242,6 @@ describe("GET /api/leads/session", () => {
     const lead = buildLead();
     mockGetLeadSession.mockResolvedValue(lead.id);
     mockLeadRepository.findById.mockResolvedValue(lead);
-    mockLyricsRepository.findApprovedByLead.mockResolvedValue(null);
     mockSongRepository.findByLead.mockResolvedValue(null);
 
     const response = await GET(sessionRequest());

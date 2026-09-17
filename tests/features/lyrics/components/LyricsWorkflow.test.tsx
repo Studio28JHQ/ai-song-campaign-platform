@@ -61,6 +61,7 @@ function baseSession(overrides: Record<string, unknown> = {}) {
     remainingAttempts: 5,
     leadStatus: "GENERATING",
     approvedLyrics: null,
+    pendingLyrics: null,
     song: null,
     ...overrides,
   };
@@ -480,6 +481,169 @@ describe("LyricsWorkflow", () => {
       renderWorkflow();
 
       expect(await screen.findByText("Title")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * "Resume journey by email" — the emailed link promises to return the
+   * parent "al paso en el que te quedaste" (`WelcomeEmailTemplate`). A
+   * version generated in an earlier visit but never approved is only
+   * recoverable through `GET /api/leads/session`'s `pendingLyrics`;
+   * without it this mount showed a blank generation form, and the next
+   * submit was a *regeneration* server-side — silently spending one of
+   * the parent's attempts to re-create what they already had.
+   */
+  describe("resuming with a pending, never-approved version (emailed resume link)", () => {
+    const PENDING = {
+      id: "lyrics-7",
+      content: "Title\nVerse 1\nChorus",
+      version: 2,
+      moodId: "10000000-0000-0000-0000-000000000003",
+      parentMessage: "A gentle bedtime song about Baby Doe.",
+      voice: "MALE" as const,
+    };
+
+    it("restores the review panel for that version instead of a blank generation form", async () => {
+      install(routedFetch({ session: baseSession({ pendingLyrics: PENDING }) }));
+      renderWorkflow();
+
+      expect(await screen.findByText("Title")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
+    });
+
+    it("never calls the generation endpoint just to restore that version", async () => {
+      const fetchMock = routedFetch({ session: baseSession({ pendingLyrics: PENDING }) });
+      install(fetchMock);
+      renderWorkflow();
+
+      await screen.findByText("Title");
+      const generateCalls = fetchMock.mock.calls.filter(
+        ([input]) => String(input) === "/api/lyrics/generate",
+      );
+      expect(generateCalls).toHaveLength(0);
+    });
+
+    it("can approve the restored version directly, without regenerating it first", async () => {
+      const user = userEvent.setup();
+      const fetchMock = routedFetch({
+        session: baseSession({ pendingLyrics: PENDING }),
+        approveResponse: { approved: true },
+      });
+      install(fetchMock);
+
+      renderWorkflow();
+      await screen.findByText("Title");
+      await user.click(screen.getByRole("button", { name: /me encanta/i }));
+
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(([input]) => String(input) === "/api/lyrics/approve"),
+        ).toBe(true),
+      );
+      const approveCall = fetchMock.mock.calls.find(
+        ([input]) => String(input) === "/api/lyrics/approve",
+      );
+      expect(JSON.parse(String(approveCall?.[1]?.body))).toEqual({ lyricsId: "lyrics-7" });
+    });
+
+    it("regenerates with the original request on 'Quiero otra versión', exactly as the uninterrupted flow does", async () => {
+      const user = userEvent.setup();
+      const fetchMock = routedFetch({
+        session: baseSession({ pendingLyrics: PENDING }),
+        generateResponses: [
+          {
+            lyrics: { id: "lyrics-8", content: "New Title\n...", version: 3, approved: true },
+            approved: true,
+            reason: null,
+            remainingAttempts: 4,
+            leadStatus: "GENERATING",
+          },
+        ],
+      });
+      install(fetchMock);
+
+      renderWorkflow();
+      await screen.findByText("Title");
+      await user.click(screen.getByRole("button", { name: /quiero otra versión/i }));
+
+      expect(await screen.findByText("New Title")).toBeInTheDocument();
+
+      const generateCall = fetchMock.mock.calls.find(
+        ([input]) => String(input) === "/api/lyrics/generate",
+      );
+      // The same mood/message/voice the restored version was generated
+      // from — mood name and description resolved through the very
+      // mapping the form itself uses.
+      expect(JSON.parse(String(generateCall?.[1]?.body))).toEqual({
+        moodId: "10000000-0000-0000-0000-000000000003",
+        moodName: "Playful",
+        moodDescription: "fun and bouncy",
+        parentMessage: "A gentle bedtime song about Baby Doe.",
+        voice: "MALE",
+      });
+    });
+
+    it("omits turnstileToken entirely on that regeneration — the route never verifies one for it", async () => {
+      const user = userEvent.setup();
+      const fetchMock = routedFetch({
+        session: baseSession({ pendingLyrics: PENDING }),
+        generateResponses: [
+          {
+            lyrics: { id: "lyrics-8", content: "New Title\n...", version: 3, approved: true },
+            approved: true,
+            reason: null,
+            remainingAttempts: 4,
+            leadStatus: "GENERATING",
+          },
+        ],
+      });
+      install(fetchMock);
+
+      renderWorkflow();
+      await screen.findByText("Title");
+      await user.click(screen.getByRole("button", { name: /quiero otra versión/i }));
+
+      await screen.findByText("New Title");
+      const generateCall = fetchMock.mock.calls.find(
+        ([input]) => String(input) === "/api/lyrics/generate",
+      );
+      const body = JSON.parse(String(generateCall?.[1]?.body));
+      // Never an empty string: the route's schema rejects one with a 400.
+      expect("turnstileToken" in body).toBe(false);
+    });
+
+    it("leaves the button inert for a legacy version whose original message was never stored", async () => {
+      const user = userEvent.setup();
+      const fetchMock = routedFetch({
+        session: baseSession({ pendingLyrics: { ...PENDING, parentMessage: null } }),
+      });
+      install(fetchMock);
+
+      renderWorkflow();
+      await screen.findByText("Title");
+      await user.click(screen.getByRole("button", { name: /quiero otra versión/i }));
+
+      // Nothing to rebuild the request from, so nothing is sent — the
+      // version itself is still restored and can still be approved.
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input) === "/api/lyrics/generate"),
+      ).toHaveLength(0);
+      expect(screen.getByText("Title")).toBeInTheDocument();
+    });
+
+    it("prefers an approved version over a pending one, and still shows neither form nor review panel", async () => {
+      install(
+        routedFetch({
+          session: baseSession({
+            approvedLyrics: { id: "lyrics-9", content: "Approved song", version: 3 },
+            pendingLyrics: PENDING,
+          }),
+        }),
+      );
+      renderWorkflow();
+
+      expect(await screen.findByText(/Approved song/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /crear la letra/i })).not.toBeInTheDocument();
     });
   });
