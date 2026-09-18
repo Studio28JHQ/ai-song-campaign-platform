@@ -15,6 +15,12 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.31.4] - 2026-09-17
+
+### Fixed
+
+- **Browser tab now shows the company favicon instead of the Vercel one**: removed `app/favicon.ico`, the default `create-next-app` icon that entered the repository with the scaffold commit (`314197b`) and was never replaced — the deployed `/favicon.ico` was byte-for-byte identical to it (25,931 bytes, md5 `c30c7d42707a47a3f4591831641e50dc`). In the App Router, an `app/favicon.ico` is served at `/favicon.ico` and Next.js emits its own `<link rel="icon" type="image/x-icon" sizes="16x16">` in addition to the ones `metadata.icons` declares; since that auto-generated link declared a size and the campaign ones did not, browsers picked it for the tab. The existing company favicon at `public/campaign/icons/favicon.png` is now the one the application uses. No configuration was added: `metadata.icons` in `app/layout.tsx` already pointed at `/campaign/icons/favicon.png` for `icon`/`shortcut`/`apple`, the asset already existed, and the deployed pages already emitted all three links — only the leftover scaffold file needed removing. The asset was not duplicated and no new icon was generated. Consequence worth knowing: `/favicon.ico` now returns a 404, which affects only clients that request it blindly without reading the page's `<link>` tags — those previously received the Vercel logo.
+
 ## [1.31.3] - 2026-09-17
 
 ### Fixed
