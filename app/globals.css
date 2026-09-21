@@ -486,4 +486,7 @@ body {
   .max-w-\(--container-narrow\) {
     max-width: 90%;
   }
+  .bg-mobile-form {
+    padding: 30px 5px;
+  }
 }
