@@ -3,13 +3,18 @@ import type { Voice } from "@/domain/lyrics/types";
 import type { MurekaGender, MurekaGenerateRequest } from "./types";
 
 /**
- * Mureka's official docs show `"model": "auto"` in their quickstart
- * example — letting Mureka pick the current generation model rather
- * than pinning a specific version, the same "don't hardcode a moving
- * target" reasoning `ClaudeClient` applies to its own model constant.
- * Reference: https://platform.mureka.ai/docs/en/quickstart.html
+ * Pinned to an explicit Mureka model version, replacing the previous
+ * `"auto"`. Mureka documents `auto` as "select the latest version of
+ * the regular model", which means the model behind every submission
+ * could change without any change here — and with it the generated
+ * song's length, arrangement, and adherence to `MUREKA_STYLE` mid
+ * campaign. `mureka-9` is one of the values Mureka's own request schema
+ * lists for this field (`auto`, `mureka-7.6`, `mureka-o2`, `mureka-8`,
+ * `mureka-9`, `mureka-9.5`), so every song this campaign generates is
+ * produced by the same, known model.
+ * Reference: https://platform.mureka.ai/docs/api/operations/post-v1-song-generate.html
  */
-const MUREKA_MODEL = "auto";
+const MUREKA_MODEL = "mureka-9";
 
 /** Exactly one song is ever generated per call (see docs/Product/Business_Rules.md — Song Rules). */
 const MUREKA_SONG_COUNT = 1;

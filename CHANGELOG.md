@@ -15,6 +15,12 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.32.0] - 2026-09-28
+
+### Changed
+
+- **Mureka song generation pinned to `mureka-9`, replacing `model: "auto"`** (`mureka/PromptBuilder.ts`): Mureka documents `auto` as "select the latest version of the regular model", so the model actually producing each song could change underneath the campaign with no change here — a live query of the most recent completed task showed `auto` resolving to `mureka-9.5`, released 2026-08-28. Since the generated song's length, arrangement, and adherence to `MUREKA_STYLE` all depend on the model, every song in this campaign is now produced by the same, explicitly named one. `mureka-9` is one of the values Mureka's own request schema lists for this field (`auto`, `mureka-7.6`, `mureka-o2`, `mureka-8`, `mureka-9`, `mureka-9.5`). Nothing else about the request changed: same endpoint (`POST https://api.mureka.ai/v1/song/generate`), same API version, same `lyrics`/`prompt`/`n: 1`/`gender`/`stream: false`, same polling, retry, and error handling.
+
 ## [1.31.4] - 2026-09-17
 
 ### Fixed

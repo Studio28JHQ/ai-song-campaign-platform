@@ -14,7 +14,7 @@ describe("PromptBuilder.build", () => {
   it("sends the fixed, validated STYLE as the prompt, plus the official contract's other fields", () => {
     const payload = PromptBuilder.build(baseInput);
 
-    expect(payload.model).toBe("auto");
+    expect(payload.model).toBe("mureka-9");
     expect(payload.n).toBe(1);
     expect(payload.stream).toBe(false);
     expect(payload.prompt).toContain(VALIDATED_STYLE_SNIPPET);
