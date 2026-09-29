@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type AdminSongRow, type SongStatusFilter, listSongs } from "../services/listSongs";
+import {
+  type AdminSongRow,
+  type SongProviderFilter,
+  type SongStatusFilter,
+  listSongs,
+} from "../services/listSongs";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -12,6 +17,7 @@ export interface SongsListState {
   pageSize: number;
   query: string;
   status: SongStatusFilter | "";
+  provider: SongProviderFilter | "";
   isLoading: boolean;
   errorMessage: string | null;
 }
@@ -19,6 +25,7 @@ export interface SongsListState {
 export interface SongsListActions {
   setQuery: (query: string) => void;
   setStatus: (status: SongStatusFilter | "") => void;
+  setProvider: (provider: SongProviderFilter | "") => void;
   setPage: (page: number) => void;
   refetch: () => void;
 }
@@ -34,6 +41,7 @@ export interface SongsListActions {
 export function useSongsList(): SongsListState & SongsListActions {
   const [query, setQueryState] = useState("");
   const [status, setStatusState] = useState<SongStatusFilter | "">("");
+  const [provider, setProviderState] = useState<SongProviderFilter | "">("");
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<AdminSongRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -48,6 +56,7 @@ export function useSongsList(): SongsListState & SongsListActions {
     listSongs({
       query: query || undefined,
       status: status || undefined,
+      provider: provider || undefined,
       page,
       pageSize: DEFAULT_PAGE_SIZE,
     })
@@ -70,7 +79,7 @@ export function useSongsList(): SongsListState & SongsListActions {
     return () => {
       cancelled = true;
     };
-  }, [query, status, page, reloadToken]);
+  }, [query, status, provider, page, reloadToken]);
 
   function setQuery(nextQuery: string): void {
     setQueryState(nextQuery);
@@ -79,6 +88,11 @@ export function useSongsList(): SongsListState & SongsListActions {
 
   function setStatus(nextStatus: SongStatusFilter | ""): void {
     setStatusState(nextStatus);
+    setPage(1);
+  }
+
+  function setProvider(nextProvider: SongProviderFilter | ""): void {
+    setProviderState(nextProvider);
     setPage(1);
   }
 
@@ -93,10 +107,12 @@ export function useSongsList(): SongsListState & SongsListActions {
     pageSize: DEFAULT_PAGE_SIZE,
     query,
     status,
+    provider,
     isLoading,
     errorMessage,
     setQuery,
     setStatus,
+    setProvider,
     setPage,
     refetch,
   };

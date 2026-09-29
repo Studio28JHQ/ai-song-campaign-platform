@@ -48,6 +48,7 @@ export class PrismaAdminSongListGate implements AdminSongListGate {
         babyName: record.lead.babyName,
         status: toPublicSongStatus(record.status),
         provider: record.provider,
+        providerModel: record.providerModel,
         musicDirection: record.lyrics.musicDirection,
         audioStorageKey: record.audioStorageKey,
         providerError: record.providerError,
@@ -80,6 +81,13 @@ export class PrismaAdminSongListGate implements AdminSongListGate {
 
     if (filter.status) {
       clauses.push({ status: { in: toPrismaSongStatuses(filter.status) } });
+    }
+
+    // Filtered in the database, alongside the existing search and status
+    // clauses, so paging and the total count stay correct — never by
+    // fetching every song and narrowing in the browser.
+    if (filter.provider) {
+      clauses.push({ provider: filter.provider });
     }
 
     return clauses.length > 0 ? { AND: clauses } : {};

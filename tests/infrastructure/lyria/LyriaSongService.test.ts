@@ -52,14 +52,18 @@ describe("LyriaSongService", () => {
     expect(service.pollGenerationStatus).toBeUndefined();
   });
 
-  it("sends the shared STYLE and the approved lyrics as one prompt", async () => {
+  it("sends Lyria's own musical brief and the approved lyrics as one prompt", async () => {
     const { client, generate } = fakeClient(audioResponse());
 
     await new LyriaSongService(client).submitGeneration(input);
 
     expect(generate).toHaveBeenCalledTimes(1);
     const prompt = generate.mock.calls[0][0] as string;
-    expect(prompt).toContain(MUREKA_STYLE);
+    // Same musical intent as Mureka's, but not Mureka's text: its commercial
+    // framing is refused by Google's safety filter when it accompanies a
+    // lyric naming a small child (see `lyria/PromptBuilder`).
+    expect(prompt).not.toContain(MUREKA_STYLE);
+    expect(prompt).toContain("86 BPM");
     expect(prompt).toContain(input.lyrics);
   });
 

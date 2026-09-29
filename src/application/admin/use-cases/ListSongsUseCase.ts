@@ -49,6 +49,7 @@ export class ListSongsUseCase {
       pageSize,
       query: request.query?.trim() || undefined,
       status: request.status,
+      provider: request.provider,
     });
 
     const items = await Promise.all(
@@ -60,6 +61,7 @@ export class ListSongsUseCase {
         babyName: row.babyName,
         status: row.status,
         provider: row.provider,
+        providerModel: row.providerModel,
         musicDirection: row.musicDirection,
         audioUrl: row.audioStorageKey
           ? await this.audioUrlResolver.resolve(row.audioStorageKey)

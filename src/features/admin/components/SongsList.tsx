@@ -35,6 +35,27 @@ function CopyUrlButton({ audioUrl }: { audioUrl: string }) {
   );
 }
 
+const PROVIDER_OPTIONS = [
+  { value: "", label: "Todos" },
+  { value: "mureka", label: "Mureka" },
+  { value: "lyria", label: "Lyria" },
+] as const;
+
+/**
+ * Friendly name for a persisted `Song.provider`. Deliberately falls back to
+ * the raw stored value rather than hiding it: a historical row generated
+ * before the current provider set (the legacy `"suno"`) must still read
+ * clearly instead of rendering blank or breaking the table.
+ */
+const PROVIDER_LABELS: Record<string, string> = {
+  mureka: "Mureka",
+  lyria: "Lyria",
+};
+
+function providerLabel(provider: string): string {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
 const STATUS_OPTIONS = [
   { value: "", label: "Cualquier estado" },
   { value: "QUEUED", label: "En cola" },
@@ -76,10 +97,12 @@ export function SongsList() {
     pageSize,
     query,
     status,
+    provider,
     isLoading,
     errorMessage,
     setQuery,
     setStatus,
+    setProvider,
     setPage,
     refetch,
   } = useSongsList();
@@ -98,20 +121,40 @@ export function SongsList() {
           className="max-w-sm"
         />
 
-        <div className="flex flex-col gap-1 sm:max-w-xs">
-          <Label htmlFor="filter-song-status">Estado</Label>
-          <select
-            id="filter-song-status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value as Parameters<typeof setStatus>[0])}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-1 sm:max-w-xs">
+            <Label htmlFor="filter-song-provider">Proveedor</Label>
+            <select
+              id="filter-song-provider"
+              value={provider}
+              onChange={(event) =>
+                setProvider(event.target.value as Parameters<typeof setProvider>[0])
+              }
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              {PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1 sm:max-w-xs">
+            <Label htmlFor="filter-song-status">Estado</Label>
+            <select
+              id="filter-song-status"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as Parameters<typeof setStatus>[0])}
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -127,7 +170,7 @@ export function SongsList() {
         <EmptyState
           icon={Music}
           title="No se encontraron canciones"
-          description="Ajusta la búsqueda o el filtro de estado e inténtalo de nuevo."
+          description="Ajusta la búsqueda o los filtros de proveedor y estado e inténtalo de nuevo."
         />
       ) : (
         <div className="max-h-[36rem] overflow-auto rounded-xl border border-border shadow-sm">
@@ -136,6 +179,9 @@ export function SongsList() {
               <tr>
                 <th scope="col" className="px-4 py-3 font-medium">
                   Familia
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Proveedor
                 </th>
                 <th scope="col" className="px-4 py-3 font-medium">
                   Estado
@@ -176,6 +222,12 @@ export function SongsList() {
                     <Link href={`/admin/leads/${song.leadId}`} className="text-primary underline">
                       {song.parentName} · {song.babyName}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="block whitespace-nowrap">{providerLabel(song.provider)}</span>
+                    <span className="block whitespace-nowrap text-caption text-muted-foreground">
+                      {song.providerModel ?? "—"}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <SongStatusBadge status={song.status} />

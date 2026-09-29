@@ -1,5 +1,8 @@
 export type SongStatusFilter = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED";
 
+/** The providers this campaign can generate with — the filter's closed set. */
+export type SongProviderFilter = "mureka" | "lyria";
+
 export interface AdminSongRow {
   id: string;
   leadId: string;
@@ -8,6 +11,7 @@ export interface AdminSongRow {
   babyName: string;
   status: string;
   provider: string;
+  providerModel: string | null;
   musicDirection: string | null;
   audioUrl: string | null;
   providerError: string | null;
@@ -17,6 +21,7 @@ export interface AdminSongRow {
 export interface ListSongsInput {
   query?: string;
   status?: SongStatusFilter;
+  provider?: SongProviderFilter;
   page: number;
   pageSize: number;
 }
@@ -40,6 +45,7 @@ export async function listSongs(input: ListSongsInput): Promise<ListSongsResult>
   const params = new URLSearchParams();
   if (input.query) params.set("q", input.query);
   if (input.status) params.set("status", input.status);
+  if (input.provider) params.set("provider", input.provider);
   params.set("page", String(input.page));
   params.set("pageSize", String(input.pageSize));
 

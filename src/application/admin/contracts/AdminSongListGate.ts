@@ -1,3 +1,5 @@
+import type { SongGenerationProviderName } from "@/application/song/contracts/SongGenerationProvider";
+
 /** Public song-status vocabulary (see `app/api/song/publicSongStatus.ts`), used for filtering the "Canciones" list. */
 export type AdminSongStatusFilter = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED";
 
@@ -12,6 +14,14 @@ export interface AdminSongListFilter {
   pageSize: number;
   query?: string;
   status?: AdminSongStatusFilter;
+  /**
+   * Narrows the list to the songs a given provider actually generated
+   * (`Song.provider`). Typed against the current provider set so the filter
+   * can only ever ask for a provider this campaign knows about; the *display*
+   * side stays permissive, so a historical value like the legacy `"suno"`
+   * still renders — it simply cannot be selected in the dropdown.
+   */
+  provider?: SongGenerationProviderName;
 }
 
 /**
@@ -28,6 +38,8 @@ export interface AdminSongRow {
   /** Public song-status vocabulary (QUEUED/GENERATING/COMPLETED/FAILED). */
   status: string;
   provider: string;
+  /** The provider's own model identifier, when the generation recorded one. `null` for songs generated before that column existed. */
+  providerModel: string | null;
   musicDirection: string | null;
   audioStorageKey: string | null;
   /** The provider's reported failure reason, if any — surfaced so an operator can triage a `FAILED` song without leaving this screen. */

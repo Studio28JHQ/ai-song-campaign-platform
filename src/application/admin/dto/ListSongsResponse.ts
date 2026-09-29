@@ -1,3 +1,4 @@
+import type { SongGenerationProviderName } from "@/application/song/contracts/SongGenerationProvider";
 import type { AdminSongStatusFilter } from "../contracts/AdminSongListGate";
 
 /** Input to `ListSongsUseCase` — pagination, free-text search, and status filter for the "Canciones" screen. */
@@ -6,6 +7,7 @@ export interface ListSongsRequest {
   pageSize?: number;
   query?: string;
   status?: AdminSongStatusFilter;
+  provider?: SongGenerationProviderName;
 }
 
 /** One row of the admin "Canciones" list, ready for display — signed URL resolved fresh, never the raw storage key (see `AudioUrlResolver`). */
@@ -17,6 +19,7 @@ export interface AdminSongView {
   babyName: string;
   status: string;
   provider: string;
+  providerModel: string | null;
   musicDirection: string | null;
   audioUrl: string | null;
   providerError: string | null;

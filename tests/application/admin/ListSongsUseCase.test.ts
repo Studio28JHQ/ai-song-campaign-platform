@@ -15,6 +15,7 @@ function row(overrides: Partial<AdminSongRow> = {}): AdminSongRow {
     babyName: "Baby Doe",
     status: "COMPLETED",
     provider: "mureka",
+    providerModel: "mureka-9",
     musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
     audioStorageKey: "songs/song-1.mp3",
     providerError: null,
@@ -90,7 +91,61 @@ describe("ListSongsUseCase", () => {
       pageSize: 10,
       query: "Jane",
       status: "FAILED",
+      provider: undefined,
     });
+  });
+
+  it("passes the provider filter through to the gate, alongside the existing filters", async () => {
+    const gate: AdminSongListGate = {
+      list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    };
+    const resolver: AudioUrlResolver = { resolve: vi.fn() };
+    const useCase = new ListSongsUseCase(gate, resolver);
+
+    // Filtering happens in the database, combined with the other clauses —
+    // never by narrowing an already-fetched page in the browser.
+    await useCase.execute({ page: 1, pageSize: 20, status: "COMPLETED", provider: "lyria" });
+
+    expect(gate.list).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      query: undefined,
+      status: "COMPLETED",
+      provider: "lyria",
+    });
+  });
+
+  it("reports the provider and its model for each row", async () => {
+    const gate: AdminSongListGate = {
+      list: vi.fn().mockResolvedValue({
+        items: [row({ provider: "lyria", providerModel: "lyria-3.5" })],
+        total: 1,
+      }),
+    };
+    const resolver: AudioUrlResolver = { resolve: vi.fn().mockResolvedValue("https://signed") };
+    const useCase = new ListSongsUseCase(gate, resolver);
+
+    const result = await useCase.execute({ page: 1, pageSize: 20 });
+
+    expect(result.items[0].provider).toBe("lyria");
+    expect(result.items[0].providerModel).toBe("lyria-3.5");
+  });
+
+  it("keeps providerModel null for a historical song that never recorded one", async () => {
+    const gate: AdminSongListGate = {
+      list: vi.fn().mockResolvedValue({
+        items: [row({ provider: "mureka", providerModel: null })],
+        total: 1,
+      }),
+    };
+    const resolver: AudioUrlResolver = { resolve: vi.fn().mockResolvedValue("https://signed") };
+    const useCase = new ListSongsUseCase(gate, resolver);
+
+    const result = await useCase.execute({ page: 1, pageSize: 20 });
+
+    // Never invented, never coerced into a string — the screen renders the
+    // absence explicitly.
+    expect(result.items[0].providerModel).toBeNull();
   });
 
   it("rejects a non-positive page", async () => {

@@ -17,6 +17,7 @@ function songsResponse(overrides: Record<string, unknown> = {}) {
         babyName: "Baby Doe",
         status: "COMPLETED",
         provider: "mureka",
+        providerModel: "mureka-9",
         audioUrl: "https://signed.example.com/song-1.mp3",
         providerError: null,
         emailedAt: "2026-01-01T01:00:00.000Z",
@@ -95,5 +96,91 @@ describe("SongsList", () => {
     const table = await screen.findByRole("table");
     within(table).getByText("En cola");
     expect(screen.queryByRole("button", { name: "Copiar URL" })).not.toBeInTheDocument();
+  });
+  it("shows the provider and its model in their own column", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse(songsResponse({ provider: "lyria", providerModel: "lyria-3.5" })),
+      ),
+    ) as unknown as typeof fetch;
+
+    render(<SongsList />);
+
+    // Scoped to the table: "Lyria" is also the label of an option in the
+    // provider filter, which is not what this asserts.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Lyria")).toBeInTheDocument();
+    expect(within(table).getByText("lyria-3.5")).toBeInTheDocument();
+  });
+
+  it("shows a dash, never 'null', for a historical song with no recorded model", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(songsResponse({ provider: "mureka", providerModel: null }))),
+    ) as unknown as typeof fetch;
+
+    render(<SongsList />);
+
+    const table = await screen.findByRole("table");
+    const providerCell = within(table).getByText("Mureka").closest("td") as HTMLElement;
+    // The model sits directly under the provider name, in the same cell.
+    expect(within(providerCell).getByText("—")).toBeInTheDocument();
+    expect(within(table).queryByText("null")).not.toBeInTheDocument();
+    expect(within(table).queryByText("undefined")).not.toBeInTheDocument();
+  });
+
+  it("renders an unknown historical provider readably instead of blank", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse(songsResponse({ provider: "suno", providerModel: null }))),
+    ) as unknown as typeof fetch;
+
+    render(<SongsList />);
+
+    // The legacy value has no friendly label; it must still read clearly.
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("suno")).toBeInTheDocument();
+  });
+
+  it("asks the server for the selected provider, combined with the status filter", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(jsonResponse(songsResponse())),
+    ) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    render(<SongsList />);
+    await screen.findByRole("table");
+
+    fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "COMPLETED" } });
+    fireEvent.change(screen.getByLabelText("Proveedor"), { target: { value: "lyria" } });
+
+    await waitFor(() => {
+      const urls = (fetchMock as unknown as { mock: { calls: string[][] } }).mock.calls.map(
+        (call) => call[0],
+      );
+      const last = urls[urls.length - 1];
+      expect(last).toContain("provider=lyria");
+      expect(last).toContain("status=COMPLETED");
+    });
+  });
+
+  it("drops the provider parameter entirely when 'Todos' is selected", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(jsonResponse(songsResponse())),
+    ) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    render(<SongsList />);
+    await screen.findByRole("table");
+
+    fireEvent.change(screen.getByLabelText("Proveedor"), { target: { value: "lyria" } });
+    await waitFor(() => {
+      const calls = (fetchMock as unknown as { mock: { calls: string[][] } }).mock.calls;
+      expect(calls[calls.length - 1][0]).toContain("provider=lyria");
+    });
+
+    fireEvent.change(screen.getByLabelText("Proveedor"), { target: { value: "" } });
+    await waitFor(() => {
+      const calls = (fetchMock as unknown as { mock: { calls: string[][] } }).mock.calls;
+      expect(calls[calls.length - 1][0]).not.toContain("provider=");
+    });
   });
 });

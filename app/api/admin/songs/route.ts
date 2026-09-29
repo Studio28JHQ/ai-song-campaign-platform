@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ListSongsUseCase } from "@/application/admin/use-cases/ListSongsUseCase";
+import { SONG_GENERATION_PROVIDERS } from "@/application/song/contracts/SongGenerationProvider";
 import { PrismaAdminSongListGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminSongListGate";
 import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { ValidationError } from "@/shared/errors";
@@ -22,6 +23,9 @@ const listSongsUseCase = new ListSongsUseCase(
 const searchParamsSchema = z.object({
   q: z.string().optional(),
   status: z.enum(["QUEUED", "GENERATING", "COMPLETED", "FAILED"]).optional(),
+  // Validated against the campaign's own provider set, so an unknown value is
+  // a 400 rather than a silently empty list.
+  provider: z.enum(SONG_GENERATION_PROVIDERS).optional(),
   page: z.coerce.number().int().optional(),
   pageSize: z.coerce.number().int().optional(),
 });
@@ -32,6 +36,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const parsed = searchParamsSchema.safeParse({
     q: searchParams.get("q") ?? undefined,
     status: searchParams.get("status") ?? undefined,
+    provider: searchParams.get("provider") ?? undefined,
     page: searchParams.get("page") ?? undefined,
     pageSize: searchParams.get("pageSize") ?? undefined,
   });
@@ -44,6 +49,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const result = await listSongsUseCase.execute({
       query: parsed.data.q,
       status: parsed.data.status,
+      provider: parsed.data.provider,
       page: parsed.data.page ?? 1,
       pageSize: parsed.data.pageSize ?? 20,
     });
