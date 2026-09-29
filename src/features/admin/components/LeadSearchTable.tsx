@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { useLeadSearch } from "../hooks/useLeadSearch";
 import { buildLeadsExportUrl } from "../services/exportLeadsCsv";
 import type { LeadSortField } from "../services/searchLeads";
+import { DeleteLeadAction } from "./DeleteLeadAction";
 import { EmptyState } from "./EmptyState";
 import { ErrorMessage } from "./ErrorMessage";
 import { SongStatusBadge } from "./StatusBadge";
@@ -36,8 +38,32 @@ const EMAIL_STATUS_OPTIONS = [
   { value: "NOT_SENT", label: "No enviado" },
 ] as const;
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("es-MX");
+/**
+ * The registration timestamp, to the second.
+ *
+ * The date alone could not tell two families apart on a day that saw
+ * nearly two hundred registrations, which is the whole reason the column
+ * exists. The timezone is pinned to the campaign's own rather than left
+ * to the viewer's, so two people comparing the same screen — or the same
+ * person on a different machine — read the same wall-clock time; the
+ * value stored in the database is UTC either way.
+ */
+function formatTimestamp(value: string): string {
+  const formatted = new Date(value).toLocaleString("es-EC", {
+    timeZone: "America/Guayaquil",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  // `es-EC` separates the date and the time with a comma; the panel reads
+  // better without it, and a column of "29/09/2026 11:47:32" scans as one
+  // value rather than two.
+  return formatted.replace(",", "");
 }
 
 /**
@@ -71,8 +97,16 @@ export function LeadSearchTable() {
     setCity,
     setPage,
     toggleSort,
+    refetch,
     currentFilters,
   } = useLeadSearch();
+
+  // Sprint FINAL-5 — Test Data Cleanup. Feedback for the one action on
+  // this screen that cannot be undone, kept above the table so it is
+  // read whether or not the deleted row's position is still in view.
+  const [deletionNotice, setDeletionNotice] = useState<{ ok: boolean; message: string } | null>(
+    null,
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -162,6 +196,15 @@ export function LeadSearchTable() {
 
       {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
 
+      {deletionNotice ? (
+        <p
+          role={deletionNotice.ok ? "status" : "alert"}
+          className={deletionNotice.ok ? "text-sm text-foreground" : "text-sm text-destructive"}
+        >
+          {deletionNotice.message}
+        </p>
+      ) : null}
+
       {isLoading ? (
         <div className="flex flex-col gap-2" aria-busy="true" aria-label="Cargando familias">
           {Array.from({ length: 6 }).map((_, index) => (
@@ -205,7 +248,9 @@ export function LeadSearchTable() {
                   key={item.id}
                   className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  <td className="px-4 py-3">{formatDate(item.createdAt)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                    {formatTimestamp(item.createdAt)}
+                  </td>
                   <td className="px-4 py-3">{item.parentName}</td>
                   <td className="px-4 py-3">{item.babyName}</td>
                   <td className="px-4 py-3">{item.email}</td>
@@ -214,9 +259,26 @@ export function LeadSearchTable() {
                   </td>
                   <td className="px-4 py-3">{item.emailSent ? "Enviado" : "No enviado"}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/admin/leads/${item.id}`} className="text-primary underline">
-                      Ver
-                    </Link>
+                    <div className="flex items-start gap-3">
+                      <Link href={`/admin/leads/${item.id}`} className="text-primary underline">
+                        Ver
+                      </Link>
+                      <DeleteLeadAction
+                        leadId={item.id}
+                        parentName={item.parentName}
+                        babyName={item.babyName}
+                        email={item.email}
+                        hasSong={item.songStatus !== null}
+                        onDeleted={() => {
+                          setDeletionNotice({
+                            ok: true,
+                            message: `Se eliminó a ${item.parentName} y todos sus datos.`,
+                          });
+                          refetch();
+                        }}
+                        onError={(message) => setDeletionNotice({ ok: false, message })}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

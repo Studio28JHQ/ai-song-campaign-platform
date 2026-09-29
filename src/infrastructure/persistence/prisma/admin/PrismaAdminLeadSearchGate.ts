@@ -59,23 +59,36 @@ export class PrismaAdminLeadSearchGate implements AdminLeadSearchGate {
     }
   }
 
+  /**
+   * The sort the database applies, so paging walks one globally ordered
+   * list rather than re-sorting each page in the browser.
+   *
+   * Every sort ends with `id`, which is the point of returning an array:
+   * the chosen column is rarely unique — several families register in
+   * the same second, share a first name, or have no song at all — and
+   * PostgreSQL gives no guarantee about the order of rows that tie. Two
+   * pages of a tied list can then overlap or skip rows entirely. The id
+   * is unique and never changes, so appending it makes the order total
+   * and paging stable, without altering the visible sort.
+   */
   private toOrderBy(
     sortBy: string | undefined,
     sortDirection: "asc" | "desc" | undefined,
-  ): Prisma.LeadOrderByWithRelationInput {
+  ): Prisma.LeadOrderByWithRelationInput[] {
     const direction = sortDirection ?? "desc";
+    const tieBreaker: Prisma.LeadOrderByWithRelationInput = { id: direction };
 
     switch (sortBy) {
       case "parentName":
-        return { parentName: direction };
+        return [{ parentName: direction }, tieBreaker];
       case "babyName":
-        return { babyName: direction };
+        return [{ babyName: direction }, tieBreaker];
       case "email":
-        return { email: direction };
+        return [{ email: direction }, tieBreaker];
       case "songStatus":
-        return { song: { status: direction } };
+        return [{ song: { status: direction } }, tieBreaker];
       default:
-        return { createdAt: direction };
+        return [{ createdAt: direction }, tieBreaker];
     }
   }
 }

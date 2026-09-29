@@ -41,6 +41,13 @@ export interface LeadSearchActions {
   setCity: (value: string) => void;
   setPage: (page: number) => void;
   toggleSort: (field: LeadSortField) => void;
+  /**
+   * Re-runs the current query, keeping every filter, the sort and the
+   * page. Used after a family is deleted; if that family was the only
+   * row left on the page, the page steps back one so the operator is not
+   * left staring at an empty table.
+   */
+  refetch: () => void;
   /** The current filter criteria, in the shape the CSV export URL builder expects. */
   currentFilters: LeadFilterCriteria;
 }
@@ -67,6 +74,7 @@ export function useLeadSearch(): LeadSearchState & LeadSearchActions {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +111,18 @@ export function useLeadSearch(): LeadSearchState & LeadSearchActions {
     return () => {
       cancelled = true;
     };
-  }, [query, dateFrom, dateTo, songStatus, emailStatus, city, page, sortBy, sortDirection]);
+  }, [
+    query,
+    dateFrom,
+    dateTo,
+    songStatus,
+    emailStatus,
+    city,
+    page,
+    sortBy,
+    sortDirection,
+    reloadToken,
+  ]);
 
   function setQuery(nextQuery: string): void {
     setQueryState(nextQuery);
@@ -145,6 +164,18 @@ export function useLeadSearch(): LeadSearchState & LeadSearchActions {
     }
   }
 
+  function refetch(): void {
+    // The row that was on screen is gone, so `items.length === 1` means
+    // this page has just emptied. Stepping back re-runs the query through
+    // the page change; staying put re-runs it through the token.
+    if (items.length === 1 && page > 1) {
+      setPage(page - 1);
+      return;
+    }
+
+    setReloadToken((previous) => previous + 1);
+  }
+
   return {
     items,
     total,
@@ -168,6 +199,7 @@ export function useLeadSearch(): LeadSearchState & LeadSearchActions {
     setCity,
     setPage,
     toggleSort,
+    refetch,
     currentFilters: {
       query: query || undefined,
       dateFrom: dateFrom || undefined,
