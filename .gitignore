@@ -39,3 +39,4 @@ sandbox/
 *.tsbuildinfo
 
 /src/generated/prisma
+/docs/Prompts
