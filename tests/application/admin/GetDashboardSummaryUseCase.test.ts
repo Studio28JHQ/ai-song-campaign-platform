@@ -19,7 +19,6 @@ function fakeGate(
       emailsResent: 2,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
-      campaignSongsGenerated: null,
       songsCompletedToday: 0,
       songsCompletedLast7Days: 1,
       songsCompletedLast30Days: 5,
@@ -54,7 +53,6 @@ describe("GetDashboardSummaryUseCase", () => {
       campaignGoal: 3000,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
-      campaignSongsGenerated: null,
       songsCompletedToday: 0,
       songsCompletedLast7Days: 1,
       songsCompletedLast30Days: 5,
@@ -111,13 +109,15 @@ describe("GetDashboardSummaryUseCase", () => {
   });
 
   it("prefers the campaign's real maximumSongs over the configured fallback", async () => {
-    const gate = fakeGate({ campaignMaximumSongs: 3000, campaignSongsGenerated: 42 });
+    const gate = fakeGate({ campaignMaximumSongs: 3000 });
     const useCase = new GetDashboardSummaryUseCase(gate, 500);
 
     const result = await useCase.execute();
 
     expect(result.campaignGoal).toBe(3000);
-    expect(result.campaignSongsGenerated).toBe(42);
+    // Sprint FINAL-6: the campaign's own stored tally is no longer part
+    // of the summary at all — consumption is `songsCompleted`.
+    expect(result).not.toHaveProperty("campaignSongsGenerated");
   });
 
   it("passes unavailableSections through unchanged (Sprint FINAL-3 — Dashboard Stabilization)", async () => {

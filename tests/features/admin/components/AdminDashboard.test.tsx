@@ -114,10 +114,28 @@ describe("AdminDashboard", () => {
     expect(progressbar).toHaveAttribute("aria-valuenow", "0");
   });
 
-  it("prefers campaignSongsGenerated (the real enforced counter) over songsCompleted when present", async () => {
+  it("[J] shows the stored completed songs as the campaign's consumption", async () => {
+    // Sprint FINAL-6 — Derived Campaign Capacity. This used to read the
+    // campaign's `songsGenerated` tally, which only ever goes up: on
+    // 2026-09-29 it said 430 while 395 songs were stored, so the bar
+    // claimed a consumption that counted deleted songs. The same number
+    // the generation gate enforces is now the same number shown here.
     global.fetch = mockFetch({
       ...summaryBody,
-      campaignSongsGenerated: 3000,
+      songsCompleted: 395,
+      campaignMaximumSongs: 3000,
+    });
+
+    render(<AdminDashboard />);
+
+    expect(await screen.findByText("395 / 3000 (13%)")).toBeInTheDocument();
+    expect(screen.queryByText(/430 \/ 3000/)).not.toBeInTheDocument();
+  });
+
+  it("[J] fills the bar when the stored songs reach the cap", async () => {
+    global.fetch = mockFetch({
+      ...summaryBody,
+      songsCompleted: 3000,
       campaignMaximumSongs: 3000,
     });
 

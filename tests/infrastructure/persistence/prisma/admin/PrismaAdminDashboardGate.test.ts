@@ -82,7 +82,6 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       emailsResent: 1,
       averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
-      campaignSongsGenerated: null,
       songsCompletedToday: 0,
       songsCompletedLast7Days: 0,
       songsCompletedLast30Days: 0,
@@ -92,7 +91,7 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     });
   });
 
-  it("returns the campaign's real maximumSongs and songsGenerated when a campaign row exists", async () => {
+  it("returns the campaign's real maximumSongs when a campaign row exists, and no stored tally", async () => {
     const client = fakeClient({
       totalLeads: 1,
       lyricsGenerated: 1,
@@ -111,7 +110,9 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     const summary = await gate.getSummary();
 
     expect(summary.campaignMaximumSongs).toBe(3000);
-    expect(summary.campaignSongsGenerated).toBe(42);
+    // Sprint FINAL-6 — Derived Campaign Capacity: `songsGenerated` is a
+    // historical tally and no longer travels to the panel.
+    expect(summary).not.toHaveProperty("campaignSongsGenerated");
   });
 
   it("counts resent emails via AuditLog entries with action resend_email", async () => {
@@ -248,7 +249,6 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       expect(summary.totalLeads).toBe(0); // safe fallback, not a thrown error
       // Everything outside "core" still loaded normally.
       expect(summary.campaignMaximumSongs).toBe(3000);
-      expect(summary.campaignSongsGenerated).toBe(42);
     });
 
     it("logs the real underlying error for the failed query — never silently swallowed", async () => {
