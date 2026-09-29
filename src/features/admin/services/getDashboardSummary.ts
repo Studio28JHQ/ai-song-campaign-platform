@@ -1,9 +1,3 @@
-export interface AverageGenerationMinutes {
-  today: number | null;
-  last7Days: number | null;
-  last30Days: number | null;
-}
-
 export interface DailyCount {
   date: string;
   count: number;
@@ -26,7 +20,6 @@ export interface DashboardSummary {
   generationSuccessRate: number;
   lyricsApprovalRate: number;
   campaignGoal: number;
-  averageGenerationMinutes: AverageGenerationMinutes;
   campaignMaximumSongs: number | null;
   songsCompletedToday: number;
   songsCompletedLast7Days: number;

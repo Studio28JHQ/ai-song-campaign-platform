@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, FileText, Music, Percent, TrendingUp } from "lucide-react";
+import { CheckCircle2, Music, Percent, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardSummary } from "../hooks/useDashboardSummary";
 import type { DashboardSection, DashboardSummary } from "../services/getDashboardSummary";
@@ -21,12 +21,6 @@ const FUNNEL_STEPS: Array<{ label: string; value: (s: DashboardSummary) => numbe
 
 /** Sprint FINAL-3 — Dashboard Stabilization. Spanish copy for a widget whose backing query failed — the rest of the Dashboard keeps working. */
 const SECTION_ERROR_ES = "No fue posible cargar esta sección. Inténtalo nuevamente.";
-
-function formatMinutes(value: number | null): string {
-  if (value === null) return "No disponible";
-  if (value < 1) return "< 1 min";
-  return `${value} min`;
-}
 
 /**
  * Sprint ADMIN-1 — Backoffice de Campaña. The campaign goal progress
@@ -76,31 +70,6 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
   );
 }
 
-function GenerationTimeStats({ summary }: { summary: DashboardSummary }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
-        <span className="text-label text-muted-foreground">Hoy</span>
-        <span className="text-title font-semibold text-foreground">
-          {formatMinutes(summary.averageGenerationMinutes.today)}
-        </span>
-      </div>
-      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
-        <span className="text-label text-muted-foreground">Últimos 7 días</span>
-        <span className="text-title font-semibold text-foreground">
-          {formatMinutes(summary.averageGenerationMinutes.last7Days)}
-        </span>
-      </div>
-      <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm">
-        <span className="text-label text-muted-foreground">Últimos 30 días</span>
-        <span className="text-title font-semibold text-foreground">
-          {formatMinutes(summary.averageGenerationMinutes.last30Days)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Sprint FINAL-2 — Campaign Operations Dashboard. The six KPI cards the
  * brief names explicitly for "Estadísticas" — reuses the exact same
@@ -122,11 +91,6 @@ function StatisticsCards({ summary }: { summary: DashboardSummary }) {
         label="Canciones últimos 30 días"
         value={summary.songsCompletedLast30Days}
         icon={Music}
-      />
-      <SummaryCard
-        label="Tiempo promedio de generación"
-        value={formatMinutes(summary.averageGenerationMinutes.last30Days)}
-        icon={FileText}
       />
       <SummaryCard
         label="Aprobación de letras"
@@ -229,27 +193,21 @@ export function AdminDashboard() {
             <DailyBarChart
               title="Registros por día (últimos 30 días)"
               data={summary.registrationsByDay}
+              unitLabel="registros"
             />
             <DailyBarChart
               title="Canciones completadas por día (últimos 30 días)"
               data={summary.completedSongsByDay}
+              unitLabel="canciones completadas"
             />
           </section>
 
           <section className="flex flex-col gap-3">
             <SectionHeader icon={TrendingUp} title="Estadísticas" />
-            {isUnavailable("windowCounts") || isUnavailable("generationTime") ? (
+            {isUnavailable("windowCounts") ? (
               <ErrorMessage size="sm" message={SECTION_ERROR_ES} />
             ) : null}
             <StatisticsCards summary={summary} />
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <SectionHeader icon={FileText} title="Tiempo promedio de generación" />
-            {isUnavailable("generationTime") ? (
-              <ErrorMessage size="sm" message={SECTION_ERROR_ES} />
-            ) : null}
-            <GenerationTimeStats summary={summary} />
           </section>
 
           <section className="flex flex-col gap-3">

@@ -80,7 +80,6 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       songsFailed: 2,
       emailsSent: 4,
       emailsResent: 1,
-      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       campaignMaximumSongs: null,
       songsCompletedToday: 0,
       songsCompletedLast7Days: 0,
@@ -135,38 +134,6 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     expect(client.auditLog.count).toHaveBeenCalledWith({ where: { action: "resend_email" } });
   });
 
-  it("averages submittedAt-to-completedAt minutes over completed songs in the window", async () => {
-    const client = fakeClient({
-      totalLeads: 1,
-      lyricsGenerated: 1,
-      lyricsApproved: 1,
-      songsRequested: 1,
-      songsQueued: 0,
-      songsGenerating: 0,
-      songsCompleted: 1,
-      songsFailed: 0,
-      emailsSent: 1,
-      emailsResent: 0,
-      completedSongs: [
-        {
-          submittedAt: new Date("2026-01-01T00:00:00.000Z"),
-          completedAt: new Date("2026-01-01T00:05:00.000Z"),
-        },
-        {
-          submittedAt: new Date("2026-01-01T00:00:00.000Z"),
-          completedAt: new Date("2026-01-01T00:07:00.000Z"),
-        },
-      ],
-    });
-    const gate = new PrismaAdminDashboardGate(client);
-
-    const summary = await gate.getSummary();
-
-    expect(summary.averageGenerationMinutes.today).toBe(6);
-    expect(summary.averageGenerationMinutes.last7Days).toBe(6);
-    expect(summary.averageGenerationMinutes.last30Days).toBe(6);
-  });
-
   it("returns the per-window completed-song counts (hoy/7 días/30 días)", async () => {
     const client = fakeClient({
       totalLeads: 1,
@@ -212,16 +179,68 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
 
     const summary = await gate.getSummary();
 
+    const campaignDay = (at: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Guayaquil",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(at);
+
     expect(summary.registrationsByDay).toHaveLength(31); // inclusive of today, 30 days back
-    expect(summary.registrationsByDay.at(-1)).toEqual({
-      date: today.toISOString().slice(0, 10),
-      count: 2,
-    });
+    expect(summary.registrationsByDay.at(-1)).toEqual({ date: campaignDay(today), count: 2 });
     expect(summary.completedSongsByDay).toHaveLength(31);
-    expect(summary.completedSongsByDay.at(-1)).toEqual({
-      date: today.toISOString().slice(0, 10),
-      count: 1,
+    expect(summary.completedSongsByDay.at(-1)).toEqual({ date: campaignDay(today), count: 1 });
+  });
+
+  /**
+   * Sprint FINAL-7 — Dashboard Charts. Days are the campaign's, not UTC's.
+   *
+   * It used to bucket in UTC, so a family that registered at 00:30 UTC
+   * landed in the bar an operator reads as the next day — while the
+   * Familias table, rendering the same timestamp in `America/Guayaquil`,
+   * showed it as the previous evening. The same event sat on two different
+   * days in two places on the same screen.
+   */
+  it("assigns an event near midnight UTC to the campaign day it actually happened on", async () => {
+    // 2026-09-29 00:30 UTC is 2026-09-28 19:30 in Ecuador.
+    const justAfterUtcMidnight = new Date("2026-09-29T00:30:00.000Z");
+    // 2026-09-29 05:00 UTC is exactly 2026-09-29 00:00 in Ecuador.
+    const firstMomentOfTheLocalDay = new Date("2026-09-29T05:00:00.000Z");
+    // One second earlier is still the previous local day.
+    const lastMomentOfThePreviousDay = new Date("2026-09-29T04:59:59.000Z");
+
+    const client = fakeClient({
+      totalLeads: 3,
+      lyricsGenerated: 0,
+      lyricsApproved: 0,
+      songsRequested: 0,
+      songsQueued: 0,
+      songsGenerating: 0,
+      songsCompleted: 0,
+      songsFailed: 0,
+      emailsSent: 0,
+      emailsResent: 0,
+      registrations: [
+        { createdAt: justAfterUtcMidnight },
+        { createdAt: lastMomentOfThePreviousDay },
+        { createdAt: firstMomentOfTheLocalDay },
+      ],
+      completedSongs: [{ submittedAt: justAfterUtcMidnight, completedAt: justAfterUtcMidnight }],
     });
+    const gate = new PrismaAdminDashboardGate(client);
+
+    const summary = await gate.getSummary();
+
+    const on = (series: Array<{ date: string; count: number }>, day: string) =>
+      series.find((entry) => entry.date === day)?.count;
+
+    // Two of the three fell on the 28th locally, one on the 29th — which is
+    // not how UTC would have split them (UTC puts all three on the 29th).
+    expect(on(summary.registrationsByDay, "2026-09-28")).toBe(2);
+    expect(on(summary.registrationsByDay, "2026-09-29")).toBe(1);
+    expect(on(summary.completedSongsByDay, "2026-09-28")).toBe(1);
+    expect(on(summary.completedSongsByDay, "2026-09-29")).toBe(0);
   });
 
   describe("partial-failure resilience (Sprint FINAL-3 — Dashboard Stabilization)", () => {

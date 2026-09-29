@@ -20,7 +20,6 @@ const summaryBody = {
   generationSuccessRate: 63,
   lyricsApprovalRate: 67,
   campaignGoal: 3000,
-  averageGenerationMinutes: { today: null, last7Days: 4.5, last30Days: 6.2 },
   songsCompletedToday: 1,
   songsCompletedLast7Days: 3,
   songsCompletedLast30Days: 5,
@@ -144,17 +143,25 @@ describe("AdminDashboard", () => {
     expect(await screen.findByText("3000 / 3000 (100%)")).toBeInTheDocument();
   });
 
-  it("shows 'No disponible' for a period with no completed songs, and the real value otherwise", async () => {
+  it("no longer shows the average generation time anywhere", async () => {
+    // Sprint FINAL-7 — Dashboard Charts. Three cards all reading "1 min"
+    // told the operator nothing: the metric is provider latency, rounded
+    // to whole minutes, and every song lands at about one. It was removed
+    // from the flow rather than hidden, so there is nothing left to show.
     global.fetch = mockFetch(summaryBody);
 
     render(<AdminDashboard />);
 
-    expect(await screen.findByText("No disponible")).toBeInTheDocument();
-    expect(screen.getByText("4.5 min")).toBeInTheDocument();
-    // 6.2 min now appears twice: the "Últimos 30 días" time box and the
-    // "Tiempo promedio de generación" statistics card both read the same
-    // averageGenerationMinutes.last30Days value.
-    expect(screen.getAllByText("6.2 min").length).toBeGreaterThanOrEqual(1);
+    await screen.findByText("Estadísticas");
+    expect(screen.queryByText("Tiempo promedio de generación")).not.toBeInTheDocument();
+    expect(screen.queryByText("No disponible")).not.toBeInTheDocument();
+    expect(screen.queryByText(/ min$/)).not.toBeInTheDocument();
+    // The statistics the brief keeps are all still there.
+    expect(screen.getByText("Canciones hoy")).toBeInTheDocument();
+    expect(screen.getByText("Canciones últimos 7 días")).toBeInTheDocument();
+    expect(screen.getByText("Canciones últimos 30 días")).toBeInTheDocument();
+    expect(screen.getByText("Aprobación de letras")).toBeInTheDocument();
+    expect(screen.getByText("Éxito de canciones")).toBeInTheDocument();
   });
 
   it("shows the conversion funnel with the exact steps named in the brief, in order", async () => {

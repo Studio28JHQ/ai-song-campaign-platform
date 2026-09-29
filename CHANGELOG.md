@@ -15,6 +15,24 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.38.0] - 2026-09-29
+
+### Changed
+
+- **The two daily charts say something now.** They were already rendering — `DailyBarChart` is a real, dependency-free bar chart and both panels used it — but on a linear scale with a 2% floor the campaign's actual shape (two launch days at 250 and 282 registrations against a fortnight of single digits and a run of zeros) put 28 of 30 bars on the floor, where a day with nothing looked exactly like a day with one. Bar heights are now on a **square-root scale**: against a peak of 250, one registration draws at 6% instead of 0.4%, twenty at 28%, and the peak still fills the plot — while staying monotonic, so the chart never misreports which day was busier.
+- **A day with zero is drawn as a different kind of thing, not a smaller amount.** It used to be `Math.max(2, …)`, which gave 0, 1 and 2 the same bar. Zero is now a muted sliver rather than a short `bg-primary` bar, and an all-zero series says "Sin actividad." instead of showing a row of identical stubs.
+- **Daily buckets are the campaign's days, not UTC's.** `bucketByDay` grouped in UTC, so a family that registered at 00:30 UTC landed in the bar an operator reads as the next day — while the Familias table, rendering the same timestamp in `America/Guayaquil`, showed it as the previous evening: the same event on two different days in two places on one screen. Grouping now goes through a single `Intl` formatter pinned to `America/Guayaquil` (via `Intl` rather than subtracting five hours, so the rule survives if Ecuador ever adopts daylight saving), and the day key each `DailyCount` carries is already local — which is why the chart renders it verbatim instead of converting a second time. One timezone rule, in one place, for both series.
+- **Five or six dates along the axis instead of two.** The ends plus an even spread between them, printed as a separate spaced row rather than one cell per bar: thirty cells at 360px are ~12px wide and a "29/09" label is three times that, so per-bar cells would have overlapped. Each bar also carries its own date and count as an `aria-label` (`"29/09: 282 registros"`), so the series is readable one day at a time rather than only as a picture.
+
+### Removed
+
+- **"Tiempo promedio de generación", the section and the statistics card.** Three boxes all reading "1 min" told the operator nothing. The metric was never the song's length — it is `completedAt − submittedAt`, provider latency, which over 429 songs ranges from 1 second to 2 minutes — but rounded to whole minutes it collapses to the same value every time. Removed from the flow rather than hidden: the component, its section, the card, `formatMinutes`, the three `settle("generationTime", …)` queries, `averageGenerationMinutesSince`, the `AverageGenerationMinutes` type, the `averageGenerationMinutes` field on the gate contract, the response DTO and the client types, and `"generationTime"` from the `DashboardSection` union. **The Dashboard now runs 16 queries per load instead of 19**, and the three that went were the ones fetching whole rows to average them in JavaScript. The kept statistics — Canciones hoy / 7 días / 30 días, Aprobación de letras, Éxito de canciones — are untouched.
+
+### Maintenance
+
+- The aggregation optimisation the audit identified (replacing the two `findMany` calls that fetch 30 days of rows with a SQL/Prisma group-by) was deliberately **not** done here, to keep this diff reviewable. It remains worthwhile: the two queries currently transfer ~945 rows to count them in memory.
+- New tests (9 for `DailyBarChart`) and updated ones across the four dashboard suites: normal data distinguishing zero from positive; the production skew (0, 1, 2, 5, 10, 20, 250) keeping every quiet day above the perceptibility threshold and monotonic; an all-zero series without dividing by zero; an empty series as an explicit empty state; per-bar `aria-label` with the right unit noun for each chart; five to seven axis dates across 30 days with both ends present; the day key rendered without a second timezone shift; and, in the gate, three events either side of the local midnight (00:30 UTC, 04:59:59 UTC and 05:00:00 UTC) landing 2 on the 28th and 1 on the 29th — which is not how UTC would have split them.
+
 ## [1.37.0] - 2026-09-29
 
 ### Changed

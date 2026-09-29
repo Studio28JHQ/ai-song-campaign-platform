@@ -1,8 +1,4 @@
-import type {
-  AverageGenerationMinutes,
-  DailyCount,
-  DashboardSection,
-} from "../contracts/AdminDashboardGate";
+import type { DailyCount, DashboardSection } from "../contracts/AdminDashboardGate";
 
 /** Output of `GetDashboardSummaryUseCase`. Plain indicators plus two 30-day daily trend series — no BI engine, no stored aggregates. */
 export interface DashboardSummaryResponse {
@@ -22,7 +18,6 @@ export interface DashboardSummaryResponse {
   lyricsApprovalRate: number;
   /** Sprint ADMIN-1 — Backoffice de Campaña. `CAMPAIGN_MAX_SONGS` ("3000 canciones"), for the goal progress bar. */
   campaignGoal: number;
-  averageGenerationMinutes: AverageGenerationMinutes;
   /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists. */
   campaignMaximumSongs: number | null;
   songsCompletedToday: number;

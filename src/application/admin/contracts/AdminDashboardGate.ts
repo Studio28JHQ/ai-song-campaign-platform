@@ -7,19 +7,6 @@
  * Prisma-backed adapter in `src/infrastructure/`, the same pattern as
  * `CampaignGate`.
  */
-/**
- * Sprint ADMIN-1 — Backoffice de Campaña. Average minutes between
- * `Song.submittedAt` and `Song.completedAt`, over `COMPLETED` songs
- * whose `completedAt` falls in the given window — `null` when no song
- * completed in that window yet ("Display average times when
- * available. Otherwise show 'No disponible'. Do not fail.").
- */
-export interface AverageGenerationMinutes {
-  today: number | null;
-  last7Days: number | null;
-  last30Days: number | null;
-}
-
 /** Sprint FINAL-2 — Campaign Operations Dashboard. One day's count for a 30-day trend chart — `date` as `YYYY-MM-DD`. */
 export interface DailyCount {
   date: string;
@@ -33,8 +20,7 @@ export interface DailyCount {
  * batch), so a single failing query degrades only its own widget —
  * see `unavailableSections` on `DashboardSummaryCounts`.
  */
-export type DashboardSection =
-  "core" | "generationTime" | "campaign" | "windowCounts" | "dailyTrends";
+export type DashboardSection = "core" | "campaign" | "windowCounts" | "dailyTrends";
 
 export interface DashboardSummaryCounts {
   totalLeads: number;
@@ -47,7 +33,6 @@ export interface DashboardSummaryCounts {
   songsFailed: number;
   emailsSent: number;
   emailsResent: number;
-  averageGenerationMinutes: AverageGenerationMinutes;
   /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists (or that section failed to load). */
   campaignMaximumSongs: number | null;
   /** New leads registered per day, oldest first, over the last 30 days (including days with zero). */

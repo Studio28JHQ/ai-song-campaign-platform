@@ -28,7 +28,6 @@ describe("GET /api/admin/dashboard", () => {
       songsFailed: 3,
       emailsSent: 4,
       emailsResent: 2,
-      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
 
     const response = await GET();
@@ -49,7 +48,6 @@ describe("GET /api/admin/dashboard", () => {
       generationSuccessRate: 50,
       lyricsApprovalRate: 67, // round(10/15 * 100)
       campaignGoal: 3000,
-      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
     });
   });
 
@@ -76,7 +74,6 @@ describe("GET /api/admin/dashboard", () => {
       songsFailed: 0,
       emailsSent: 1,
       emailsResent: 0,
-      averageGenerationMinutes: { today: null, last7Days: null, last30Days: null },
       unavailableSections: ["dailyTrends"],
     });
 

@@ -9,6 +9,41 @@ import { logger } from "@/shared/logger/logger";
 import { prisma as defaultPrismaClient } from "../client";
 
 /**
+ * The campaign's timezone, and the one the whole Dashboard means when it
+ * says "a day". Ecuador has no daylight saving, but this goes through
+ * `Intl` rather than subtracting five hours so the rule stays true if
+ * that ever changes.
+ *
+ * `en-CA` is used purely because it formats as `YYYY-MM-DD`, which sorts
+ * lexicographically — that is what lets the zero-filling loop below walk
+ * days by comparing strings.
+ */
+const CAMPAIGN_TIME_ZONE = "America/Guayaquil";
+
+const campaignDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: CAMPAIGN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Which campaign day an instant falls on, as `YYYY-MM-DD`. */
+function toCampaignDayKey(at: Date): string {
+  return campaignDayFormatter.format(at);
+}
+
+/**
+ * The day after `dayKey`. Anchored at noon UTC on purpose: it is far
+ * enough from either midnight that adding 24 hours can never land back
+ * on the same campaign day or skip one, whatever the offset.
+ */
+function nextCampaignDay(dayKey: string): string {
+  const noon = new Date(`${dayKey}T12:00:00Z`);
+  noon.setUTCDate(noon.getUTCDate() + 1);
+  return toCampaignDayKey(noon);
+}
+
+/**
  * Thin, single-purpose Prisma adapter satisfying the `AdminDashboardGate`
  * port. There is no reporting/analytics domain module (out of scope —
  * see PROJECT_MANIFEST.md), so this is a handful of `count`/`findMany`
@@ -83,9 +118,6 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       songsFailed,
       emailsSent,
       emailsResent,
-      today,
-      last7Days,
-      last30Days,
       campaign,
       songsCompletedToday,
       songsCompletedLast7Days,
@@ -116,15 +148,6 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       ),
       settle("core", "auditLog.count(resend_email)", 0, () =>
         this.client.auditLog.count({ where: { action: "resend_email" } }),
-      ),
-      settle("generationTime", "avgGenerationMinutes(today)", null, () =>
-        this.averageGenerationMinutesSince(startOfToday),
-      ),
-      settle("generationTime", "avgGenerationMinutes(7d)", null, () =>
-        this.averageGenerationMinutesSince(sevenDaysAgo),
-      ),
-      settle("generationTime", "avgGenerationMinutes(30d)", null, () =>
-        this.averageGenerationMinutesSince(thirtyDaysAgo),
       ),
       settle("campaign", "campaign.findFirst", null as { maximumSongs: number } | null, () =>
         this.client.campaign.findFirst({
@@ -176,7 +199,6 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       songsFailed,
       emailsSent,
       emailsResent,
-      averageGenerationMinutes: { today, last7Days, last30Days },
       campaignMaximumSongs: campaign?.maximumSongs ?? null,
       songsCompletedToday,
       songsCompletedLast7Days,
@@ -196,63 +218,35 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
   }
 
   /**
-   * Sprint ADMIN-1 — Backoffice de Campaña. Average minutes between
-   * `submittedAt` and `completedAt` over `COMPLETED` songs finished
-   * since `since` — `null` (never a throw) when none have completed in
-   * that window yet, per the brief's "Do not fail" requirement. A plain
-   * in-memory average over a handful of rows, not a raw SQL aggregate —
-   * this campaign is capped at a few thousand songs total (see
-   * PROJECT_MANIFEST.md), so this stays cheap without extra query
-   * complexity.
-   */
-  private async averageGenerationMinutesSince(since: Date): Promise<number | null> {
-    const songs = await this.client.song.findMany({
-      where: {
-        status: PrismaSongStatus.COMPLETED,
-        completedAt: { gte: since },
-        submittedAt: { not: null },
-      },
-      select: { submittedAt: true, completedAt: true },
-    });
-
-    if (songs.length === 0) return null;
-
-    const totalMinutes = songs.reduce((sum, song) => {
-      const minutes = (song.completedAt!.getTime() - song.submittedAt!.getTime()) / 60_000;
-      return sum + minutes;
-    }, 0);
-
-    return Math.round((totalMinutes / songs.length) * 10) / 10;
-  }
-
-  /**
    * Sprint FINAL-2 — Campaign Operations Dashboard. Buckets already-
    * fetched timestamps into one count per calendar day from `since`
    * through today (inclusive), zero-filling days with no events — a
    * `Map` preserves insertion order, so the result comes out oldest
-   * first with no separate sort needed. Day boundaries and the `date`
-   * key are both computed in UTC (not local time) so the bucketing is
-   * self-consistent regardless of the server's timezone.
+   * first with no separate sort needed.
+   *
+   * Days are the campaign's own days, not UTC ones (Sprint FINAL-7 —
+   * Dashboard Charts). It used to bucket in UTC, which put a family that
+   * registered at 00:30 UTC into a bar the operator would read as the
+   * next day — while the Familias table, which renders the same
+   * timestamp in `America/Guayaquil`, showed it as the previous evening.
+   * The same event appeared on two different days in two places on the
+   * same screen. Both now mean the campaign's day.
+   *
+   * The `date` key each `DailyCount` carries is therefore already a local
+   * day, which is why the chart renders it verbatim instead of
+   * converting again.
    */
   private bucketByDay(timestamps: Date[], since: Date): DailyCount[] {
-    const toUtcDateKey = (date: Date): string => date.toISOString().slice(0, 10);
-    const startOfDayUtc = (date: Date): Date =>
-      new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-
-    const startOfSince = startOfDayUtc(since);
-    const startOfToday = startOfDayUtc(new Date());
+    const startOfSince = toCampaignDayKey(since);
+    const today = toCampaignDayKey(new Date());
 
     const counts = new Map<string, number>();
-    for (
-      const cursor = new Date(startOfSince);
-      cursor <= startOfToday;
-      cursor.setUTCDate(cursor.getUTCDate() + 1)
-    ) {
-      counts.set(toUtcDateKey(cursor), 0);
+    for (let day = startOfSince; day <= today; day = nextCampaignDay(day)) {
+      counts.set(day, 0);
     }
 
     for (const timestamp of timestamps) {
-      const key = toUtcDateKey(timestamp);
+      const key = toCampaignDayKey(timestamp);
       if (counts.has(key)) {
         counts.set(key, (counts.get(key) ?? 0) + 1);
       }
