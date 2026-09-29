@@ -6,6 +6,8 @@ import type { Email } from "@/domain/lead/value-objects/Email";
 import { Lyrics } from "@/domain/lyrics/entities/Lyrics";
 import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsRepository";
 import { GenerateLyricsForLeadUseCase } from "@/application/lyrics/use-cases/GenerateLyricsForLeadUseCase";
+import type { ClaudeClient } from "@/infrastructure/ai/claude/ClaudeClient";
+import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
 import type {
   LyricsGenerator,
   LyricsGeneratorResult,
@@ -112,6 +114,44 @@ class InMemoryLyricsRepository implements LyricsRepository {
 
 function fakeGenerator(result: LyricsGeneratorResult): LyricsGenerator {
   return { generateAndModerate: vi.fn().mockResolvedValue(result) };
+}
+
+/** A Claude response carrying an approved lyric of the given length. */
+function claudeResponse(lyrics: string) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          approved: true,
+          reason: null,
+          lyrics,
+          musicMood: "Warm, joyful and playful.",
+          musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+          moderationCategory: null,
+        }),
+      },
+    ],
+  };
+}
+
+/** A Claude response rejecting the parent's message. */
+function claudeRejection(moderationCategory: string) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          approved: false,
+          reason: "El mensaje incluye contenido religioso.",
+          moderationCategory,
+          lyrics: null,
+          musicMood: null,
+          musicDirection: null,
+        }),
+      },
+    ],
+  };
 }
 
 function createLead(maxAttempts = 5): Lead {
@@ -606,5 +646,53 @@ describe("GenerateLyricsForLeadUseCase — Sprint v1.2 (AI Safety Hardening): re
 
     expect(generator.generateAndModerate).not.toHaveBeenCalled();
     expect(lead.remainingAttempts).toBe(5);
+  });
+  /**
+   * Sprint FINAL-4 — Targeted Lyrics Repair. Driven through the *real*
+   * `ClaudeLyricsService`, because the property under test is precisely
+   * that the use case cannot tell a repaired generation from a clean
+   * one — and therefore cannot charge the parent for it.
+   */
+  it("an internal repair never costs the parent an attempt", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const longThenShort = vi
+      .fn()
+      .mockResolvedValueOnce(claudeResponse("a".repeat(430)))
+      .mockResolvedValueOnce(claudeResponse("a".repeat(350)));
+    const generator = new ClaudeLyricsService({
+      sendMessage: longThenShort,
+    } as unknown as ClaudeClient);
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    const response = await useCase.execute({ leadId: lead.id, ...baseRequest });
+
+    // Two real Claude calls happened — a generation and a repair — and
+    // the parent still has all five attempts, because an approved first
+    // generation is free and the repair is invisible from here.
+    expect(longThenShort).toHaveBeenCalledTimes(2);
+    expect(response.approved).toBe(true);
+    expect(response.remainingAttempts).toBe(5);
+    expect((await leadRepository.findById(lead.id))?.remainingAttempts).toBe(5);
+  });
+
+  it("a moderation rejection still costs exactly one attempt, repair or no repair", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const rejectedTwice = vi.fn().mockResolvedValue(claudeRejection("RELIGIOUS_PROPAGANDA"));
+    const generator = new ClaudeLyricsService({
+      sendMessage: rejectedTwice,
+    } as unknown as ClaudeClient);
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    const response = await useCase.execute({ leadId: lead.id, ...baseRequest });
+
+    // Two calls (one rejection plus one directed repair), one attempt —
+    // the existing business rule, unchanged.
+    expect(rejectedTwice).toHaveBeenCalledTimes(2);
+    expect(response.approved).toBe(false);
+    expect(response.remainingAttempts).toBe(4);
   });
 });

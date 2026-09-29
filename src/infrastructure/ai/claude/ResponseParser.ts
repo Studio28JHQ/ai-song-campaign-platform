@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ExternalApiError } from "@/shared/errors";
-import type { ClaudeContentBlock, ClaudeLyricsResult, ClaudeMessageResponse } from "./types";
+import { toModerationCategory } from "./moderationCategories";
+import type { ClaudeContentBlock, ClaudeMessageResponse, ClaudeModeratedResult } from "./types";
 
 // Sprint v1.2 — AI Safety Hardening. Bounds Claude's own creative-direction
 // output before it is ever persisted or embedded in the Mureka prompt —
@@ -30,7 +31,14 @@ const MUSIC_DIRECTION_MAX_LENGTH = 400;
 // itself produced. An over-limit lyric is rejected here exactly like
 // any other schema violation (`claude.malformed_response`) — never
 // truncated, which could cut a lyric off mid-word or mid-section.
-const LYRICS_MAX_LENGTH = 360;
+/**
+ * The hard maximum for the lyrics, and the single source of truth for
+ * it: `PromptBuilder` imports this constant rather than repeating the
+ * number, so the repair prompt can never ask for a range this parser
+ * would then reject. Exported for that reason only — the validation
+ * itself stays here, and this file remains the final authority.
+ */
+export const LYRICS_MAX_LENGTH = 360;
 
 const claudeLyricsResponseSchema = z
   .object({
@@ -40,6 +48,17 @@ const claudeLyricsResponseSchema = z
     // Sprint v1.1 — AI Musical Direction. Sprint v1.2 — length-bounded, see above.
     musicMood: z.string().nullable(),
     musicDirection: z.string().nullable(),
+    /**
+     * Sprint FINAL-4 — Targeted Lyrics Repair. Internal, and
+     * deliberately optional: a response that omits the field still
+     * parses, and any string is accepted here because
+     * `toModerationCategory` resolves it below — to `null` when it
+     * names no known rule. A rejection is a legitimate outcome, so
+     * refusing to parse it over a missing or misspelled label would
+     * turn a working rejection into a 503 for the parent; what an
+     * unresolvable label costs is the repair, not the response.
+     */
+    moderationCategory: z.string().nullable().optional(),
   })
   .refine(
     (value) => {
@@ -78,7 +97,7 @@ const claudeLyricsResponseSchema = z
  * class (see docs/Architecture/External_Services.md — "Claude API").
  */
 export class ResponseParser {
-  static parse(response: ClaudeMessageResponse): ClaudeLyricsResult {
+  static parse(response: ClaudeMessageResponse): ClaudeModeratedResult {
     const text = ResponseParser.extractText(response);
     const json = ResponseParser.parseJson(text);
     return ResponseParser.validate(json);
@@ -111,7 +130,7 @@ export class ResponseParser {
     }
   }
 
-  private static validate(json: unknown): ClaudeLyricsResult {
+  private static validate(json: unknown): ClaudeModeratedResult {
     // Checked ahead of the general schema validation below, as its own
     // distinctly-coded error, so callers (see `ClaudeLyricsService`) can
     // tell "the lyrics themselves were the only problem, and a fresh
@@ -149,6 +168,21 @@ export class ResponseParser {
       });
     }
 
-    return result.data;
+    // Sprint FINAL-4 — Targeted Lyrics Repair. The category is only
+    // meaningful on a rejection; on an approval it is forced to null
+    // whatever the model sent, so nothing downstream can read a category
+    // out of a successful generation. On a rejection it is `null`
+    // whenever the model named no rule we recognise — which
+    // `ClaudeLyricsService` reads as "nothing to aim a repair at".
+    return {
+      approved: result.data.approved,
+      reason: result.data.reason,
+      lyrics: result.data.lyrics,
+      musicMood: result.data.musicMood,
+      musicDirection: result.data.musicDirection,
+      moderationCategory: result.data.approved
+        ? null
+        : toModerationCategory(result.data.moderationCategory),
+    };
   }
 }

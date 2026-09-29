@@ -18,14 +18,24 @@ This document describes every external integration used by the platform: purpose
 - **`ClaudeClient`** — minimal HTTP client for Anthropic's Messages API, built on the shared `httpRequest` helper (`src/shared/http/`) rather than the official SDK, consistent with the project's "no unnecessary abstractions" principle. Adds the `x-api-key` (from `appConfig.claude.apiKey`) and `anthropic-version` headers and posts the model/prompt.
 - **`PromptBuilder`** — assembles the system prompt (fixed campaign rules, safety/moderation rules, writing instructions, and the required JSON response format) and the user message (baby name, parent message, selected mood, language). This is the only place those rules are defined.
 - **`ResponseParser`** — extracts the text content block from Claude's response, parses it as JSON, and validates it against the expected shape with Zod, including the invariant that an approved result has non-empty lyrics and a rejected result has a non-empty reason.
-- **`ClaudeLyricsService`** — orchestrates the three above: build prompt → send message → parse response. Satisfies the Application layer's `LyricsGenerator` port, called by `GenerateLyricsForLeadUseCase` (see `docs/Architecture/System_Architecture.md`).
+- **`ClaudeLyricsService`** — orchestrates the three above: build prompt → send message → parse response. Satisfies the Application layer's `LyricsGenerator` port, called by `GenerateLyricsForLeadUseCase` (see `docs/Architecture/System_Architecture.md`). Also owns the call budget and both kinds of targeted repair (see "Targeted repair" below).
+- **`moderationCategories`** (Sprint FINAL-4) — the internal moderation vocabulary, one value per rule already present in `PromptBuilder`'s `SAFETY_RULES`, plus `PUBLIC_MODERATION_REASON`, the single generic Spanish message a parent ever sees for a rejection.
 
 **Request Flow:**
 
 1. `ClaudeLyricsService.generateAndModerate(input)` calls `PromptBuilder.build` with the baby's name, the parent's message, the selected mood, and the language.
 2. `ClaudeClient.sendMessage` posts the resulting system/user prompt to Anthropic's Messages API.
 3. `ResponseParser.parse` extracts and validates the response.
-4. The caller receives `{ approved, reason, lyrics }` — never a raw Claude payload.
+4. The caller receives `{ approved, reason, lyrics }` — never a raw Claude payload, and never the internal `moderationCategory`.
+
+**Targeted repair (Sprint FINAL-4 — Targeted Lyrics Repair)** — A single request may spend at most **3 Claude calls in total** (`MAX_CLAUDE_CALLS_PER_REQUEST`), one budget shared by every kind of call, so generations and repairs can never multiply. The calls after the first are aimed at the specific problem rather than repeating the same prompt:
+
+- **Lyrics over the 360-character maximum** — the draft is still in memory inside the raw response, so the next call asks Claude to _edit that draft_ into the 340–360 target window (`PromptBuilder.buildLengthRepair`). A repair that is still too long is repaired again from the most recent draft, never from the original. `ResponseParser` remains the only authority on the limit; the target window is prompt guidance, not a second rule. Motivated by production measurement on 2026-09-29: 41.6% of calls overshot 360, with a median overshoot to 406.
+- **Moderation rejection** — Claude names the rule it applied in `moderationCategory`, and exactly one directed call (`PromptBuilder.buildModerationRepair`) asks for the same song with that element left out. It runs the full, unmodified `SAFETY_RULES` again and may reject again, which ends the request: there is never a second moderation repair.
+
+Neither repair is persisted anywhere: the draft and the parent's message live in memory for the request and are then gone. Every repair is a real Claude call and is recorded as its own `GenerationAttempt` row.
+
+**Public vs internal on a rejection** — `moderationCategory` is internal: it steers the repair and is written to `generation_attempts.failureReason` so the campaign team can group rejections (before this, 21 rejections in one day produced 20 different free-text strings). What the parent receives is always `PUBLIC_MODERATION_REASON` — fixed Spanish, no category, no mention of policies or moderation, no echo of what they wrote. That substitution happens in `ClaudeLyricsService`, in code, rather than relying on the model to follow an instruction; the model had demonstrably drifted, answering 11 of 21 rejections in English to an all-Spanish campaign.
 
 **Response Format** — The prompt requires Claude to return a single JSON object and nothing else (no free text, no markdown fences):
 
@@ -36,8 +46,24 @@ This document describes every external integration used by the platform: purpose
 or
 
 ```json
-{ "approved": false, "reason": "...moderation reason...", "lyrics": null }
+{
+  "approved": false,
+  "reason": "...moderation reason...",
+  "lyrics": null,
+  "moderationCategory": "RELIGIOUS_PROPAGANDA"
+}
 ```
+
+`moderationCategory` (Sprint FINAL-4) names which existing safety rule was applied. It adds no rule and changes none: the values are generated from `MODERATION_CATEGORY_RULES`, which restates the `SAFETY_RULES` bullets one for one. The field stays optional in the schema, and `toModerationCategory` resolves it to one of four outcomes:
+
+| What Claude sent                             | Resolves to            | Repaired?                                                        |
+| -------------------------------------------- | ---------------------- | ---------------------------------------------------------------- |
+| A known category (`RELIGIOUS_PROPAGANDA`, …) | that category          | Yes                                                              |
+| `OTHER_UNSAFE_CONTENT`, explicitly           | `OTHER_UNSAFE_CONTENT` | Yes — it is a real rule, the catch-all the safety rules end with |
+| Nothing at all                               | `null`                 | No                                                               |
+| Something unrecognised                       | `null`                 | No                                                               |
+
+`null` is deliberately not the same as `OTHER_UNSAFE_CONTENT`: the category is what a repair aims at, so without one there is nothing to correct and the repair would be a paid call asking Claude to remove something neither side can name. An unresolvable label therefore costs the repair, never the response — parsing still succeeds, the parent still gets `PUBLIC_MODERATION_REASON`, and the attempt is still recorded (as `UNCATEGORISED — <the model's own wording>`, so the gap is visible rather than disguised as a category).
 
 When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Verse 2, Final Chorus) sized for roughly 2–3 minutes of music, as plain text.
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClaudeClient } from "@/infrastructure/ai/claude/ClaudeClient";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
+import { PUBLIC_MODERATION_REASON } from "@/infrastructure/ai/claude/moderationCategories";
 
 const baseInput = {
   leadId: "11111111-1111-1111-1111-111111111111",
@@ -38,10 +39,14 @@ describe("ClaudeLyricsService.generateAndModerate", () => {
     expect(result.musicDirection).toBe("Warm acoustic arrangement with gentle piano and ukulele.");
   });
 
-  it("returns a rejected result without throwing, from the same single request", async () => {
+  it("returns a rejected result without throwing, after one directed repair attempt", async () => {
+    // Sprint FINAL-4 — Targeted Lyrics Repair: a rejection now buys one
+    // directed retry. Two rejections end the request, without throwing,
+    // and what the parent sees is the application's own message.
     const client = fakeClient({
       approved: false,
       reason: "Contains offensive language.",
+      moderationCategory: "ABUSE",
       lyrics: null,
       musicMood: null,
       musicDirection: null,
@@ -53,9 +58,10 @@ describe("ClaudeLyricsService.generateAndModerate", () => {
       parentMessage: "bad content",
     });
 
-    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+    expect(client.sendMessage).toHaveBeenCalledTimes(2);
     expect(result.approved).toBe(false);
-    expect(result.reason).toBe("Contains offensive language.");
+    expect(result.reason).toBe(PUBLIC_MODERATION_REASON);
+    expect(result.reason).not.toContain("offensive");
     expect(result.lyrics).toBeNull();
   });
 
@@ -88,10 +94,11 @@ describe("ClaudeLyricsService.generateAndModerate — Sprint v1.6 (300-330 chara
     };
   }
 
-  it("retries once, with the exact same prompt, when the first response's lyrics exceed 360 characters, and succeeds on the second attempt", async () => {
+  it("repairs the over-long draft on the second call instead of re-asking the same question", async () => {
+    const tooLong = "a".repeat(390);
     const sendMessage = vi
       .fn()
-      .mockResolvedValueOnce(responseWith({ lyrics: "a".repeat(390) }))
+      .mockResolvedValueOnce(responseWith({ lyrics: tooLong }))
       .mockResolvedValueOnce(responseWith({ lyrics: "a".repeat(315) }));
     const client = { sendMessage } as unknown as ClaudeClient;
     const service = new ClaudeLyricsService(client);
@@ -99,9 +106,12 @@ describe("ClaudeLyricsService.generateAndModerate — Sprint v1.6 (300-330 chara
     const result = await service.generateAndModerate(baseInput);
 
     expect(sendMessage).toHaveBeenCalledTimes(2);
-    // The exact same prompt both times — a retry re-asks the same
-    // question rather than asking Claude to shorten its previous answer.
-    expect(sendMessage.mock.calls[0][0]).toEqual(sendMessage.mock.calls[1][0]);
+    // Sprint FINAL-4 — Targeted Lyrics Repair: the second call is no
+    // longer the same question asked again. It carries the draft that
+    // was just rejected, as content to edit.
+    expect(sendMessage.mock.calls[0][0]).not.toEqual(sendMessage.mock.calls[1][0]);
+    expect(sendMessage.mock.calls[1][0].user).toContain(tooLong);
+    expect(sendMessage.mock.calls[1][0].user).toContain("<lyrics_to_edit>");
     expect(result.approved).toBe(true);
     expect(result.lyrics).toHaveLength(315);
   });
@@ -306,6 +316,7 @@ describe("ClaudeLyricsService.generateAndModerate — attempt recording", () => 
         approvedResponse({
           approved: false,
           reason: "Contains offensive language.",
+          moderationCategory: "ABUSE",
           lyrics: null,
           musicMood: null,
           musicDirection: null,
@@ -322,7 +333,9 @@ describe("ClaudeLyricsService.generateAndModerate — attempt recording", () => 
       handleId: "attempt-1",
       result: "MODERATION_REJECTED",
       errorCode: null,
-      failureReason: "Contains offensive language.",
+      // Sprint FINAL-4: the internal category leads, so the campaign team
+      // can group these; Claude's own wording follows as context.
+      failureReason: "ABUSE — Contains offensive language.",
     });
   });
 
