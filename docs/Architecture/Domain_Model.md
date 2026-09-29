@@ -95,9 +95,13 @@ QUEUED ──▶ GENERATING ──▶ COMPLETED
 
 ## GenerationAttempt
 
-**Purpose (as designed)** — Intended as a per-attempt audit trail of every interaction with Claude, including attempts that fail before producing lyrics (see `docs/Architecture/Database_Model.md`).
+**Purpose** — A per-call audit trail of every interaction with Claude, including the calls that fail before producing lyrics (see `docs/Architecture/Database_Model.md`).
 
-**Implementation status** — The `GenerationAttempt` Prisma model exists in the schema but is never written to or read by any current code path (verified: no reference outside the generated Prisma client). The five-attempts business rule (see `docs/Product/Business_Rules.md`) is fully enforced today through a simpler mechanism — `Lead.remainingAttempts`, a single counter decremented by `GenerateLyricsForLeadUseCase` — which is sufficient for the rule as written. The practical effect: a moderation-rejected attempt that never produced a `Lyrics` row leaves no individual record of itself (only the decremented counter), so the Admin execution history (see `docs/Product/User_Flow.md`) cannot show it as a distinct timeline event. See `BACKLOG_V3.md` for wiring this table up as a real audit trail.
+**Implementation status (Sprint FINAL-2 — Lyrics Generation Traceability)** — Written by `ClaudeLyricsService` via the `LyricsAttemptRecorder` application port, read by the Admin lead-detail screen via `AdminLyricsAttemptGate`. There is deliberately **no domain entity**: a `GenerationAttempt` has no invariants and no behaviour — it is an observation of something that already happened, never a participant in a business rule. Giving it an entity, a repository and a mapper would add three layers that enforce nothing.
+
+**Why it exists, given `Lead.remainingAttempts`** — The attempts business rule (see `docs/Product/Business_Rules.md`) is still enforced entirely through `Lead.remainingAttempts`, and this table changes nothing about it. What the counter cannot answer is _what happened_: a generation that failed inside Claude threw before anything was persisted — no `Lyrics` row, no consumed attempt, no surviving trace — so a family that never tried and a family whose generation failed were indistinguishable in the database. The internal retry on an over-long lyric was the most common such failure and the most completely invisible. These rows make that difference legible, and they distinguish: never reached the provider (no rows), reached it and failed (`FAILED` plus a normalised `errorCode`), was declined by moderation (`MODERATION_REJECTED`), or produced lyrics the parent then never approved (`SUCCESS`, with no approved `Lyrics`).
+
+**What it deliberately does not do** — It does not enforce, alter or replace any rule; it does not gate generation; a failure to write a row never affects a generation's outcome; and no historical row was invented for generations that predate it.
 
 ## Consent
 

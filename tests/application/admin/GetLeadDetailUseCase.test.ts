@@ -15,6 +15,24 @@ import { AuditLogEntry } from "@/domain/admin/entities/AuditLogEntry";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
 import type { ExecutionHistoryItem } from "@/application/admin/dto/ExecutionHistoryItem";
+import type {
+  AdminLyricsAttemptGate,
+  AdminLyricsAttemptView,
+} from "@/application/admin/contracts/AdminLyricsAttemptGate";
+
+/**
+ * Sprint FINAL-2 — Lyrics Generation Traceability. The lead's recorded
+ * provider calls, read-only on this screen.
+ */
+class InMemoryLyricsAttemptGate implements AdminLyricsAttemptGate {
+  private readonly attempts = new Map<string, AdminLyricsAttemptView[]>();
+  seed(leadId: string, attempts: AdminLyricsAttemptView[]): void {
+    this.attempts.set(leadId, attempts);
+  }
+  async findByLead(leadId: string): Promise<AdminLyricsAttemptView[]> {
+    return this.attempts.get(leadId) ?? [];
+  }
+}
 
 function fakeAudioUrlResolver(): AudioUrlResolver {
   return {
@@ -169,12 +187,14 @@ describe("GetLeadDetailUseCase", () => {
   let lyricsRepository: InMemoryLyricsRepository;
   let songRepository: InMemorySongRepository;
   let auditLogRepository: InMemoryAuditLogRepository;
+  let lyricsAttemptGate: InMemoryLyricsAttemptGate;
 
   beforeEach(() => {
     leadRepository = new InMemoryLeadRepository();
     lyricsRepository = new InMemoryLyricsRepository();
     songRepository = new InMemorySongRepository();
     auditLogRepository = new InMemoryAuditLogRepository();
+    lyricsAttemptGate = new InMemoryLyricsAttemptGate();
   });
 
   it("rejects an unknown lead", async () => {
@@ -184,6 +204,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     await expect(
@@ -230,6 +251,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -250,6 +272,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -269,6 +292,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-42" });
@@ -287,6 +311,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -331,6 +356,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -372,6 +398,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -414,6 +441,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -451,6 +479,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
     const beforeEmail = await useCaseBeforeEmail.execute({
       leadId: lead.id,
@@ -506,6 +535,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -546,6 +576,7 @@ describe("GetLeadDetailUseCase", () => {
       songRepository,
       auditLogRepository,
       fakeAudioUrlResolver(),
+      lyricsAttemptGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -553,5 +584,122 @@ describe("GetLeadDetailUseCase", () => {
     const timestamps = result.executionHistory.map((item) => item.timestamp.getTime());
     const sorted = [...timestamps].sort((a, b) => b - a);
     expect(timestamps).toEqual(sorted);
+  });
+});
+
+/**
+ * Sprint FINAL-2 — Lyrics Generation Traceability. The attempts are the
+ * only part of this screen that can describe a lead with *no* lyrics: the
+ * Lyrics and Song rows can only ever describe generations that worked.
+ */
+describe("GetLeadDetailUseCase — lyrics generation attempts", () => {
+  function buildUseCase(gate: InMemoryLyricsAttemptGate, leadRepository: InMemoryLeadRepository) {
+    return new GetLeadDetailUseCase(
+      leadRepository,
+      new InMemoryLyricsRepository(),
+      new InMemorySongRepository(),
+      new InMemoryAuditLogRepository(),
+      fakeAudioUrlResolver(),
+      gate,
+    );
+  }
+
+  it("reports no attempts for a lead that never reached the provider", async () => {
+    // The honest answer for the campaign's historical leads too: their
+    // generations predate this recording, so there is nothing to show — and
+    // nothing was backfilled to pretend otherwise.
+    const lead = createLead();
+    const leadRepository = new InMemoryLeadRepository();
+    leadRepository.seed(lead);
+
+    const result = await buildUseCase(new InMemoryLyricsAttemptGate(), leadRepository).execute({
+      leadId: lead.id,
+      viewingAdminId: "admin-1",
+    });
+
+    expect(result.lyricsAttempts).toEqual([]);
+  });
+
+  it("exposes each recorded call with its outcome, code, model and timings", async () => {
+    const lead = createLead();
+    const leadRepository = new InMemoryLeadRepository();
+    leadRepository.seed(lead);
+
+    const gate = new InMemoryLyricsAttemptGate();
+    gate.seed(lead.id, [
+      {
+        attemptNumber: 1,
+        result: "FAILED",
+        errorCode: "CLAUDE_OUTPUT_TOO_LONG",
+        failureReason: "Claude's lyrics were 454 characters, over the 360-character maximum.",
+        providerModel: "claude-sonnet-5",
+        createdAt: new Date("2026-09-28T10:00:00.000Z"),
+        completedAt: new Date("2026-09-28T10:00:12.000Z"),
+      },
+      {
+        attemptNumber: 2,
+        result: "STARTED",
+        errorCode: null,
+        failureReason: null,
+        providerModel: "claude-sonnet-5",
+        createdAt: new Date("2026-09-28T10:00:13.000Z"),
+        completedAt: null,
+      },
+    ]);
+
+    const result = await buildUseCase(gate, leadRepository).execute({
+      leadId: lead.id,
+      viewingAdminId: "admin-1",
+    });
+
+    expect(result.lyricsAttempts).toHaveLength(2);
+    expect(result.lyricsAttempts[0]).toMatchObject({
+      attemptNumber: 1,
+      result: "FAILED",
+      errorCode: "CLAUDE_OUTPUT_TOO_LONG",
+      providerModel: "claude-sonnet-5",
+    });
+    // Passed through untouched — the use case does not reinterpret a
+    // `STARTED` row as a failure, and nothing here writes back.
+    expect(result.lyricsAttempts[1]).toMatchObject({ result: "STARTED", completedAt: null });
+  });
+
+  it("does not change the lead's own attempt counter, which counts something else entirely", async () => {
+    const lead = createLead();
+    const leadRepository = new InMemoryLeadRepository();
+    leadRepository.seed(lead);
+
+    const gate = new InMemoryLyricsAttemptGate();
+    gate.seed(lead.id, [
+      {
+        attemptNumber: 1,
+        result: "FAILED",
+        errorCode: "CLAUDE_OUTPUT_TOO_LONG",
+        failureReason: null,
+        providerModel: "claude-sonnet-5",
+        createdAt: new Date("2026-09-28T10:00:00.000Z"),
+        completedAt: new Date("2026-09-28T10:00:12.000Z"),
+      },
+      {
+        attemptNumber: 2,
+        result: "SUCCESS",
+        errorCode: null,
+        failureReason: null,
+        providerModel: "claude-sonnet-5",
+        createdAt: new Date("2026-09-28T10:00:13.000Z"),
+        completedAt: new Date("2026-09-28T10:00:25.000Z"),
+      },
+    ]);
+
+    const result = await buildUseCase(gate, leadRepository).execute({
+      leadId: lead.id,
+      viewingAdminId: "admin-1",
+    });
+
+    // Two provider calls, and the parent has spent nothing: the internal
+    // length retry is free. `remainingAttempts` is not derivable from
+    // `lyricsAttempts.length`, in either direction.
+    expect(result.lyricsAttempts).toHaveLength(2);
+    expect(result.lead.remainingAttempts).toBe(5);
   });
 });

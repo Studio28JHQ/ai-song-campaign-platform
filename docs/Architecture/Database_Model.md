@@ -6,7 +6,7 @@ This document describes the relational schema in `prisma/schema.prisma`. It is a
 
 - Primary keys are `UUID` (`@default(uuid())`), matching Supabase/Postgres convention.
 - Every table name is mapped (`@@map`) to a lowercase, snake_case, plural name (e.g. `Lead` → `leads`); model and field names stay camelCase/PascalCase to match the rest of the TypeScript codebase.
-- `createdAt`/`updatedAt` timestamps are present on every entity except append-only logs (`GenerationAttempt`, `AuditLog`, `Lyrics`), which are immutable once written and so only need `createdAt`.
+- `createdAt`/`updatedAt` timestamps are present on every entity except append-only logs (`GenerationAttempt`, `AuditLog`, `Lyrics`), which only need `createdAt`. `AuditLog` and `Lyrics` are immutable once written; a `GenerationAttempt` row is written twice by design — opened before the provider call and closed with its outcome — and records the second write in `completedAt` rather than in an `updatedAt` column (see below).
 
 ## Entities
 
@@ -32,9 +32,16 @@ Every generated lyrics version for a lead (see `docs/Architecture/Domain_Model.m
 
 ### GenerationAttempt
 
-Designed as an audit trail of every interaction with Claude (see `docs/Product/Business_Rules.md#Attempts-Rules`), including attempts that fail before producing lyrics. `attemptNumber` is unique per lead so attempts are strictly ordered and never collide. `lyricsId` is optional and unique — an attempt produces at most one `Lyrics` row (on success), and a `Lyrics` row traces back to exactly one originating attempt. `result` distinguishes `SUCCESS` / `MODERATION_REJECTED` / `FAILED`.
+An audit trail of every interaction with Claude, including the attempts that fail before producing lyrics. `attemptNumber` is unique per lead so attempts are strictly ordered and never collide. `lyricsId` is optional and unique — designed so an attempt could point at the `Lyrics` row it produced — and is currently always `null` (see below). `result` distinguishes `STARTED` / `SUCCESS` / `MODERATION_REJECTED` / `FAILED`.
 
-**Not currently populated.** No application code writes to or reads this table in V1 — the five-attempts rule is enforced entirely through `Lead.remainingAttempts` instead (see `docs/Architecture/Domain_Model.md#GenerationAttempt`). The table remains in the schema for a future audit-trail feature; see `BACKLOG_V3.md`.
+**Populated as of Sprint FINAL-2 — Lyrics Generation Traceability.** One row per _real Claude call_, written by `ClaudeLyricsService` through the `LyricsAttemptRecorder` port and read back by the Admin lead-detail screen through `AdminLyricsAttemptGate`.
+
+- **`attemptNumber` is not the parent's attempt count.** It counts the provider calls actually issued for a lead, over the lead's whole lifetime. The attempts rule (see `docs/Product/Business_Rules.md#Attempts-Rules`) is still enforced exclusively through `Lead.remainingAttempts`, and the two numbers diverge by design: an over-long lyric is retried internally at no cost to the parent, so one functional attempt produces one row normally, two when the retry succeeds, and three at most (one initial call plus the two retries `LYRICS_TOO_LONG_RETRY_LIMIT` allows). Neither number is derivable from the other.
+- **`STARTED` is a pre-call marker**, written before the request so a call that never returns still leaves evidence, and replaced by a terminal value when the call finishes. `completedAt` is set at that point. Nothing rewrites a `STARTED` row afterwards: `result = STARTED` with a null `completedAt` means "opened, never closed", and whether that is a request in flight or one killed mid-call is judged from the row's age by whoever reads it.
+- **`errorCode`** holds a normalised, stable cause (`CLAUDE_OUTPUT_TOO_LONG`, `CLAUDE_INVALID_RESPONSE`, `CLAUDE_RATE_LIMIT`, `CLAUDE_API_ERROR`, `CLAUDE_UNAVAILABLE`, `LYRICS_VALIDATION_ERROR`, `INTERNAL_ERROR`) rather than the raw provider code, so failures stay groupable. It is `null` for anything that is not a `FAILED` attempt — a moderation rejection is an outcome, not an error. **`failureReason`** holds only a message this codebase wrote itself; provider error _contexts_ are deliberately never stored, since they can contain the raw response and therefore the parent's own message. **`providerModel`** names the model that produced the row.
+- **`lyricsId` stays `null`.** Linking an attempt to the `Lyrics` row it produced would require the use case to write back after persistence; the attempt's own outcome already answers every question this table exists to answer.
+- **Rows exist only for generations made after the tracing was added.** Nothing was backfilled: a lead with no rows genuinely has no recorded calls, which is a more useful fact than invented history.
+- **Writing a row can never affect a generation.** Every recorder call is best-effort — a failure is logged and nothing else (see `docs/Development/Error_Handling.md`).
 
 ### Song
 
@@ -60,7 +67,7 @@ Lead     1 ──< GenerationAttempt
 Lead     1 ──1 Consent         (at most one, and only once registered)
 Mood     1 ──< Lyrics
 Mood     1 ──< Song
-Lyrics   1 ──1 GenerationAttempt (the attempt that produced it, if any)
+Lyrics   1 ──1 GenerationAttempt (designed link, currently never set)
 Lyrics   1 ──< Song             (a lyrics version may back a song)
 AdminUser 1 ──< AuditLog
 ```

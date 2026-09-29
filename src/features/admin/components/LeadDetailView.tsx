@@ -1,9 +1,10 @@
 "use client";
 
-import { CheckCircle2, Clock3, FileText, Mic2, Music, User } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, FileText, Mic2, Music, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { LeadDetailLyricsAttempt } from "../services/getLeadDetail";
 import { useLeadDetail } from "../hooks/useLeadDetail";
 import { EmptyState } from "./EmptyState";
 import { ErrorMessage } from "./ErrorMessage";
@@ -26,6 +27,19 @@ function formatDuration(seconds: number | null): string | null {
 function formatTimestamp(value: string | null): string {
   return value ? new Date(value).toLocaleString("es-MX") : "—";
 }
+
+/**
+ * Sprint FINAL-2 — Lyrics Generation Traceability. What each recorded
+ * provider call resulted in, in the campaign team's own words. `STARTED`
+ * is shown as "sin respuesta" rather than as a failure: the row only
+ * proves the call was opened, and nothing rewrites it afterwards.
+ */
+const ATTEMPT_RESULT_LABELS: Record<LeadDetailLyricsAttempt["result"], string> = {
+  STARTED: "Sin respuesta",
+  SUCCESS: "Letra generada",
+  MODERATION_REJECTED: "Rechazada por moderación",
+  FAILED: "Fallida",
+};
 
 /** Sprint FINAL-3 — Dashboard Stabilization. The card shell every Lead Detail section shares — consistent spacing, radius, and shadow. */
 function DetailCard({ children }: { children: ReactNode }) {
@@ -78,7 +92,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
     return <ErrorMessage message={errorMessage ?? "Algo salió mal. Inténtalo de nuevo."} />;
   }
 
-  const { lead, lyricsHistory, approvedLyrics, song, executionHistory } = detail;
+  const { lead, lyricsHistory, approvedLyrics, song, executionHistory, lyricsAttempts } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,6 +150,54 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
                   </span>
                 </div>
                 <pre className="whitespace-pre-wrap text-foreground">{version.content}</pre>
+              </li>
+            ))}
+          </ul>
+        )}
+      </DetailCard>
+
+      <DetailCard>
+        <SectionHeader icon={Activity} title="Intentos de generación" />
+        {lyricsAttempts.length === 0 ? (
+          <EmptyState
+            icon={Activity}
+            title="Sin intentos registrados"
+            description="No se llamó al generador, o la generación ocurrió antes de que se registraran los intentos."
+          />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {lyricsAttempts.map((attempt) => (
+              <li
+                key={attempt.attemptNumber}
+                className="rounded-lg border border-border p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-foreground">
+                    Llamada {attempt.attemptNumber} · {ATTEMPT_RESULT_LABELS[attempt.result]}
+                  </span>
+                  {attempt.errorCode ? (
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      {attempt.errorCode}
+                    </code>
+                  ) : null}
+                </div>
+                <dl className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-muted-foreground sm:grid-cols-3">
+                  <div>
+                    <dt className="inline">Inicio: </dt>
+                    <dd className="inline">{formatTimestamp(attempt.createdAt)}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline">Fin: </dt>
+                    <dd className="inline">{formatTimestamp(attempt.completedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline">Modelo: </dt>
+                    <dd className="inline">{attempt.providerModel ?? "—"}</dd>
+                  </div>
+                </dl>
+                {attempt.failureReason ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{attempt.failureReason}</p>
+                ) : null}
               </li>
             ))}
           </ul>

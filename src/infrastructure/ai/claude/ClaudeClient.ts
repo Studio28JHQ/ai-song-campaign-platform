@@ -6,7 +6,10 @@ import type { ClaudeMessageResponse } from "./types";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_API_VERSION = "2023-06-01";
-const CLAUDE_MODEL = "claude-sonnet-5";
+// Exported so an attempt record can name the model that produced it
+// (`GenerationAttempt.providerModel`) — historical rows stay readable
+// after this pin changes.
+export const CLAUDE_MODEL = "claude-sonnet-5";
 // Sprint — Claude max_tokens sizing. Live-measured against the current
 // production prompt: natural (uncapped) completions ranged 864-3442
 // output tokens (thinking-token consumption alone varied 0-2077 on

@@ -37,7 +37,16 @@ enum LeadStatus {
   @@map("lead_status")
 }
 
+// Sprint FINAL-2 — Lyrics Generation Traceability. `STARTED` is written
+// *before* the provider call and replaced by a terminal value when the
+// call returns, so a crash, a timeout or a serverless invocation killed
+// mid-flight leaves evidence instead of nothing. A `STARTED` row is not
+// a failure: only the combination of `result = STARTED`, a null
+// `completedAt` and the row's age tells a recent in-flight attempt apart
+// from an interrupted one, and that judgement is made by whoever reads
+// the data — never written back here automatically.
 enum GenerationAttemptResult {
+  STARTED
   SUCCESS
   MODERATION_REJECTED
   FAILED
@@ -244,6 +253,31 @@ model Lyrics {
   @@map("lyrics")
 }
 
+// Sprint FINAL-2 — Lyrics Generation Traceability. One row per *real
+// Claude call*, which is deliberately not the same thing as a lead's
+// user-facing attempt:
+//
+// - `Lead.remainingAttempts` counts the functional attempts the parent is
+//   entitled to (`MAX_LYRIC_ATTEMPTS`, 3 in this campaign — the column's
+//   own `@default(5)` is a legacy default the application never uses,
+//   since `CreateLeadUseCase` always sets the budget explicitly),
+//   consumed by the business rules in `GenerateLyricsForLeadUseCase`.
+// - `attemptNumber` here counts provider calls actually issued for the
+//   lead, ever, in order. One functional attempt can spend more than one
+//   of these: an over-long lyric is retried internally by
+//   `ClaudeLyricsService` without costing the parent anything. Measured
+//   against the current code: one call normally, two when a retry
+//   succeeds, three at most (one initial call plus
+//   `LYRICS_TOO_LONG_RETRY_LIMIT` = 2 retries) before it gives up.
+//
+// The two numbers therefore diverge by design, and neither can be
+// derived from the other. `lyricsId` stays null: linking an attempt to
+// the Lyrics row it produced would require the use case to write back
+// after persistence, and the attempt's own outcome already answers every
+// question this table exists to answer.
+//
+// `providerModel` records which model produced the row, so historical
+// attempts stay interpretable after the pinned model changes.
 model GenerationAttempt {
   id            String                  @id @default(uuid()) @db.Uuid
   leadId        String                  @db.Uuid
@@ -251,7 +285,10 @@ model GenerationAttempt {
   attemptNumber Int
   result        GenerationAttemptResult
   failureReason String?
+  errorCode     String?
+  providerModel String?
   createdAt     DateTime                @default(now())
+  completedAt   DateTime?
 
   lead   Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   lyrics Lyrics? @relation(fields: [lyricsId], references: [id], onDelete: SetNull)

@@ -1,7 +1,15 @@
+import type {
+  LyricsAttemptFinish,
+  LyricsAttemptHandle,
+  LyricsAttemptRecorder,
+} from "@/application/lyrics/contracts/LyricsAttemptRecorder";
+import { NO_OP_LYRICS_ATTEMPT_RECORDER } from "@/application/lyrics/contracts/LyricsAttemptRecorder";
+import type { LyricsGeneratorInput } from "@/application/lyrics/contracts/LyricsGenerator";
 import { ExternalApiError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
-import { ClaudeClient } from "./ClaudeClient";
-import { PromptBuilder, type PromptBuilderInput } from "./PromptBuilder";
+import { CLAUDE_MODEL, ClaudeClient } from "./ClaudeClient";
+import { toLyricsAttemptErrorCode, toLyricsAttemptFailureReason } from "./lyricsAttemptErrorCode";
+import { PromptBuilder } from "./PromptBuilder";
 import { ResponseParser } from "./ResponseParser";
 import type { ClaudeLyricsResult } from "./types";
 
@@ -41,22 +49,55 @@ const LYRICS_TOO_LONG_RETRY_LIMIT = 2;
  * generation produce a genuinely new complete lyric, which the same
  * prompt already instructs to normally land around 300–330 characters.
  *
- * This class is infrastructure-only. It is not wired into any Application
- * use case yet — that wiring, along with a matching application-layer
- * port/contract, is a future task.
+ * ## Traceability (Sprint FINAL-2)
+ *
+ * Every one of those calls — including the internal retries, which no
+ * other layer can see — is recorded through `LyricsAttemptRecorder`:
+ * opened as `STARTED` before the call, closed with `SUCCESS`,
+ * `MODERATION_REJECTED` or `FAILED` (plus a normalised `errorCode`) once
+ * the outcome is known. That is why the recorder is injected *here* and
+ * not into the use case: the use case sees one result or one thrown
+ * error, so recording there would miss exactly the retried failures this
+ * tracing exists to explain.
+ *
+ * Recording is strictly observational and strictly best-effort. Every
+ * recorder call is wrapped: a recorder that throws, or a database that is
+ * unreachable, produces a log line and nothing else. A successful
+ * generation must never become a user-facing error because its audit row
+ * could not be written, and no recording failure changes what is
+ * returned, retried or thrown.
  */
 export class ClaudeLyricsService {
-  constructor(private readonly client: ClaudeClient = new ClaudeClient()) {}
+  constructor(
+    private readonly client: ClaudeClient = new ClaudeClient(),
+    private readonly attemptRecorder: LyricsAttemptRecorder = NO_OP_LYRICS_ATTEMPT_RECORDER,
+  ) {}
 
-  async generateAndModerate(input: PromptBuilderInput): Promise<ClaudeLyricsResult> {
+  async generateAndModerate(input: LyricsGeneratorInput): Promise<ClaudeLyricsResult> {
     const prompt = PromptBuilder.build(input);
 
+    // `attempt` counts real Claude calls within this invocation, and is what
+    // the recorder's per-lead `attemptNumber` continues across invocations.
+    // It is unrelated to `Lead.remainingAttempts`, the parent's functional
+    // attempts, which this loop never touches: an over-long lyric retried
+    // here costs the parent nothing (see `LyricsAttemptRecorder`).
     for (let attempt = 1; ; attempt += 1) {
-      const response = await this.client.sendMessage(prompt);
+      const handle = await this.openAttempt(input.leadId);
 
+      let response;
       try {
-        return ResponseParser.parse(response);
+        response = await this.client.sendMessage(prompt);
       } catch (error) {
+        await this.closeAttempt(handle, ClaudeLyricsService.failureOf(error));
+        throw error;
+      }
+
+      let result: ClaudeLyricsResult;
+      try {
+        result = ResponseParser.parse(response);
+      } catch (error) {
+        await this.closeAttempt(handle, ClaudeLyricsService.failureOf(error));
+
         const isLyricsTooLong =
           error instanceof ExternalApiError && error.code === "claude.lyrics_too_long";
 
@@ -69,7 +110,65 @@ export class ClaudeLyricsService {
           retryLimit: LYRICS_TOO_LONG_RETRY_LIMIT,
           ...(error.context ?? {}),
         });
+
+        continue;
       }
+
+      // A moderation rejection is a completed call with a legitimate answer,
+      // not a failure: it carries no `errorCode`.
+      await this.closeAttempt(handle, {
+        result: result.approved ? "SUCCESS" : "MODERATION_REJECTED",
+        errorCode: null,
+        failureReason: result.approved ? null : (result.reason?.slice(0, 300) ?? null),
+      });
+
+      return result;
+    }
+  }
+
+  private static failureOf(error: unknown): LyricsAttemptFinish {
+    return {
+      result: "FAILED",
+      errorCode: toLyricsAttemptErrorCode(error),
+      failureReason: toLyricsAttemptFailureReason(error),
+    };
+  }
+
+  /**
+   * Opens the attempt row. Returns `null` when it could not be written —
+   * the generation then proceeds completely unchanged, simply untraced.
+   */
+  private async openAttempt(leadId: string): Promise<LyricsAttemptHandle | null> {
+    try {
+      return await this.attemptRecorder.attemptStarted({
+        leadId,
+        providerModel: CLAUDE_MODEL,
+      });
+    } catch (error) {
+      logger.warn("Could not record the start of a lyrics generation attempt", {
+        leadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async closeAttempt(
+    handle: LyricsAttemptHandle | null,
+    outcome: LyricsAttemptFinish,
+  ): Promise<void> {
+    if (!handle) return;
+
+    try {
+      await this.attemptRecorder.attemptFinished(handle, outcome);
+    } catch (error) {
+      // The row stays `STARTED` with a null `completedAt`. That is a
+      // recognised state, not corruption — see `GenerationAttemptResult`.
+      logger.warn("Could not record the outcome of a lyrics generation attempt", {
+        result: outcome.result,
+        errorCode: outcome.errorCode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

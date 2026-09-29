@@ -8,6 +8,7 @@ const mockLyricsFindApprovedByLead = vi.fn();
 const mockSongFindByLead = vi.fn();
 const mockAuditCreate = vi.fn();
 const mockAuditFindByEntity = vi.fn();
+const mockAttemptsFindByLead = vi.fn();
 
 vi.mock("@/infrastructure/auth/getAdminSession", () => ({
   getAdminSession: mockGetAdminSession,
@@ -40,6 +41,13 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
   }),
 }));
 
+// Sprint FINAL-2 — Lyrics Generation Traceability.
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAdminLyricsAttemptGate", () => ({
+  PrismaAdminLyricsAttemptGate: vi.fn().mockImplementation(function PrismaAdminLyricsAttemptGate() {
+    return { findByLead: mockAttemptsFindByLead };
+  }),
+}));
+
 const { GET } = await import("../../../app/api/admin/leads/[leadId]/route");
 
 function context(leadId: string): { params: Promise<{ leadId: string }> } {
@@ -62,6 +70,7 @@ describe("GET /api/admin/leads/[leadId]", () => {
     mockSongFindByLead.mockResolvedValue(null);
     mockAuditCreate.mockImplementation(async (entry) => entry);
     mockAuditFindByEntity.mockResolvedValue([]);
+    mockAttemptsFindByLead.mockResolvedValue([]);
   });
 
   it("returns the composed lead detail for an authenticated admin", async () => {
@@ -75,6 +84,8 @@ describe("GET /api/admin/leads/[leadId]", () => {
 
     expect(response.status).toBe(200);
     expect(body.lead.id).toBe("lead-1");
+    expect(body.lyricsAttempts).toEqual([]);
+    expect(mockAttemptsFindByLead).toHaveBeenCalledWith("lead-1");
     expect(mockAuditCreate).toHaveBeenCalledTimes(1);
   });
 

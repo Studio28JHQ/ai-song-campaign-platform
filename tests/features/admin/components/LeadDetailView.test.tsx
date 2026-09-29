@@ -8,7 +8,11 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 }
 
 function buildDetailBody(
-  overrides: { song?: Record<string, unknown> | null; lead?: Record<string, unknown> } = {},
+  overrides: {
+    song?: Record<string, unknown> | null;
+    lead?: Record<string, unknown>;
+    lyricsAttempts?: Array<Record<string, unknown>>;
+  } = {},
 ) {
   return {
     lead: {
@@ -75,6 +79,18 @@ function buildDetailBody(
         label: "Reintento ejecutado",
         timestamp: "2026-01-01T02:00:00.000Z",
         actor: "admin-1",
+      },
+    ],
+    // Sprint FINAL-2 — Lyrics Generation Traceability.
+    lyricsAttempts: overrides.lyricsAttempts ?? [
+      {
+        attemptNumber: 1,
+        result: "SUCCESS",
+        errorCode: null,
+        failureReason: null,
+        providerModel: "claude-sonnet-5",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        completedAt: "2026-01-01T00:00:12.000Z",
       },
     ],
   };
@@ -220,5 +236,76 @@ describe("LeadDetailView", () => {
     await screen.findByText("jane@example.com");
     expect(screen.queryByRole("button", { name: "Reintentar generación" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reenviar correo" })).not.toBeInTheDocument();
+  });
+  /**
+   * Sprint FINAL-2 — Lyrics Generation Traceability. What the campaign
+   * team needs from this section: why a family has no lyrics.
+   */
+  it("lists each recorded generation attempt with its outcome, code and model", async () => {
+    const detailBody = buildDetailBody({
+      lyricsAttempts: [
+        {
+          attemptNumber: 1,
+          result: "FAILED",
+          errorCode: "CLAUDE_OUTPUT_TOO_LONG",
+          failureReason: "Claude's lyrics were 454 characters, over the 360-character maximum.",
+          providerModel: "claude-sonnet-5",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T00:00:12.000Z",
+        },
+        {
+          attemptNumber: 2,
+          result: "SUCCESS",
+          errorCode: null,
+          failureReason: null,
+          providerModel: "claude-sonnet-5",
+          createdAt: "2026-01-01T00:00:13.000Z",
+          completedAt: "2026-01-01T00:00:25.000Z",
+        },
+      ],
+    });
+    global.fetch = vi.fn().mockResolvedValue(jsonResponse(detailBody)) as unknown as typeof fetch;
+
+    render(<LeadDetailView leadId="lead-1" />);
+
+    await screen.findByText("jane@example.com");
+    expect(screen.getByText("Intentos de generación")).toBeInTheDocument();
+    expect(screen.getByText(/Llamada 1 · Fallida/)).toBeInTheDocument();
+    expect(screen.getByText("CLAUDE_OUTPUT_TOO_LONG")).toBeInTheDocument();
+    expect(screen.getByText(/Llamada 2 · Letra generada/)).toBeInTheDocument();
+    expect(screen.getAllByText("claude-sonnet-5")).toHaveLength(2);
+  });
+
+  it("shows an attempt that never came back as pending, not as a failure", async () => {
+    const detailBody = buildDetailBody({
+      lyricsAttempts: [
+        {
+          attemptNumber: 1,
+          result: "STARTED",
+          errorCode: null,
+          failureReason: null,
+          providerModel: "claude-sonnet-5",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          completedAt: null,
+        },
+      ],
+    });
+    global.fetch = vi.fn().mockResolvedValue(jsonResponse(detailBody)) as unknown as typeof fetch;
+
+    render(<LeadDetailView leadId="lead-1" />);
+
+    await screen.findByText("jane@example.com");
+    expect(screen.getByText(/Llamada 1 · Sin respuesta/)).toBeInTheDocument();
+    expect(screen.queryByText(/Llamada 1 · Fallida/)).not.toBeInTheDocument();
+  });
+
+  it("explains an empty attempt list instead of leaving the section blank", async () => {
+    const detailBody = buildDetailBody({ lyricsAttempts: [] });
+    global.fetch = vi.fn().mockResolvedValue(jsonResponse(detailBody)) as unknown as typeof fetch;
+
+    render(<LeadDetailView leadId="lead-1" />);
+
+    await screen.findByText("jane@example.com");
+    expect(screen.getByText("Sin intentos registrados")).toBeInTheDocument();
   });
 });

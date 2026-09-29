@@ -6,6 +6,7 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus, type SongSnapshot } from "@/domain/song/types";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
+import type { AdminLyricsAttemptGate } from "../contracts/AdminLyricsAttemptGate";
 import type { ExecutionHistoryItem } from "../dto/ExecutionHistoryItem";
 import type { GetLeadDetailRequest } from "../dto/GetLeadDetailRequest";
 import type { GetLeadDetailResponse, LeadDetailSongView } from "../dto/GetLeadDetailResponse";
@@ -17,6 +18,11 @@ import type { GetLeadDetailResponse, LeadDetailSongView } from "../dto/GetLeadDe
  * history. No business rule is duplicated here; this is a pure
  * read/aggregation, and the only mutation is the audit trail entry
  * created for the view itself.
+ *
+ * Sprint FINAL-2 — Lyrics Generation Traceability: also the lead's
+ * recorded provider calls (`lyricsAttempts`), which is the one part of
+ * this screen that can explain a lead with no lyrics at all — the
+ * Lyrics/Song rows can only describe generations that succeeded.
  */
 export class GetLeadDetailUseCase {
   constructor(
@@ -25,6 +31,7 @@ export class GetLeadDetailUseCase {
     private readonly songRepository: SongRepository,
     private readonly auditLogRepository: AuditLogRepository,
     private readonly audioUrlResolver: AudioUrlResolver,
+    private readonly lyricsAttemptGate: AdminLyricsAttemptGate,
   ) {}
 
   async execute(request: GetLeadDetailRequest): Promise<GetLeadDetailResponse> {
@@ -37,10 +44,11 @@ export class GetLeadDetailUseCase {
       });
     }
 
-    const [lyricsHistory, approvedLyrics, song] = await Promise.all([
+    const [lyricsHistory, approvedLyrics, song, lyricsAttempts] = await Promise.all([
       this.lyricsRepository.findAllByLead(lead.id),
       this.lyricsRepository.findApprovedByLead(lead.id),
       this.songRepository.findByLead(lead.id),
+      this.lyricsAttemptGate.findByLead(lead.id),
     ]);
 
     await this.auditLogRepository.create(
@@ -67,6 +75,7 @@ export class GetLeadDetailUseCase {
       approvedLyrics: approvedLyrics?.toSnapshot() ?? null,
       song: songSnapshot ? await this.toSongView(songSnapshot) : null,
       executionHistory,
+      lyricsAttempts,
     };
   }
 

@@ -61,12 +61,30 @@ export interface LeadDetailExecutionHistoryItem {
   detail?: string | null;
 }
 
+/**
+ * Sprint FINAL-2 — Lyrics Generation Traceability. One recorded Claude
+ * call. `attemptNumber` counts provider calls for the lead, not the
+ * parent's functional attempts (`lead.remainingAttempts`): an over-long
+ * lyric is retried internally, so one functional attempt can appear here
+ * as two rows. `STARTED` means the call was opened and never closed.
+ */
+export interface LeadDetailLyricsAttempt {
+  attemptNumber: number;
+  result: "STARTED" | "SUCCESS" | "MODERATION_REJECTED" | "FAILED";
+  errorCode: string | null;
+  failureReason: string | null;
+  providerModel: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 export interface LeadDetailResult {
   lead: LeadDetailLead;
   lyricsHistory: LeadDetailLyrics[];
   approvedLyrics: LeadDetailLyrics | null;
   song: LeadDetailSong | null;
   executionHistory: LeadDetailExecutionHistoryItem[];
+  lyricsAttempts: LeadDetailLyricsAttempt[];
 }
 
 export class GetLeadDetailError extends Error {

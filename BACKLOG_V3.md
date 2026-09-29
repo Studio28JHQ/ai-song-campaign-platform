@@ -28,7 +28,12 @@ Add deeper logging, tracing, and monitoring beyond Version 1 baseline.
 
 ## Generation Attempt Audit Trail
 
-The `GenerationAttempt` table is defined in the schema but not populated — the five-attempts business rule is enforced via `Lead.remainingAttempts` alone, which is sufficient for V1. Wiring up a real per-attempt audit trail would let the Admin execution history show individual moderation-rejected attempts that never produced a `Lyrics` row.
+**Implemented** in Sprint FINAL-2 — Lyrics Generation Traceability: `GenerationAttempt` now holds one row per real Claude call, surfaced on the Admin lead-detail screen (see `docs/Architecture/Database_Model.md#GenerationAttempt`). The attempts business rule is still enforced via `Lead.remainingAttempts` alone; the table is observability, not a rule.
+
+Two deliberately unimplemented remainders, neither of which is needed to answer "what happened to this family":
+
+- **Attempts as timeline events.** The recorded calls are shown as their own section, not merged into the newest-first execution history. Merging them would mean deciding how a failed provider call reads next to "Letra generada" for a non-technical operator — a presentation question, not a data one.
+- **Linking an attempt to the `Lyrics` row it produced** (`generation_attempts.lyricsId`, present and always `null`). It would require the use case to write back to the attempt after persistence, coupling the generation flow to the audit trail for information the attempt's own outcome already conveys.
 
 ## Expand End-to-End Test Coverage
 

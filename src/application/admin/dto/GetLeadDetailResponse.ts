@@ -1,6 +1,7 @@
 import type { LeadSnapshot } from "@/domain/lead/types";
 import type { LyricsSnapshot } from "@/domain/lyrics/types";
 import type { SongSnapshot } from "@/domain/song/types";
+import type { AdminLyricsAttemptView } from "../contracts/AdminLyricsAttemptGate";
 import type { ExecutionHistoryItem } from "./ExecutionHistoryItem";
 
 /**
@@ -21,4 +22,12 @@ export interface GetLeadDetailResponse {
   approvedLyrics: LyricsSnapshot | null;
   song: LeadDetailSongView | null;
   executionHistory: ExecutionHistoryItem[];
+  /**
+   * Sprint FINAL-2 — Lyrics Generation Traceability. Every recorded
+   * provider call for this lead, oldest first. Empty for every lead whose
+   * generations predate the tracing — deliberately not backfilled, since
+   * those calls genuinely were never recorded and inventing rows would
+   * make the table a worse source of truth than an honest gap.
+   */
+  lyricsAttempts: AdminLyricsAttemptView[];
 }

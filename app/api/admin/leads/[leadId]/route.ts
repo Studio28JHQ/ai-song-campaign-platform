@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetailUseCase";
 import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
+import { PrismaAdminLyricsAttemptGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminLyricsAttemptGate";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
@@ -23,6 +24,7 @@ const getLeadDetailUseCase = new GetLeadDetailUseCase(
   new PrismaSongRepository(),
   new PrismaAuditLogRepository(),
   new R2AudioUrlResolver(),
+  new PrismaAdminLyricsAttemptGate(),
 );
 
 interface RouteContext {

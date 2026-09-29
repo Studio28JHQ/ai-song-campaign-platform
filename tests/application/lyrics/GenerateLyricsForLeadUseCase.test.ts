@@ -555,4 +555,56 @@ describe("GenerateLyricsForLeadUseCase — Sprint v1.2 (AI Safety Hardening): re
     expect(await lyricsRepository.findApprovedByLead(lead.id)).toBeNull();
     expect(await lyricsRepository.findAllByLead(lead.id)).toHaveLength(0);
   });
+  /**
+   * Sprint FINAL-2 — Lyrics Generation Traceability. The lead id travels
+   * with the generation request purely so the provider can attribute the
+   * calls it makes (including the internal retries no other layer can see)
+   * to this lead.
+   */
+  it("tells the generator whose generation this is, without touching the prompt inputs", async () => {
+    const lead = createLead();
+    leadRepository.seed(lead);
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await useCase.execute({ leadId: lead.id, ...baseRequest });
+
+    expect(generator.generateAndModerate).toHaveBeenCalledWith({
+      leadId: lead.id,
+      babyName: "Baby Doe",
+      parentMessage: "A gentle song about bedtime.",
+      mood: { name: "Joyful", description: "upbeat and cheerful" },
+      language: "es",
+    });
+  });
+
+  it("never reaches the generator when the parent's message fails validation, so no attempt exists to record", async () => {
+    // Deliberate: the rejection happens before any provider call, so there
+    // is no attempt to record. A lead in this state genuinely never reached
+    // Claude, and writing a `GenerationAttempt` row for it would claim a
+    // call that never happened.
+    const lead = createLead();
+    leadRepository.seed(lead);
+    const generator = fakeGenerator({
+      approved: true,
+      reason: null,
+      lyrics: "Title\n...",
+      musicMood: "Warm, joyful and playful.",
+      musicDirection: "Warm acoustic arrangement with gentle piano and ukulele.",
+    });
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    await expect(
+      useCase.execute({ leadId: lead.id, ...baseRequest, parentMessage: "   " }),
+    ).rejects.toThrow();
+
+    expect(generator.generateAndModerate).not.toHaveBeenCalled();
+    expect(lead.remainingAttempts).toBe(5);
+  });
 });

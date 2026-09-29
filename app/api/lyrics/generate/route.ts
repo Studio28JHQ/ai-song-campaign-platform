@@ -5,11 +5,13 @@ import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { appConfig } from "@/config/app";
 import { VOICE_OPTIONS } from "@/domain/lyrics/types";
+import { ClaudeClient } from "@/infrastructure/ai/claude/ClaudeClient";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
+import { PrismaLyricsAttemptRecorder } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsAttemptRecorder";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
@@ -55,7 +57,13 @@ const lyricsRepository = new PrismaLyricsRepository();
 const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
   new PrismaLeadRepository(),
   lyricsRepository,
-  new ClaudeLyricsService(),
+  // Sprint FINAL-2 — Lyrics Generation Traceability. The recorder is
+  // injected into the provider, not the use case, because the calls worth
+  // recording include the retries that happen inside the provider and are
+  // invisible from here. It is purely observational: see
+  // `ClaudeLyricsService` for why a recording failure can never affect this
+  // endpoint's response.
+  new ClaudeLyricsService(new ClaudeClient(), new PrismaLyricsAttemptRecorder()),
 );
 const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
 const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());

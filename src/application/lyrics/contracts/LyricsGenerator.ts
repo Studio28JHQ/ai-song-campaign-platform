@@ -7,6 +7,14 @@
  * share this exact shape.
  */
 export interface LyricsGeneratorInput {
+  /**
+   * Whose generation this is. Not used to build the prompt — it exists so
+   * the provider can attribute the calls it makes (including the internal
+   * retries only it can see) to a lead when recording them through
+   * `LyricsAttemptRecorder`. Sprint FINAL-2 — Lyrics Generation
+   * Traceability.
+   */
+  leadId: string;
   babyName: string;
   parentMessage: string;
   mood: { name: string; description?: string };

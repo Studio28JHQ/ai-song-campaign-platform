@@ -76,6 +76,9 @@ export class GenerateLyricsForLeadUseCase {
     }
 
     const result = await this.lyricsGenerator.generateAndModerate({
+      // Carried so the provider can attribute every call it makes — the
+      // internal retries included — to this lead; it never reaches the prompt.
+      leadId: lead.id,
       babyName: lead.babyName,
       parentMessage,
       mood: { name: request.moodName, description: request.moodDescription },
