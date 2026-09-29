@@ -62,6 +62,14 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     logger.error("Unexpected error while listing songs", {
       error: error instanceof Error ? error.message : String(error),
+      // The message above is ours and says nothing about what actually
+      // failed. `DatabaseError` carries the driver's own error as
+      // `cause`, and nothing was reading it — which is how an exhausted
+      // connection pool spent an afternoon looking like a broken query.
+      cause:
+        error instanceof Error && error.cause instanceof Error
+          ? error.cause.message.slice(0, 300)
+          : undefined,
     });
 
     return errorResponse(500, "internal_error", "Algo salió mal. Inténtalo de nuevo.");

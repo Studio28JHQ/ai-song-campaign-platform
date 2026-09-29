@@ -25,6 +25,14 @@ export async function GET(): Promise<NextResponse> {
   } catch (error) {
     logger.error("Unexpected error while loading public GTM settings", {
       error: error instanceof Error ? error.message : String(error),
+      // The message above is ours and says nothing about what actually
+      // failed. `DatabaseError` carries the driver's own error as
+      // `cause`, and nothing was reading it — which is how an exhausted
+      // connection pool spent an afternoon looking like a broken query.
+      cause:
+        error instanceof Error && error.cause instanceof Error
+          ? error.cause.message.slice(0, 300)
+          : undefined,
     });
 
     // Best-effort: a failure here must never break the Landing — the
