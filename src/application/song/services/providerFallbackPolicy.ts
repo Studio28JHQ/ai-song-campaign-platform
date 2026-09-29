@@ -35,6 +35,23 @@ import { AppError } from "@/shared/errors";
 const FALLBACK_ELIGIBLE_ERROR_CODES: ReadonlySet<string> = new Set([
   "mureka.quota_exceeded",
   "lyria.quota_exceeded",
+  // Google's safety classifier refused the lyric before generating anything
+  // (see `LyriaClient.isContentBlock`). It qualifies on exactly the same
+  // grounds as an exhausted quota: the provider said no up front, produced no
+  // audio and charged nothing, so a second attempt elsewhere cannot pay twice.
+  //
+  // It is also the one provider failure that is *specific to the provider
+  // rather than to the song*: the refusal is deterministic for that lyric on
+  // Lyria — the same text was refused on the original attempt, on the admin
+  // retry, and again when replayed against the API — while Mureka, which runs
+  // no such filter, has generated hundreds of songs with the same style,
+  // brand mention and baby wording. Without this entry the family simply
+  // never gets a song that the other provider would produce happily.
+  //
+  // Deliberately narrow: a *generic* `lyria.invalid_request` stays out, since
+  // that means our own payload is malformed and a second provider would only
+  // hide the bug.
+  "lyria.content_blocked",
 ]);
 
 /** The shared-error code of `error`, when it carries one. */

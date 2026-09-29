@@ -122,6 +122,30 @@ export class LyriaClient {
     }
 
     if (status === 400) {
+      // Google returns 400 for two very different things, and collapsing them
+      // loses the only distinction that matters operationally.
+      //
+      // A *content block* means Google's safety classifier refused the prompt
+      // before generating anything ("Input blocked … the prompt contains
+      // sensitive words"). It is a property of the approved lyric, not of our
+      // payload: verified against the live API, one real song's lyric was
+      // refused on every attempt while three others from the same hour, with
+      // the same style, the same brand mention and the same kind of baby
+      // wording, were accepted — and replacing a single line of the refused
+      // one ("Un llanto pequeño" → "Una risa pequeña") made it pass. Nothing
+      // is generated and nothing is charged, so this is the one 400 where
+      // handing the song to the other provider is both safe and correct (see
+      // `providerFallbackPolicy`).
+      //
+      // Any other 400 means *our* request is malformed, which a second
+      // provider would not fix and which must stay loud.
+      if (LyriaClient.isContentBlock(message)) {
+        return new ExternalApiError(
+          "Lyria refused the lyrics: blocked by Google's content policy before generating.",
+          { code: "lyria.content_blocked", context },
+        );
+      }
+
       return new ExternalApiError("Lyria rejected the request: invalid request.", {
         code: "lyria.invalid_request",
         context,
@@ -139,6 +163,16 @@ export class LyriaClient {
       code: "lyria.api_error",
       context,
     });
+  }
+
+  /**
+   * Whether a 400 is Google's safety classifier refusing the prompt rather
+   * than a malformed request. Matched on the phrases Google's own message
+   * uses; only the classification is kept — the message itself is never
+   * stored or logged, since it echoes back part of the prompt.
+   */
+  private static isContentBlock(message: string): boolean {
+    return /input blocked|sensitive words|prohibited use policy/i.test(message);
   }
 
   private static extractStatus(error: unknown): number | undefined {

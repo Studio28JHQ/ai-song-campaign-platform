@@ -591,6 +591,48 @@ describe("GenerationDispatcher", () => {
       expect(persisted?.providerModel).toBe("lyria-3.5");
     });
 
+    it("falls back from Lyria to Mureka when Google's content policy refuses the lyric", async () => {
+      // Deterministic and pre-generation: Google refused the prompt, produced
+      // no audio and charged nothing, so the other provider can safely take
+      // over. Mureka runs no such filter.
+      const song = seedQueuedSong();
+      const lyria = fakeSongGenerator(
+        new ExternalApiError("blocked", { code: "lyria.content_blocked" }),
+        { name: "lyria", model: "lyria-3.5" },
+      );
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+      });
+      await dispatcher.execute();
+
+      expect(lyria.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(mureka.submitGeneration).toHaveBeenCalledTimes(1);
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("mureka");
+      expect(persisted?.providerModel).toBe("mureka-9");
+    });
+
+    it("does not fall back on a generic Lyria invalid request — that is our own payload bug", async () => {
+      seedQueuedSong();
+      const lyria = fakeSongGenerator(
+        new ExternalApiError("bad payload", { code: "lyria.invalid_request" }),
+        { name: "lyria", model: "lyria-3.5" },
+      );
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(mureka.submitGeneration).not.toHaveBeenCalled();
+    });
+
     it("falls back from Lyria to Mureka on an exhausted quota — the policy is symmetric", async () => {
       const song = seedQueuedSong();
       const lyria = fakeSongGenerator(lyriaQuotaExceeded(), {

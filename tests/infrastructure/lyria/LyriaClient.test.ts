@@ -78,6 +78,50 @@ describe("LyriaClient.generate", () => {
     expect(mockInteractionsCreate).toHaveBeenCalledTimes(2);
   });
 
+  it("classifies Google's content-policy refusal apart from a malformed request", async () => {
+    // Google's real wording, captured from the live API when it refused a
+    // production lyric.
+    mockInteractionsCreate.mockRejectedValue(
+      Object.assign(
+        new Error(
+          "400 Input blocked: The prompt could not be submitted. The prompt contains sensitive words that violate Google's Generative AI Prohibited Use policy.",
+        ),
+        { status: 400 },
+      ),
+    );
+
+    await expect(new LyriaClient().generate("prompt")).rejects.toMatchObject({
+      code: "lyria.content_blocked",
+    });
+  });
+
+  it("keeps a plain malformed 400 as an invalid request, never a content block", async () => {
+    mockInteractionsCreate.mockRejectedValue(
+      Object.assign(new Error("400 Invalid value at 'input'"), { status: 400 }),
+    );
+
+    await expect(new LyriaClient().generate("prompt")).rejects.toMatchObject({
+      code: "lyria.invalid_request",
+    });
+  });
+
+  it("never echoes Google's refusal message, which quotes back part of the prompt", async () => {
+    mockInteractionsCreate.mockRejectedValue(
+      Object.assign(new Error("400 Input blocked: sensitive words"), { status: 400 }),
+    );
+
+    let thrown: unknown;
+    try {
+      await new LyriaClient().generate("prompt");
+    } catch (error) {
+      thrown = error;
+    }
+
+    const mapped = thrown as ExternalApiError;
+    expect(mapped.message).not.toContain("Input blocked");
+    expect(JSON.stringify(mapped.context ?? {})).not.toContain("sensitive words");
+  });
+
   it.each([
     [401, "unauthorized", "lyria.invalid_authentication"],
     [403, "forbidden", "lyria.forbidden"],
