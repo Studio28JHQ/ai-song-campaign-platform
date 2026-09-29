@@ -73,6 +73,7 @@ export class ResponseParser {
     const data = result.data;
 
     return {
+      kind: "async",
       providerTaskId: String(data.id),
       providerTraceId: data.trace_id != null ? String(data.trace_id) : null,
       // Mureka's `created_at` is a Unix timestamp in seconds.

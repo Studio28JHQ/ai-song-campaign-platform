@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/layout/Section";
 import { appConfig } from "@/config/app";
+import { GenerationRoutingForm } from "@/features/admin/components/GenerationRoutingForm";
 import { GtmSettingsForm } from "@/features/admin/components/GtmSettingsForm";
 
 export const metadata: Metadata = {
@@ -46,6 +47,8 @@ export default function AdminSettingsPage() {
               </div>
             ))}
           </dl>
+
+          <GenerationRoutingForm />
 
           <GtmSettingsForm />
         </div>

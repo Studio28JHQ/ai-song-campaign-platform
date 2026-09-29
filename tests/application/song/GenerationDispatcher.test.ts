@@ -13,6 +13,13 @@ import type {
   SongGenerationProvider,
   SongGenerationSubmission,
 } from "@/application/song/contracts/SongGenerationProvider";
+import type {
+  CampaignSettingsGate,
+  GenerationRouting,
+} from "@/application/campaign/contracts/CampaignSettingsGate";
+import { SongCompletionService } from "@/application/song/services/SongCompletionService";
+import { ExternalApiError } from "@/shared/errors";
+import { SongGenerationProviderRegistry } from "@/application/song/services/SongGenerationProviderRegistry";
 
 class InMemoryLeadRepository implements LeadRepository {
   private readonly leads = new Map<string, Lead>();
@@ -145,16 +152,58 @@ function fakeMoodProvider(
 
 function fakeSongGenerator(
   submission: SongGenerationSubmission | Error = {
+    kind: "async",
     providerTaskId: "task-123",
     providerTraceId: null,
   },
+  overrides: { name?: "mureka" | "lyria"; model?: string } = {},
 ): SongGenerationProvider {
   return {
+    name: overrides.name ?? "mureka",
+    model: overrides.model ?? "mureka-9",
     submitGeneration:
       submission instanceof Error
         ? vi.fn().mockRejectedValue(submission)
         : vi.fn().mockResolvedValue(submission),
     pollGenerationStatus: vi.fn(),
+  };
+}
+
+const CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * For the asynchronous-provider paths, where the dispatcher must never reach
+ * completion handling: calling this fails the test loudly instead of silently
+ * passing.
+ */
+function unusedCompletionService(): SongCompletionService {
+  return {
+    complete: vi.fn(() => {
+      throw new Error("SongCompletionService must not be used for an async submission");
+    }),
+  } as unknown as SongCompletionService;
+}
+
+/** Records the bytes handed over by a synchronous provider's submission. */
+function recordingCompletionService(): {
+  service: SongCompletionService;
+  complete: ReturnType<typeof vi.fn>;
+} {
+  const complete = vi.fn(async (song: { markCompleted: unknown }) => song);
+  return { service: { complete } as unknown as SongCompletionService, complete };
+}
+
+/**
+ * The routing half of `CampaignSettingsGate`. The GTM methods are part of the
+ * same port but are never touched by the dispatcher, so they throw rather
+ * than pretend.
+ */
+function fakeRoutingGate(routing: GenerationRouting): CampaignSettingsGate {
+  return {
+    getGtmContainerId: vi.fn(),
+    updateGtmContainerId: vi.fn(),
+    getGenerationRouting: vi.fn().mockResolvedValue(routing),
+    updateGenerationRouting: vi.fn(),
   };
 }
 
@@ -203,13 +252,21 @@ describe("GenerationDispatcher", () => {
     options: {
       moodProvider?: MoodSunoPromptProvider;
       songGenerator?: SongGenerationProvider;
+      providers?: SongGenerationProvider[];
+      routing?: GenerationRouting;
+      completionService?: SongCompletionService;
     } = {},
   ): GenerationDispatcher {
+    const providers = options.providers ?? [options.songGenerator ?? fakeSongGenerator()];
+
     return new GenerationDispatcher(
       songRepository,
       lyricsRepository,
       options.moodProvider ?? fakeMoodProvider(),
-      options.songGenerator ?? fakeSongGenerator(),
+      new SongGenerationProviderRegistry(providers),
+      fakeRoutingGate(options.routing ?? { primaryProvider: "mureka", fallbackProvider: null }),
+      options.completionService ?? unusedCompletionService(),
+      CAMPAIGN_ID,
     );
   }
 
@@ -230,6 +287,7 @@ describe("GenerationDispatcher", () => {
       lyricsId: "lyrics-stuck",
       moodId: "mood-1",
       provider: "suno",
+      providerModel: null,
       providerSongId: null,
       providerTaskId: "task-stuck",
       providerTraceId: null,
@@ -275,6 +333,7 @@ describe("GenerationDispatcher", () => {
   it("moves the oldest QUEUED song to GENERATING and records the submission, without downloading, storing, or emailing anything", async () => {
     const song = seedQueuedSong();
     const songGenerator = fakeSongGenerator({
+      kind: "async",
       providerTaskId: "task-123",
       providerTraceId: "trace-456",
     });
@@ -390,6 +449,7 @@ describe("GenerationDispatcher", () => {
       seedStuckGeneratingSong(31);
       const queuedSong = seedQueuedSong();
       const songGenerator = fakeSongGenerator({
+        kind: "async",
         providerTaskId: "task-456",
         providerTraceId: null,
       });
@@ -440,5 +500,292 @@ describe("GenerationDispatcher", () => {
 
     expect(response?.song.status).toBe(SongStatus.GENERATING);
     expect(response?.song.id).toBe(song.id);
+  });
+  describe("provider routing", () => {
+    const quotaExceeded = () => new ExternalApiError("quota", { code: "mureka.quota_exceeded" });
+    const lyriaQuotaExceeded = () =>
+      new ExternalApiError("quota", { code: "lyria.quota_exceeded" });
+
+    function immediateSubmission(): SongGenerationSubmission {
+      return {
+        kind: "immediate",
+        providerSongId: "interaction-1",
+        audio: { bytes: new Uint8Array([9, 9, 9]), contentType: "audio/mpeg" },
+      };
+    }
+
+    it("submits to the configured primary provider (Mureka) and records it on the song", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+      const lyria = fakeSongGenerator(undefined, { name: "lyria", model: "lyria-3.5" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      });
+      await dispatcher.execute();
+
+      expect(mureka.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("mureka");
+      expect(persisted?.providerModel).toBe("mureka-9");
+    });
+
+    it("submits to Lyria, and completes the song in the same run, when Lyria is the primary", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+      const lyria = fakeSongGenerator(immediateSubmission(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+      const { service, complete } = recordingCompletionService();
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+        completionService: service,
+      });
+      await dispatcher.execute();
+
+      expect(lyria.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(mureka.submitGeneration).not.toHaveBeenCalled();
+      // The synchronous provider's audio goes through the shared completion
+      // service — the same one the polling path uses — not a second pipeline.
+      expect(complete).toHaveBeenCalledTimes(1);
+      expect(complete.mock.calls[0][1]).toEqual({
+        bytes: new Uint8Array([9, 9, 9]),
+        contentType: "audio/mpeg",
+        providerSongId: "interaction-1",
+      });
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("lyria");
+      expect(persisted?.providerModel).toBe("lyria-3.5");
+      expect(persisted?.submittedAt).not.toBeNull();
+    });
+
+    it("falls back from Mureka to Lyria on an exhausted quota, and records Lyria as the provider", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(quotaExceeded(), { name: "mureka", model: "mureka-9" });
+      const lyria = fakeSongGenerator(immediateSubmission(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+      const { service, complete } = recordingCompletionService();
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+        completionService: service,
+      });
+      await dispatcher.execute();
+
+      expect(mureka.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(lyria.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(complete).toHaveBeenCalledTimes(1);
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("lyria");
+      expect(persisted?.providerModel).toBe("lyria-3.5");
+    });
+
+    it("falls back from Lyria to Mureka on an exhausted quota — the policy is symmetric", async () => {
+      const song = seedQueuedSong();
+      const lyria = fakeSongGenerator(lyriaQuotaExceeded(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+      });
+      await dispatcher.execute();
+
+      expect(lyria.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(mureka.submitGeneration).toHaveBeenCalledTimes(1);
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("mureka");
+      expect(persisted?.providerModel).toBe("mureka-9");
+    });
+
+    it("never attempts a second provider when the fallback is disabled", async () => {
+      const song = seedQueuedSong();
+      const lyria = fakeSongGenerator(lyriaQuotaExceeded(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: null },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(mureka.submitGeneration).not.toHaveBeenCalled();
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.FAILED);
+      expect(persisted?.provider).toBe("lyria");
+    });
+
+    it("does not fall back on an ambiguous network failure — the primary may already be generating a paid song", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(
+        new ExternalApiError("timeout", { code: "http_request_failed" }),
+        { name: "mureka", model: "mureka-9" },
+      );
+      const lyria = fakeSongGenerator(undefined, { name: "lyria", model: "lyria-3.5" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+      expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+    });
+
+    it.each([
+      ["a rate limit", "mureka.rate_limited"],
+      ["a server error", "mureka.server_error"],
+      ["an invalid request", "mureka.invalid_request"],
+      ["invalid credentials", "mureka.invalid_authentication"],
+      ["a forbidden response", "mureka.forbidden"],
+    ])("does not fall back on %s", async (_label, code) => {
+      seedQueuedSong();
+      const mureka = fakeSongGenerator(new ExternalApiError(code, { code }), {
+        name: "mureka",
+        model: "mureka-9",
+      });
+      const lyria = fakeSongGenerator(undefined, { name: "lyria", model: "lyria-3.5" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+    });
+
+    it("attempts at most one fallback: a failing fallback fails the song instead of chaining", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(quotaExceeded(), { name: "mureka", model: "mureka-9" });
+      const lyria = fakeSongGenerator(lyriaQuotaExceeded(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(mureka.submitGeneration).toHaveBeenCalledTimes(1);
+      expect(lyria.submitGeneration).toHaveBeenCalledTimes(1);
+      expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+    });
+
+    it("does not fall back when post-processing fails after the provider already generated the audio", async () => {
+      const song = seedQueuedSong();
+      const lyria = fakeSongGenerator(immediateSubmission(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+      // Stands in for an FFmpeg or R2 failure: the audio exists and has been
+      // paid for, so regenerating anywhere would pay twice.
+      const failingCompletion = {
+        complete: vi.fn(async (failing: Song) => {
+          failing.markFailed("ffmpeg exited with code 1");
+          await songRepository.update(failing);
+          throw new Error("ffmpeg exited with code 1");
+        }),
+      } as unknown as SongCompletionService;
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+        completionService: failingCompletion,
+      });
+      await expect(dispatcher.execute()).rejects.toThrow("ffmpeg");
+
+      expect(mureka.submitGeneration).not.toHaveBeenCalled();
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.status).toBe(SongStatus.FAILED);
+      expect(persisted?.provider).toBe("lyria");
+    });
+
+    it("raises a controlled error when the configured provider has no adapter registered", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka],
+        routing: { primaryProvider: "lyria", fallbackProvider: null },
+      });
+
+      await expect(dispatcher.execute()).rejects.toMatchObject({
+        code: "song.unknown_provider",
+      });
+      expect(mureka.submitGeneration).not.toHaveBeenCalled();
+      expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+    });
+
+    it("keeps the single-concurrency guarantee: a song already GENERATING blocks any routing", async () => {
+      seedStuckGeneratingSong(1);
+      const queued = seedQueuedSong();
+      const lyria = fakeSongGenerator(immediateSubmission(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+
+      const dispatcher = buildDispatcher({
+        providers: [lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: null },
+      });
+      const result = await dispatcher.execute();
+
+      expect(result).toBeNull();
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+      expect((await songRepository.findById(queued.id))?.status).toBe(SongStatus.QUEUED);
+    });
+
+    it("leaves an already-submitted song bound to its own provider when the routing changes afterwards", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(undefined, { name: "mureka", model: "mureka-9" });
+      const lyria = fakeSongGenerator(immediateSubmission(), {
+        name: "lyria",
+        model: "lyria-3.5",
+      });
+
+      // Dispatched while Mureka was primary.
+      await buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      }).execute();
+      expect((await songRepository.findById(song.id))?.provider).toBe("mureka");
+
+      // The admin then flips the routing. The in-flight song is untouched:
+      // the dispatcher does not even look at it (it is GENERATING), and its
+      // provider still names Mureka for the poller to resolve.
+      const afterSwitch = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "lyria", fallbackProvider: "mureka" },
+      });
+      expect(await afterSwitch.execute()).toBeNull();
+
+      const persisted = await songRepository.findById(song.id);
+      expect(persisted?.provider).toBe("mureka");
+      expect(persisted?.providerModel).toBe("mureka-9");
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+    });
   });
 });

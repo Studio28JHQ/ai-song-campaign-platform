@@ -91,6 +91,21 @@ model Campaign {
   // environment variable and never hardcoded — editable only from the
   // Admin panel (Configuración) and read fresh at render time.
   gtmContainerId      String?
+  // Generation provider routing — the campaign's second DB-backed global
+  // setting, editable only from the Admin panel (Configuración), read
+  // fresh by `GenerationDispatcher` on every tick so a change takes
+  // effect without a redeploy. `primaryProvider` is tried first;
+  // `fallbackProvider` is tried only for the explicitly whitelisted
+  // pre-generation failures (see `providerFallbackPolicy`), and `null`
+  // disables fallback entirely. Deliberately plain strings, not a Prisma
+  // enum: `Song.provider` is already a String carrying historical values
+  // ("suno", "mureka"), and a partial enum would mean two
+  // representations of the same concept. Validation lives in
+  // `UpdateGenerationRoutingUseCase` (write side) and
+  // `SongGenerationProviderRegistry` (read side), the same pattern
+  // `gtmContainerId` uses.
+  primaryProvider     String         @default("mureka")
+  fallbackProvider    String?        @default("lyria")
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
@@ -263,7 +278,18 @@ model Song {
   leadId          String     @unique @db.Uuid
   lyricsId        String     @db.Uuid
   moodId          String     @db.Uuid
-  provider        String     @default("suno")
+  // The provider that actually generated this song, written by
+  // `GenerationDispatcher` at submission time — never the currently
+  // configured primary. `GenerationPoller` resolves its adapter from
+  // this column, so changing the campaign's routing never redirects a
+  // song that is already in flight. The default moved from the legacy
+  // "suno" to "mureka" (the real provider since the pre-beta switch);
+  // historical rows are untouched.
+  provider        String     @default("mureka")
+  // The provider's own model identifier for this generation
+  // ("mureka-9", "lyria-3.5"). Nullable: rows created before this column
+  // existed never recorded it.
+  providerModel   String?
   providerSongId  String?
   providerTaskId  String?
   providerTraceId String?

@@ -74,6 +74,31 @@ When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Vers
 
 **Live validation** — Authentication and the request/response cycle were confirmed against the real submission endpoint (the account's available quota was exhausted at the time, so Mureka returned a real `429`, correctly classified as `mureka.quota_exceeded`) and against the query endpoint (a real `400` for a non-existent task id, correctly classified as non-retryable). See CHANGELOG.md for the most recent validation performed at the time the provider switch itself shipped.
 
+## Google Lyria (Gemini Developer API)
+
+**Responsibilities**
+
+- Audio generation — the campaign's second, switchable music provider
+
+**Purpose** — Generates the song audio as an alternative to Mureka, selectable per campaign from the Admin panel. Implemented at `src/infrastructure/lyria/`. Receives the _same_ creative input Mureka receives (the shared `MUREKA_STYLE` plus the approved lyrics, byte for byte) so the two providers can be compared on equal terms; it never gets its own prompt variant, and it never alters the approved lyrics.
+
+**Synchronous, unlike Mureka** — Google's Interactions API is single-turn: `client.interactions.create({ model: "lyria-3.5", input })` returns the finished audio inline as base64, with no task id and no polling endpoint. The application's `SongGenerationProvider` port models this explicitly with an `immediate` submission result (Mureka returns `async`), and `GenerationDispatcher` completes such a song in the same invocation through the shared `SongCompletionService`. Nothing is forced to look asynchronous.
+
+**Classes:**
+
+- **`LyriaClient`** — the only integration in this codebase built on a vendor SDK (`@google/genai`) rather than the shared `httpRequest` helper, and deliberately so: the SDK owns the `x-goog-api-key` header, keeping the credential out of URLs, query strings and error objects. There is no `?key=` fallback. Resolves the SDK client lazily on first use, so the adapter is importable and registrable in a deployment with no Google credential configured; a missing key surfaces as `lyria.missing_api_key` on that one song. Passes `maxRetries: 0` — a retried generation is a second song paid for. Maps Google's failures onto the shared `ExternalApiError` taxonomy (`lyria.invalid_authentication`, `lyria.forbidden`, `lyria.invalid_request`, `lyria.rate_limited`, `lyria.quota_exceeded`, `lyria.server_error`, `lyria.api_error`), attaching only a status code — never the SDK error, its config or its request.
+- **`PromptBuilder`** — assembles the single text prompt: the imported `MUREKA_STYLE` (imported, never copied, so the A/B comparison cannot drift), the vocal gender in prose (Lyria has no `gender` field), and the approved lyrics verbatim. `[Ending]` is left exactly as approved even though Google documents only `[Verse]`/`[Chorus]`/`[Bridge]` — rewriting an approved lyric to suit a provider is not this layer's decision.
+- **`ResponseParser`** — validates the response with Zod and decodes `output_audio.data` from base64 into bytes. Requires audio; tolerates a missing interaction id rather than discarding a song that was already generated and paid for.
+- **`LyriaSongService`** — implements `SongGenerationProvider` with `name: "lyria"` and `model: "lyria-3.5"` (both persisted on the Song). Deliberately has **no** `pollGenerationStatus`: there is never a task to poll.
+
+**Request/Response Format** — `POST https://generativelanguage.googleapis.com/v1beta/interactions` (via the SDK), `{ model: "lyria-3.5", input: "<style + voice + lyrics>" }`. The response carries `output_audio` (`mime_type: "audio/mpeg"`, base64 `data`), `output_text` and an interaction `id`.
+
+**Live validation** — Before the adapter was written, one real generation was run against the production key: the route authenticated through the SDK, returned MP3 audio (44.1 kHz stereo, 192 kb/s) in ~46 seconds, and the existing `FfmpegAudioProcessor` cut its 66.53 seconds to exactly 60.00. The measured latency is why `GET /api/internal/pipeline/run` now declares `maxDuration = 300`.
+
+**Failure Handling** — No retries at all on the generation call (see above). A whitelisted `lyria.quota_exceeded` may hand the song to the configured fallback provider; every other failure fails the song, and post-generation failures (FFmpeg, R2, email) never trigger a fallback because the audio has already been paid for.
+
+**Notes** — Lyria audio carries Google's SynthID watermark and C2PA Content Credentials in its ID3 metadata. The metadata does not survive FFmpeg re-encoding; handling provenance is deliberately out of scope for this integration.
+
 ## Supabase
 
 **Responsibilities**

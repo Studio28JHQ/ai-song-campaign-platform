@@ -32,6 +32,16 @@ const envSchema = z.object({
   R2_BUCKET: z.string().min(1),
   CLAUDE_API_KEY: z.string().min(1),
   MUREKA_API_KEY: z.string().min(1),
+  // Google Gemini Developer API credential, used only by the Lyria provider
+  // (`src/infrastructure/lyria/`). Deliberately **optional**, unlike every
+  // other provider credential above: Lyria is a second, switchable
+  // generation provider, so a deployment that only ever uses Mureka must
+  // boot and run normally without a Google credential configured at all.
+  // The key is validated lazily, at the moment Lyria is actually used
+  // (`LyriaClient.resolveClient` → `lyria.missing_api_key`), which fails
+  // that one song instead of the whole application. Never read outside
+  // `appConfig.lyria.apiKey`, never logged, never persisted.
+  GEMINI_API_KEY: z.string().min(1).optional(),
   ADMIN_EMAIL: z.string().email(),
   ADMIN_SESSION_SECRET: z
     .string()

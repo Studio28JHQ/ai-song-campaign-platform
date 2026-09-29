@@ -14,6 +14,11 @@ import { HttpAudioDownloader } from "@/infrastructure/storage/HttpAudioDownloade
 import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
 import { R2AudioUrlResolver } from "@/infrastructure/storage/R2AudioUrlResolver";
 import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
+import { LyriaSongService } from "@/infrastructure/lyria/LyriaSongService";
+import { PrismaCampaignSettingsGate } from "@/infrastructure/persistence/prisma/campaign/PrismaCampaignSettingsGate";
+import { SongCompletionService } from "@/application/song/services/SongCompletionService";
+import { SongGenerationProviderRegistry } from "@/application/song/services/SongGenerationProviderRegistry";
+import { DEFAULT_CAMPAIGN_ID } from "@/config/constants";
 import { FfmpegAudioProcessor } from "@/infrastructure/audio/FfmpegAudioProcessor";
 import { logger } from "@/shared/logger/logger";
 
@@ -28,13 +33,24 @@ import { logger } from "@/shared/logger/logger";
  * call), but it's additive on top of this route's existing Mureka
  * poll + audio download + R2 upload + email chain, none of which
  * previously had an explicit duration budget (see the repository
- * audit — no route anywhere declares `maxDuration`). 60s comfortably
- * covers that whole chain with margin and is a valid `maxDuration` on
- * every Vercel plan (Hobby's own configurable maximum); raise it if
- * the project is confirmed to run on a plan/Fluid Compute
- * configuration that both allows and needs more.
+ * audit — no route anywhere declares `maxDuration`).
+ *
+ * Raised from 60s to 300s when Lyria was added as a second provider.
+ * Mureka's submission returns in under a second (the generation itself
+ * happens asynchronously, off this invocation), but Lyria's Interactions
+ * API is synchronous: a live measurement of one real generation took
+ * ~46 seconds to return the finished audio, and FFmpeg, the R2 upload and
+ * the email all still have to happen afterwards inside this same
+ * invocation. 60s left no usable margin — an overrun would abandon a song
+ * that had already been generated and paid for. 300s is the Hobby plan's
+ * configurable maximum.
+ *
+ * This is the function's execution budget and has nothing to do with the
+ * length of the audio: the campaign's <=60-second rule stays entirely in
+ * `FfmpegAudioProcessor`, which caps and fades every provider's output
+ * identically.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * GET /api/internal/pipeline/run — RC-2 Production Hardening: the
@@ -88,22 +104,31 @@ const songRepository = new PrismaSongRepository();
 const lyricsRepository = new PrismaLyricsRepository();
 const leadRepository = new PrismaLeadRepository();
 const moodProvider = new PrismaMoodSunoPromptProvider();
-const songGenerator = new MurekaSongService();
 const emailSender = new ResendEmailService();
 const emailDeliveryTracker = new PrismaEmailDeliveryTracker();
 const campaignGate = new PrismaCampaignGate();
+const campaignSettingsGate = new PrismaCampaignSettingsGate();
 
-const generationDispatcher = new GenerationDispatcher(
-  songRepository,
-  lyricsRepository,
-  moodProvider,
-  songGenerator,
-);
+/**
+ * Both providers are always registered; which one runs is decided per song
+ * by the campaign's routing (`campaigns.primaryProvider` /
+ * `fallbackProvider`, editable from the Admin panel) and recorded on
+ * `Song.provider`. Registering Lyria costs nothing when it is unused — its
+ * credential is only resolved on an actual generation attempt.
+ */
+const providerRegistry = new SongGenerationProviderRegistry([
+  new MurekaSongService(),
+  new LyriaSongService(),
+]);
 
-const generationPoller = new GenerationPoller(
+/**
+ * Everything from "we have audio bytes" onwards, shared by both providers:
+ * FFmpeg's 60-second cap, the R2 upload, the `COMPLETED` write, the campaign
+ * counter and the one-time email. One audio pipeline, two ways of reaching
+ * it.
+ */
+const songCompletionService = new SongCompletionService(
   songRepository,
-  songGenerator,
-  new HttpAudioDownloader(),
   new FfmpegAudioProcessor(),
   new CloudflareR2Storage(),
   new R2AudioUrlResolver(),
@@ -111,6 +136,23 @@ const generationPoller = new GenerationPoller(
   emailSender,
   emailDeliveryTracker,
   campaignGate,
+);
+
+const generationDispatcher = new GenerationDispatcher(
+  songRepository,
+  lyricsRepository,
+  moodProvider,
+  providerRegistry,
+  campaignSettingsGate,
+  songCompletionService,
+  DEFAULT_CAMPAIGN_ID,
+);
+
+const generationPoller = new GenerationPoller(
+  songRepository,
+  providerRegistry,
+  new HttpAudioDownloader(),
+  songCompletionService,
 );
 
 export async function GET(request: Request): Promise<NextResponse> {

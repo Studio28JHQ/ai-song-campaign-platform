@@ -19,6 +19,7 @@ const mockClaimDelivery = vi.fn();
 const mockDownloadAudio = vi.fn();
 const mockUploadAudio = vi.fn();
 const mockResolveAudioUrl = vi.fn();
+const mockGetGenerationRouting = vi.fn();
 
 vi.mock("@/infrastructure/persistence/prisma/song/PrismaSongRepository", () => ({
   PrismaSongRepository: vi.fn().mockImplementation(function PrismaSongRepository() {
@@ -53,9 +54,30 @@ vi.mock("@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider",
 vi.mock("@/infrastructure/mureka/MurekaSongService", () => ({
   MurekaSongService: vi.fn().mockImplementation(function MurekaSongService() {
     return {
+      name: "mureka",
+      model: "mureka-9",
       submitGeneration: mockSubmitGeneration,
       pollGenerationStatus: mockPollGenerationStatus,
     };
+  }),
+}));
+
+// Lyria is registered in the route alongside Mureka, so it has to be mocked
+// even though this suite never routes to it: constructing the real adapter
+// must not require a Google credential to be present.
+vi.mock("@/infrastructure/lyria/LyriaSongService", () => ({
+  LyriaSongService: vi.fn().mockImplementation(function LyriaSongService() {
+    return {
+      name: "lyria",
+      model: "lyria-3.5",
+      submitGeneration: vi.fn(),
+    };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/campaign/PrismaCampaignSettingsGate", () => ({
+  PrismaCampaignSettingsGate: vi.fn().mockImplementation(function PrismaCampaignSettingsGate() {
+    return { getGenerationRouting: mockGetGenerationRouting };
   }),
 }));
 
@@ -103,6 +125,11 @@ describe("GET /api/internal/pipeline/run", () => {
     vi.clearAllMocks();
     mockSongFindGenerating.mockResolvedValue(null);
     mockSongFindOldestQueued.mockResolvedValue(null);
+    // Production's post-migration default: Mureka primary, Lyria fallback.
+    mockGetGenerationRouting.mockResolvedValue({
+      primaryProvider: "mureka",
+      fallbackProvider: "lyria",
+    });
   });
 
   it("returns 401 with no Authorization header", async () => {
@@ -134,6 +161,7 @@ describe("GET /api/internal/pipeline/run", () => {
       lyricsId: "lyrics-1",
       moodId: "mood-1",
       provider: "mureka",
+      providerModel: null,
       providerSongId: null,
       providerTaskId: "task-123",
       providerTraceId: null,
@@ -169,6 +197,7 @@ describe("GET /api/internal/pipeline/run", () => {
       lyricsId: "lyrics-1",
       moodId: "mood-1",
       provider: "mureka",
+      providerModel: null,
       providerSongId: null,
       providerTaskId: null,
       providerTraceId: null,
@@ -194,7 +223,11 @@ describe("GET /api/internal/pipeline/run", () => {
       voice: "FEMALE",
     });
     mockGetMoodDetails.mockResolvedValue({ name: "Joyful", sunoPrompt: "upbeat joyful lullaby" });
-    mockSubmitGeneration.mockResolvedValue({ providerTaskId: "task-123", providerTraceId: null });
+    mockSubmitGeneration.mockResolvedValue({
+      kind: "async",
+      providerTaskId: "task-123",
+      providerTraceId: null,
+    });
 
     const response = await GET(getRequest(appConfig.internal.cronSecret));
 

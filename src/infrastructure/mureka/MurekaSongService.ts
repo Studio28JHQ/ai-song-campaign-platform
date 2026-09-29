@@ -6,7 +6,7 @@ import type {
 import { ExternalApiError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import { MurekaClient } from "./MurekaClient";
-import { PromptBuilder } from "./PromptBuilder";
+import { MUREKA_MODEL, PromptBuilder } from "./PromptBuilder";
 import { ResponseParser } from "./ResponseParser";
 import type { MurekaSubmissionResult } from "./types";
 
@@ -40,6 +40,11 @@ const RETRYABLE_ERROR_CODES = new Set([
  * structurally without a separate mapping step.
  */
 export class MurekaSongService implements SongGenerationProvider {
+  /** Persisted on `Song.provider`, and the key this adapter is registered under. */
+  readonly name = "mureka" as const;
+  /** Persisted on `Song.providerModel` — the same pinned model the payload carries. */
+  readonly model = MUREKA_MODEL;
+
   constructor(private readonly client: MurekaClient = new MurekaClient()) {}
 
   async submitGeneration(input: SongGenerationInput): Promise<MurekaSubmissionResult> {

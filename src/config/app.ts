@@ -45,6 +45,12 @@ export const appConfig = {
   mureka: {
     apiKey: env.MUREKA_API_KEY,
   },
+  // Optional by design — see `GEMINI_API_KEY` in `./env`. `undefined` here
+  // means Lyria is not configured, which `LyriaClient` turns into a
+  // controlled per-song failure rather than a startup crash.
+  lyria: {
+    apiKey: env.GEMINI_API_KEY,
+  },
   // RC-2 — Production Hardening. Song generation pipeline operational
   // settings — see `GenerationDispatcher` (stuck-song reclaim).
   song: {

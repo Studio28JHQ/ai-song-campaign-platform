@@ -9,6 +9,9 @@ import type { SongRepository } from "@/domain/song/repositories/SongRepository";
 import { SongStatus } from "@/domain/song/types";
 import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
 import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
+import { SongCompletionService } from "@/application/song/services/SongCompletionService";
+import { SongGenerationProviderRegistry } from "@/application/song/services/SongGenerationProviderRegistry";
+import type { CampaignSettingsGate } from "@/application/campaign/contracts/CampaignSettingsGate";
 import type { AudioDownloader } from "@/application/song/contracts/AudioDownloader";
 import type { AudioProcessor } from "@/application/song/contracts/AudioProcessor";
 import type { AudioStorage } from "@/application/song/contracts/AudioStorage";
@@ -18,6 +21,29 @@ import type { EmailDeliveryTracker } from "@/application/song/contracts/EmailDel
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
 import type { MoodSunoPromptProvider } from "@/application/song/contracts/MoodSunoPromptProvider";
 import { MurekaSongService } from "@/infrastructure/mureka/MurekaSongService";
+
+const CAMPAIGN_ID = "00000000-0000-0000-0000-000000000000";
+
+/** Routing fixed to Mureka with no fallback: this suite is about the Mureka pipeline itself. */
+function fakeRoutingGate(): CampaignSettingsGate {
+  return {
+    getGtmContainerId: vi.fn(),
+    updateGtmContainerId: vi.fn(),
+    getGenerationRouting: vi
+      .fn()
+      .mockResolvedValue({ primaryProvider: "mureka", fallbackProvider: null }),
+    updateGenerationRouting: vi.fn(),
+  };
+}
+
+/** Mureka's submissions are asynchronous, so the dispatcher never completes a song itself. */
+function unusedCompletionService(): SongCompletionService {
+  return {
+    complete: vi.fn(() => {
+      throw new Error("SongCompletionService must not be used for an async submission");
+    }),
+  } as unknown as SongCompletionService;
+}
 
 /**
  * RC-final — Provider Switch. This is deliberately NOT another isolated
@@ -301,19 +327,25 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       songRepository,
       lyricsRepository,
       fakeMoodProvider(),
-      murekaSongService,
+      new SongGenerationProviderRegistry([murekaSongService]),
+      fakeRoutingGate(),
+      unusedCompletionService(),
+      CAMPAIGN_ID,
     );
     const poller = new GenerationPoller(
       songRepository,
-      murekaSongService,
+      new SongGenerationProviderRegistry([murekaSongService]),
       audioDownloader,
-      fakeAudioProcessor(),
-      audioStorage,
-      fakeAudioUrlResolver(),
-      leadRepository,
-      emailSender,
-      new InMemoryEmailDeliveryTracker(),
-      fakeCampaignGate(),
+      new SongCompletionService(
+        songRepository,
+        fakeAudioProcessor(),
+        audioStorage,
+        fakeAudioUrlResolver(),
+        leadRepository,
+        emailSender,
+        new InMemoryEmailDeliveryTracker(),
+        fakeCampaignGate(),
+      ),
     );
 
     const dispatchResult = await dispatcher.execute();
@@ -393,19 +425,25 @@ describe("Mureka wired as the real production SongGenerationProvider", () => {
       songRepository,
       lyricsRepository,
       fakeMoodProvider(),
-      murekaSongService,
+      new SongGenerationProviderRegistry([murekaSongService]),
+      fakeRoutingGate(),
+      unusedCompletionService(),
+      CAMPAIGN_ID,
     );
     const poller = new GenerationPoller(
       songRepository,
-      murekaSongService,
+      new SongGenerationProviderRegistry([murekaSongService]),
       fakeAudioDownloader(),
-      fakeAudioProcessor(),
-      fakeAudioStorage(),
-      fakeAudioUrlResolver(),
-      leadRepository,
-      emailSender,
-      new InMemoryEmailDeliveryTracker(),
-      fakeCampaignGate(),
+      new SongCompletionService(
+        songRepository,
+        fakeAudioProcessor(),
+        fakeAudioStorage(),
+        fakeAudioUrlResolver(),
+        leadRepository,
+        emailSender,
+        new InMemoryEmailDeliveryTracker(),
+        fakeCampaignGate(),
+      ),
     );
 
     await dispatcher.execute();

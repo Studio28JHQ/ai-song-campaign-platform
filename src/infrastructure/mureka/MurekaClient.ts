@@ -30,6 +30,16 @@ export class MurekaClient {
         authorization: `Bearer ${appConfig.mureka.apiKey}`,
       },
       body: JSON.stringify(payload),
+      // A generation submission is never retried automatically. The shared
+      // helper's default (2 retries on a timeout or a 5xx) is safe for the
+      // idempotent calls in this codebase, but not for this one: Mureka may
+      // have accepted the request and started a *billable* generation
+      // before the response failed to reach us, and a blind retry would
+      // pay for the same song twice while only the last task id is ever
+      // recorded. Mureka publishes no idempotency key, so the only correct
+      // behaviour is a single attempt; a genuine retry is an explicit
+      // pipeline decision (the admin retry flow), never an HTTP-layer one.
+      retries: 0,
     });
 
     if (!response.ok) {

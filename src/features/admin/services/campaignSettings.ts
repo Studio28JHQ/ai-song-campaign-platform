@@ -1,5 +1,14 @@
 export interface CampaignSettings {
   gtmContainerId: string | null;
+  /** The provider tried first for every new song. */
+  primaryProvider: string;
+  /** The provider tried only on a whitelisted pre-generation failure; `null` disables fallback. */
+  fallbackProvider: string | null;
+}
+
+export interface GenerationRoutingInput {
+  primaryProvider: string;
+  fallbackProvider: string | null;
 }
 
 export class CampaignSettingsError extends Error {
@@ -44,6 +53,22 @@ export async function updateGtmContainerId(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ gtmContainerId }),
+  });
+  return parseResponse<CampaignSettings>(response);
+}
+
+/**
+ * Persists the generation routing. Its own endpoint, so the GTM setting's
+ * payload and validation are untouched; the server re-validates everything
+ * (known providers, primary !== fallback) regardless of what the form sends.
+ */
+export async function updateGenerationRouting(
+  routing: GenerationRoutingInput,
+): Promise<CampaignSettings> {
+  const response = await safeFetch("/api/admin/settings/generation", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(routing),
   });
   return parseResponse<CampaignSettings>(response);
 }

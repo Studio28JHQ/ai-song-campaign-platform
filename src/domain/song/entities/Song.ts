@@ -9,6 +9,14 @@ import {
 } from "../types";
 
 /** Mureka is the active music provider for every newly created Song — see PROJECT_MANIFEST.md. */
+/**
+ * The provider a Song is created with, before any dispatcher run has
+ * decided which provider will actually generate it. Kept as a concrete
+ * value (not `null`) so the column stays non-nullable and a `QUEUED`
+ * song always reads as something; the authoritative value is written by
+ * `assignProvider()` at submission time, which is the only value
+ * `GenerationPoller` ever trusts.
+ */
 const DEFAULT_PROVIDER = "mureka";
 
 /**
@@ -53,6 +61,7 @@ export class Song {
       lyricsId,
       moodId,
       provider: DEFAULT_PROVIDER,
+      providerModel: null,
       providerSongId: null,
       providerTaskId: null,
       providerTraceId: null,
@@ -114,6 +123,50 @@ export class Song {
    * duration of the outbound call, not just after it returns. Valid
    * only while `GENERATING`.
    */
+  /**
+   * Records which provider (and which of its models) this generation is
+   * actually being sent to. Called by `GenerationDispatcher` immediately
+   * before submitting, and again if the whitelisted fallback takes over,
+   * so the persisted value always names the provider that really ran —
+   * never the campaign's currently configured primary. This is the value
+   * `GenerationPoller` resolves its adapter from, which is what keeps an
+   * in-flight song bound to its own provider when an admin changes the
+   * routing mid-generation.
+   */
+  assignProvider(provider: string, providerModel: string): void {
+    if (this.props.status !== SongStatus.GENERATING) {
+      throw new BusinessRuleError("A provider can only be assigned while generating.", {
+        code: "song.provider_assignment_invalid_state",
+        context: { songId: this.props.id, status: this.props.status },
+      });
+    }
+
+    this.props.provider = Song.requireNonEmpty(provider, "provider");
+    this.props.providerModel = Song.requireNonEmpty(providerModel, "providerModel");
+    this.props.updatedAt = new Date();
+  }
+
+  /**
+   * The synchronous counterpart of `recordSubmission`, for a provider
+   * that returns the finished audio in the same call instead of a task id
+   * to poll (Lyria). There is no `providerTaskId` to store — the job was
+   * never asynchronous — so this only stamps the "generation actually
+   * started" instant that `GenerationDispatcher`'s stuck-song reclaim
+   * relies on. `markCompleted` follows in the same invocation.
+   */
+  recordImmediateSubmission(): void {
+    if (this.props.status !== SongStatus.GENERATING) {
+      throw new BusinessRuleError("A submission can only be recorded while generating.", {
+        code: "song.submission_invalid_state",
+        context: { songId: this.props.id, status: this.props.status },
+      });
+    }
+
+    this.props.providerStatus = "submitted";
+    this.props.submittedAt = new Date();
+    this.props.updatedAt = new Date();
+  }
+
   recordSubmission(details: SongSubmissionDetails): void {
     if (this.props.status !== SongStatus.GENERATING) {
       throw new BusinessRuleError("A submission can only be recorded while generating.", {
@@ -216,6 +269,10 @@ export class Song {
     return this.props.provider;
   }
 
+  get providerModel(): string | null {
+    return this.props.providerModel;
+  }
+
   get providerSongId(): string | null {
     return this.props.providerSongId;
   }
@@ -279,6 +336,7 @@ export class Song {
       lyricsId: this.props.lyricsId,
       moodId: this.props.moodId,
       provider: this.props.provider,
+      providerModel: this.props.providerModel,
       providerSongId: this.props.providerSongId,
       providerTaskId: this.props.providerTaskId,
       providerTraceId: this.props.providerTraceId,

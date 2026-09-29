@@ -14,7 +14,7 @@ import type { MurekaGender, MurekaGenerateRequest } from "./types";
  * produced by the same, known model.
  * Reference: https://platform.mureka.ai/docs/api/operations/post-v1-song-generate.html
  */
-const MUREKA_MODEL = "mureka-9";
+export const MUREKA_MODEL = "mureka-9";
 
 /** Exactly one song is ever generated per call (see docs/Product/Business_Rules.md — Song Rules). */
 const MUREKA_SONG_COUNT = 1;
@@ -62,7 +62,7 @@ const MUREKA_SONG_COUNT = 1;
  * Mureka's own sense of the song's shape matches the lyrics it
  * receives.
  */
-const MUREKA_STYLE =
+export const MUREKA_STYLE =
   "Commercial social media baby-care jingle — two compact narrative verses, one memorable chorus, a genuine emotional ending — up to about 60 seconds, shorter is fine, never padded, warm Latin Spanish voice, neutral pronunciation, lead vocals enter by about second 5, only a brief musical pickup, no long instrumental intro, upbeat children's acoustic folk-pop, 86 BPM, acoustic guitar, ukulele, marimba, glockenspiel, soft percussion, subtle children's choir only during the ending, compact commercial arrangement, lyrics addressed to the baby, naming the baby naturally, bright, playful, memorable melody, \"Pequeñas grandes historias\" as an emotional concept only, sing the lyrics exactly once, continuously and naturally, using the vocal time for the story, no repeated chorus, no repeated verses, no instrumental padding, no filler vocalizations (humming, mmm, uh, ooh), finish naturally, leaving only a short musical ending.";
 
 /** This pipeline never streams playback — Mureka generates the full song asynchronously, polled to completion (see `GenerationPoller`). */

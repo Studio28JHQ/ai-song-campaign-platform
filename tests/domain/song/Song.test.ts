@@ -196,6 +196,7 @@ describe("Song.fromPersistence / toSnapshot", () => {
       lyricsId: song.lyricsId,
       moodId: song.moodId,
       provider: song.provider,
+      providerModel: null,
       providerSongId: song.providerSongId,
       providerTaskId: song.providerTaskId,
       providerTraceId: song.providerTraceId,

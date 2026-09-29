@@ -1,18 +1,11 @@
-import type { LeadRepository } from "@/domain/lead/repositories/LeadRepository";
 import type { Song } from "@/domain/song/entities/Song";
 import type { SongRepository } from "@/domain/song/repositories/SongRepository";
+import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
 import type { AudioDownloader } from "../contracts/AudioDownloader";
-import type { AudioProcessor } from "../contracts/AudioProcessor";
-import type { AudioStorage } from "../contracts/AudioStorage";
-import type { AudioUrlResolver } from "../contracts/AudioUrlResolver";
-import type { CampaignGate } from "../contracts/CampaignGate";
-import type { EmailDeliveryTracker } from "../contracts/EmailDeliveryTracker";
-import type { SongEmailSender } from "../contracts/SongEmailSender";
-import type { SongGenerationProvider } from "../contracts/SongGenerationProvider";
 import type { GenerationPollerResponse } from "../dto/GenerationPollerResponse";
-
-const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
+import type { SongCompletionService } from "../services/SongCompletionService";
+import type { SongGenerationProviderRegistry } from "../services/SongGenerationProviderRegistry";
 
 /**
  * The Song Queue's completion poller (Sprint 9.1 — Generation Pipeline
@@ -62,15 +55,9 @@ const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
 export class GenerationPoller {
   constructor(
     private readonly songRepository: SongRepository,
-    private readonly songGenerator: SongGenerationProvider,
+    private readonly providerRegistry: SongGenerationProviderRegistry,
     private readonly audioDownloader: AudioDownloader,
-    private readonly audioProcessor: AudioProcessor,
-    private readonly audioStorage: AudioStorage,
-    private readonly audioUrlResolver: AudioUrlResolver,
-    private readonly leadRepository: LeadRepository,
-    private readonly emailSender: SongEmailSender,
-    private readonly deliveryTracker: EmailDeliveryTracker,
-    private readonly campaignGate: CampaignGate,
+    private readonly completionService: SongCompletionService,
   ) {}
 
   async execute(): Promise<GenerationPollerResponse | null> {
@@ -86,7 +73,29 @@ export class GenerationPoller {
       return null;
     }
 
-    const result = await this.songGenerator.pollGenerationStatus(song.providerTaskId);
+    // The provider that actually generated this song, read off the row —
+    // never the campaign's currently configured primary. An admin
+    // switching the routing mid-generation must not redirect a song that
+    // is already in flight to a provider that knows nothing about its task
+    // id (see `Song.assignProvider`).
+    const provider = this.providerRegistry.get(song.provider);
+
+    if (!provider.pollGenerationStatus) {
+      // Only reachable if a synchronous provider's song somehow stayed
+      // `GENERATING`: its submission completes the song in the same
+      // invocation, so there is no task to ask about. Failing loudly here
+      // (rather than silently returning) lets the dispatcher's
+      // stuck-song reclaim free the queue on a later tick.
+      throw new BusinessRuleError(
+        `Provider "${provider.name}" does not support polling, but song ${song.id} is still generating.`,
+        {
+          code: "song.provider_polling_unsupported",
+          context: { songId: song.id, provider: provider.name },
+        },
+      );
+    }
+
+    const result = await provider.pollGenerationStatus(song.providerTaskId);
 
     if (result.status === "pending") {
       if (result.providerStatus) {
@@ -104,115 +113,37 @@ export class GenerationPoller {
     }
 
     const outcome = result.status === "ready_to_download" ? "ready" : "completed";
-    return this.downloadStoreAndDeliver(song, result, outcome);
+    return this.downloadAndComplete(song, result, outcome);
   }
 
   /**
-   * Shared terminal-success handling for both `SongGenerationPollResult`
-   * variants that mean "the provider has finished, here is the audio"
-   * (`ready_to_download` — Mureka's async result — and `completed`, a
-   * hypothetical synchronous provider's result). Downloads the audio,
-   * uploads it to R2, persists only the resulting object key — never a
-   * signed URL, never the provider's URL — and marks the Song
-   * `COMPLETED`. `COMPLETED` already means "the audio is safely stored,"
-   * decoupled from whether an email was ever sent (see
-   * `prisma/schema.prisma`'s reserved, unused `DELIVERED` value and
-   * `SongMapper`'s collapse-to-`COMPLETED` comment), so no new
-   * `SongStatus` exists for this.
-   *
-   * The email is sent only after the download, the R2 upload, and the
-   * repository `update` (the "database transaction committed" moment)
-   * have all already succeeded — never before (Gate 9.5). Any failure
-   * up to that point marks the Song `FAILED` and rethrows, before ever
-   * reaching the email step; an email failure, by contrast, is caught
-   * entirely inside `deliverReadyEmail` and never undoes the
-   * already-successful, already-persisted generation.
+   * Downloads the finished audio from the provider's own (short-lived) URL
+   * and hands the bytes to `SongCompletionService`, which owns everything
+   * from FFmpeg onwards and is shared with the synchronous-provider path in
+   * `GenerationDispatcher`. A download failure marks the Song `FAILED` and
+   * rethrows, exactly as before this method delegated.
    */
-  private async downloadStoreAndDeliver(
+  private async downloadAndComplete(
     song: Song,
     result: { providerSongId: string; audioUrl: string; duration: number | null },
     outcome: "completed" | "ready",
   ): Promise<GenerationPollerResponse> {
+    let audio;
+
     try {
-      const audio = await this.audioDownloader.download(result.audioUrl);
-      const processed = await this.audioProcessor.process(audio.bytes);
-      const storageKey = `songs/${song.id}.mp3`;
-
-      await this.audioStorage.upload(
-        storageKey,
-        processed.bytes,
-        audio.contentType || AUDIO_STORAGE_CONTENT_TYPE_FALLBACK,
-      );
-
-      song.markCompleted({
-        providerSongId: result.providerSongId,
-        audioStorageKey: storageKey,
-        duration: processed.durationSeconds,
-      });
-      const updated = await this.songRepository.update(song);
-
-      await this.incrementCampaignSongsGenerated(updated);
-      await this.deliverReadyEmail(updated);
-
-      return { song: updated.toSnapshot(), outcome };
+      audio = await this.audioDownloader.download(result.audioUrl);
     } catch (error) {
       song.markFailed(error instanceof Error ? error.message : String(error));
       await this.songRepository.update(song);
       throw error;
     }
-  }
 
-  /**
-   * Counts this Song toward its campaign's `maximumSongs` budget — never
-   * before `COMPLETED` is already persisted, and never allowed to undo a
-   * successful generation if it fails (same non-blocking pattern as
-   * `deliverReadyEmail`).
-   */
-  private async incrementCampaignSongsGenerated(song: Song): Promise<void> {
-    try {
-      const lead = await this.leadRepository.findById(song.leadId);
-      if (!lead) return;
+    const updated = await this.completionService.complete(song, {
+      bytes: audio.bytes,
+      contentType: audio.contentType,
+      providerSongId: result.providerSongId,
+    });
 
-      await this.campaignGate.incrementSongsGenerated(lead.campaignId);
-    } catch (error) {
-      logger.error("Failed to increment campaign songsGenerated counter", {
-        songId: song.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  /**
-   * Claims delivery before sending: the claim is atomic at the database
-   * level (see `EmailDeliveryTracker`), so even if this poller somehow
-   * ran twice for the same song, only one caller ever sends. Never
-   * rethrows — an email failure must not undo an otherwise-successful
-   * generation, and `COMPLETED -> FAILED` isn't a transition `Song`
-   * allows.
-   */
-  private async deliverReadyEmail(song: Song): Promise<void> {
-    try {
-      const claimed = await this.deliveryTracker.claimDelivery(song.id);
-      if (!claimed) return;
-
-      const lead = await this.leadRepository.findById(song.leadId);
-      if (!lead || !song.audioStorageKey) return;
-
-      const audioUrl = await this.audioUrlResolver.resolve(song.audioStorageKey);
-
-      await this.emailSender.sendSongReadyEmail({
-        to: lead.email.toString(),
-        parentName: lead.parentName,
-        babyName: lead.babyName,
-        songId: song.id,
-        audioUrl,
-        duration: song.duration,
-      });
-    } catch (error) {
-      logger.error("Failed to send song-ready email", {
-        songId: song.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    return { song: updated.toSnapshot(), outcome };
   }
 }

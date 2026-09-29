@@ -44,6 +44,7 @@ describe("MurekaSongService.submitGeneration", () => {
       stream: false,
     });
     expect(result).toEqual({
+      kind: "async",
       providerTaskId: "task-123",
       providerTraceId: "trace-456",
       submittedAt: new Date(1700000000 * 1000),

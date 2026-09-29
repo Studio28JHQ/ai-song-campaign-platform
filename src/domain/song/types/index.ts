@@ -48,6 +48,7 @@ export interface SongProps {
   lyricsId: string;
   moodId: string;
   provider: string;
+  providerModel: string | null;
   providerSongId: string | null;
   providerTaskId: string | null;
   providerTraceId: string | null;
@@ -76,6 +77,7 @@ export interface SongSnapshot {
   lyricsId: string;
   moodId: string;
   provider: string;
+  providerModel: string | null;
   providerSongId: string | null;
   providerTaskId: string | null;
   providerTraceId: string | null;

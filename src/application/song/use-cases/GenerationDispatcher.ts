@@ -4,9 +4,17 @@ import type { LyricsRepository } from "@/domain/lyrics/repositories/LyricsReposi
 import { appConfig } from "@/config/app";
 import { BusinessRuleError } from "@/shared/errors";
 import { logger } from "@/shared/logger/logger";
+import { SongStatus } from "@/domain/song/types";
+import type { CampaignSettingsGate } from "@/application/campaign/contracts/CampaignSettingsGate";
 import type { MoodSunoPromptProvider } from "../contracts/MoodSunoPromptProvider";
-import type { SongGenerationProvider } from "../contracts/SongGenerationProvider";
+import type {
+  SongGenerationInput,
+  SongGenerationSubmission,
+} from "../contracts/SongGenerationProvider";
 import type { GenerationDispatcherResponse } from "../dto/GenerationDispatcherResponse";
+import { isFallbackEligible, providerErrorCode } from "../services/providerFallbackPolicy";
+import type { SongCompletionService } from "../services/SongCompletionService";
+import type { SongGenerationProviderRegistry } from "../services/SongGenerationProviderRegistry";
 
 /**
  * The Song Queue's dispatcher (Sprint 9.1 — Generation Pipeline
@@ -47,7 +55,10 @@ export class GenerationDispatcher {
     private readonly songRepository: SongRepository,
     private readonly lyricsRepository: LyricsRepository,
     private readonly moodProvider: MoodSunoPromptProvider,
-    private readonly songGenerator: SongGenerationProvider,
+    private readonly providerRegistry: SongGenerationProviderRegistry,
+    private readonly routingGate: CampaignSettingsGate,
+    private readonly completionService: SongCompletionService,
+    private readonly campaignId: string,
   ) {}
 
   async execute(): Promise<GenerationDispatcherResponse | null> {
@@ -82,6 +93,8 @@ export class GenerationDispatcher {
       });
       return null;
     }
+
+    logger.info("generation_started", { songId: song.id, status: song.status });
 
     try {
       const lyrics = await this.lyricsRepository.findById(song.lyricsId);
@@ -137,21 +150,125 @@ export class GenerationDispatcher {
       // Sprint v1.2 — AI Safety Hardening: `lyrics.parentMessage` is
       // deliberately never passed here — the parent's raw message must
       // never reach Mureka (see `SongGenerationInput`).
-      const submission = await this.songGenerator.submitGeneration({
+      const submission = await this.submitWithFallback(song, {
         lyrics: lyrics.content,
         musicMood: lyrics.musicMood,
         musicDirection: lyrics.musicDirection,
         voice: lyrics.voice,
       });
 
-      song.recordSubmission(submission);
-      const updated = await this.songRepository.update(song);
+      // An asynchronous provider handed back a task id: the song stays
+      // `GENERATING` and `GenerationPoller` takes over on a later tick.
+      if (submission.kind === "async") {
+        song.recordSubmission({
+          providerTaskId: submission.providerTaskId,
+          providerTraceId: submission.providerTraceId,
+        });
+        const updated = await this.songRepository.update(song);
 
-      return { song: updated.toSnapshot() };
+        return { song: updated.toSnapshot() };
+      }
+
+      if (submission.kind !== "immediate") {
+        // Defensive: a provider returning a shape this version does not know
+        // must fail loudly rather than be treated as "it handed us audio",
+        // which would dereference fields that are not there.
+        throw new BusinessRuleError("The provider returned an unrecognised submission result.", {
+          code: "song.unknown_submission_kind",
+          context: { songId: song.id, provider: song.provider },
+        });
+      }
+
+      // A synchronous provider already generated the song inside the call
+      // above and handed over the audio. There is nothing to poll, so this
+      // same invocation finishes it — through the *same*
+      // `SongCompletionService` the polling path uses, so FFmpeg's
+      // 60-second cap, the R2 key convention and the one-time email are
+      // byte-for-byte the same for both providers.
+      song.recordImmediateSubmission();
+      const completed = await this.completionService.complete(song, {
+        bytes: submission.audio.bytes,
+        contentType: submission.audio.contentType,
+        providerSongId: submission.providerSongId,
+      });
+
+      return { song: completed.toSnapshot() };
     } catch (error) {
-      song.markFailed(error instanceof Error ? error.message : String(error));
-      await this.songRepository.update(song);
+      // `SongCompletionService` already marks its own failures `FAILED`,
+      // and `Song` has no `FAILED -> FAILED` transition, so re-marking
+      // would throw a state-machine error over the top of the real cause.
+      if (song.status === SongStatus.GENERATING) {
+        song.markFailed(error instanceof Error ? error.message : String(error));
+        await this.songRepository.update(song);
+      }
+
+      logger.error("generation_provider_failed", {
+        songId: song.id,
+        provider: song.provider,
+        providerModel: song.providerModel,
+        status: song.status,
+        errorCode: providerErrorCode(error),
+      });
+
       throw error;
+    }
+  }
+
+  /**
+   * Submits to the campaign's configured primary provider and, only for the
+   * explicitly whitelisted pre-generation failures, retries once on the
+   * configured fallback provider.
+   *
+   * Three properties this deliberately guarantees:
+   * - **At most one fallback per song.** If the fallback also fails, the
+   *   error propagates and the song ends `FAILED`. There is no chain.
+   * - **Only the whitelist.** See `providerFallbackPolicy` — an ambiguous
+   *   failure (timeout, connection reset, 5xx) never triggers a fallback,
+   *   because the primary may already be generating a song we have paid
+   *   for. Rate limits, bad payloads and credential errors do not either.
+   * - **The provider is recorded before the call, not after.** So a failure
+   *   leaves behind which provider was actually attempted, and the value
+   *   `GenerationPoller` later reads always matches whoever really ran.
+   */
+  private async submitWithFallback(
+    song: Song,
+    input: SongGenerationInput,
+  ): Promise<SongGenerationSubmission> {
+    const routing = await this.routingGate.getGenerationRouting(this.campaignId);
+    const primary = this.providerRegistry.get(routing.primaryProvider);
+
+    logger.info("generation_provider_selected", {
+      songId: song.id,
+      provider: primary.name,
+      providerModel: primary.model,
+      primary: routing.primaryProvider,
+      fallback: routing.fallbackProvider,
+    });
+
+    song.assignProvider(primary.name, primary.model);
+
+    try {
+      return await primary.submitGeneration(input);
+    } catch (error) {
+      const canFallBack = routing.fallbackProvider !== null && isFallbackEligible(error);
+
+      if (!canFallBack) {
+        throw error;
+      }
+
+      const fallback = this.providerRegistry.get(routing.fallbackProvider as string);
+
+      logger.error("generation_fallback", {
+        songId: song.id,
+        primary: primary.name,
+        fallback: fallback.name,
+        selected: fallback.name,
+        reason: providerErrorCode(error),
+      });
+
+      song.assignProvider(fallback.name, fallback.model);
+
+      return await fallback.submitGeneration(input);
     }
   }
 

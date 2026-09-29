@@ -33,6 +33,7 @@ export class SongMapper {
       lyricsId: record.lyricsId,
       moodId: record.moodId,
       provider: record.provider,
+      providerModel: record.providerModel,
       providerSongId: record.providerSongId,
       providerTaskId: record.providerTaskId,
       providerTraceId: record.providerTraceId,
@@ -59,6 +60,7 @@ export class SongMapper {
       lyricsId: song.lyricsId,
       moodId: song.moodId,
       provider: song.provider,
+      providerModel: song.providerModel,
       providerSongId: song.providerSongId,
       providerTaskId: song.providerTaskId,
       providerTraceId: song.providerTraceId,
@@ -77,6 +79,13 @@ export class SongMapper {
 
   static toUpdateInput(song: Song): Prisma.SongUncheckedUpdateInput {
     return {
+      // Both are written at submission time by `GenerationDispatcher`
+      // (`Song.assignProvider`), and rewritten if the whitelisted fallback
+      // provider takes over — so an update has to carry them, unlike the
+      // single-provider version of this mapper where `provider` was fixed
+      // at creation.
+      provider: song.provider,
+      providerModel: song.providerModel,
       providerSongId: song.providerSongId,
       providerTaskId: song.providerTaskId,
       providerTraceId: song.providerTraceId,

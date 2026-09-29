@@ -38,11 +38,43 @@ export interface SongGenerationInput {
   voice: Voice;
 }
 
-/** What a provider returns once it has accepted a generation job — before it has finished. */
-export interface SongGenerationSubmission {
-  providerTaskId: string;
-  providerTraceId: string | null;
+/**
+ * The providers this campaign can generate with. A closed set on the
+ * write path (the Admin panel's routing form validates against it — see
+ * `UpdateGenerationRoutingUseCase`); the read path stays permissive so a
+ * value that predates this union, or one somebody wrote straight into the
+ * database, degrades into a controlled "unknown provider" error instead
+ * of a type-level lie (see `SongGenerationProviderRegistry`).
+ */
+export const SONG_GENERATION_PROVIDERS = ["mureka", "lyria"] as const;
+
+export type SongGenerationProviderName = (typeof SONG_GENERATION_PROVIDERS)[number];
+
+/** Raw audio bytes as a provider handed them over, before any post-processing. */
+export interface GeneratedAudio {
+  bytes: Uint8Array;
+  contentType: string;
 }
+
+/**
+ * What a provider returns from `submitGeneration`. Two shapes, because the
+ * two providers genuinely differ and forcing either into the other's mould
+ * would mean inventing state that does not exist:
+ *
+ * - `async` — the provider accepted a job and handed back a task id to
+ *   poll later (Mureka). Nothing has been generated yet.
+ * - `immediate` — the provider generated the song inside this very call
+ *   and returned the audio with it (Lyria's Interactions API). There is no
+ *   task id, because there is no task to poll.
+ *
+ * Both paths converge immediately afterwards: `immediate` audio goes
+ * through the exact same `SongCompletionService` (FFmpeg → R2 → DB →
+ * email) that `async` audio reaches after `GenerationPoller` downloads
+ * it. There is one audio pipeline, not two.
+ */
+export type SongGenerationSubmission =
+  | { kind: "async"; providerTaskId: string; providerTraceId: string | null }
+  | { kind: "immediate"; providerSongId: string; audio: GeneratedAudio };
 
 /**
  * The result of asking a provider "is this job done yet?". A `completed`
@@ -76,6 +108,17 @@ export type SongGenerationPollResult =
   | { status: "failed"; error: string };
 
 export interface SongGenerationProvider {
+  /** Persisted on `Song.provider`, and the key this provider is registered under. */
+  readonly name: SongGenerationProviderName;
+  /** Persisted on `Song.providerModel` — the provider's own model identifier. */
+  readonly model: string;
   submitGeneration(input: SongGenerationInput): Promise<SongGenerationSubmission>;
-  pollGenerationStatus(providerTaskId: string): Promise<SongGenerationPollResult>;
+  /**
+   * Only an asynchronous provider implements this: a provider whose
+   * `submitGeneration` returns `immediate` has already finished by the time
+   * it returns, so there is never a task for `GenerationPoller` to ask
+   * about. Absent rather than a stub that throws, so the distinction is
+   * visible in the type system instead of at runtime.
+   */
+  pollGenerationStatus?(providerTaskId: string): Promise<SongGenerationPollResult>;
 }

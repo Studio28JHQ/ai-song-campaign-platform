@@ -42,7 +42,16 @@ export class UpdateGtmSettingsUseCase {
       }),
     );
 
-    return { gtmContainerId };
+    // Returns the whole settings payload, not just the field it changed, so
+    // the Admin screen's single `CampaignSettings` shape stays valid after
+    // either form saves (the routing form does the same).
+    const routing = await this.campaignSettingsGate.getGenerationRouting(this.campaignId);
+
+    return {
+      gtmContainerId,
+      primaryProvider: routing.primaryProvider,
+      fallbackProvider: routing.fallbackProvider,
+    };
   }
 
   private normalize(value: string | null): string | null {

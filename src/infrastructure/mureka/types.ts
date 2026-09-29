@@ -28,6 +28,8 @@ export interface MurekaGenerateRequest {
  * response shape is ever exposed outside `src/infrastructure/mureka/`.
  */
 export interface MurekaSubmissionResult {
+  /** Mureka is a genuinely asynchronous provider: this submission is a task to poll, not a finished song. */
+  kind: "async";
   providerTaskId: string;
   providerTraceId: string | null;
   submittedAt: Date;

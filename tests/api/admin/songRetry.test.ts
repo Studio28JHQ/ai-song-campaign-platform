@@ -67,6 +67,7 @@ function fakeFailedSong(): Song {
     lyricsId: "lyrics-1",
     moodId: "mood-1",
     provider: "suno",
+    providerModel: null,
     providerSongId: null,
     providerTaskId: null,
     providerTraceId: null,
