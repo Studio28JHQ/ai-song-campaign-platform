@@ -15,6 +15,19 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.37.0] - 2026-09-29
+
+### Changed
+
+- **The campaign's song cap is now counted, not tallied.** `maximumSongs` means "how many finished songs the campaign is holding", and that is a property of the `songs` table — but it was being enforced against `campaigns.songsGenerated`, a stored counter that is only ever incremented. Deleting a family never gave its slot back, so the two drifted apart: on 2026-09-29 the counter read **430** against **395** stored songs, and the campaign would have stopped 35 songs early on a number that counted songs nobody could listen to any more. `PrismaCampaignGate.isActiveAndGenerationEnabled` now compares `COUNT(songs WHERE status = 'COMPLETED')` against `maximumSongs`, which cannot drift because there is nothing to keep in sync, and which returns a slot the moment a song is deleted. The count is an index-only scan of the existing `songs_status_idx` (planner cost 22 against ~400 rows), runs once per authorisation, and needed **no schema change and no migration**. Queued, generating and failed songs are not counted — they never occupied a slot.
+- **The admin panel's campaign-goal figure shows the same number the system enforces.** It read `campaignSongsGenerated`, so it displayed `430 / 3000`; it now reads `songsCompleted` and displays `395 / 3000`. The two agree not because they read the same field but because they ask the same question. `campaignSongsGenerated` has been removed from the dashboard gate, its contract, the response DTO and the client types: its only consumer was this figure, and leaving the field in place would have left the trap that produced the drift.
+- **`campaigns.songsGenerated` is now explicitly legacy**, documented as such in `prisma/schema.prisma` and `docs/Architecture/Database_Model.md`. It is still incremented by `SongCompletionService`, unchanged, and still reads correctly as "how many songs ever reached COMPLETED" — a historical figure. It is no longer used to enforce the cap, to report capacity, or to tell anyone how many songs the campaign currently holds. The column is kept, and **no production value was corrected**: it does not need to be, because nothing depends on it any more.
+
+### Maintenance
+
+- Reconciliation query, for anyone checking the two numbers: `SELECT (SELECT count(*) FROM songs WHERE status='COMPLETED') AS stored, (SELECT "songsGenerated" FROM campaigns LIMIT 1) AS historical_tally;` — the gap is the songs that completed and were later deleted, and it is expected to grow.
+- New and updated tests (18 in the campaign gate, 13 in the dashboard component): capacity derived from the stored count at 2998/2999/3000/3001; the historical tally ignored entirely, including a tally of 430 against 395 stored and a tally already past the cap; `songsGenerated` no longer even selected from the campaign row; failed, queued and generating songs never counted; the count skipped altogether when the campaign is paused or generation is disabled; a failed count raising rather than silently assuming capacity; and the panel showing the stored count rather than the tally, at 13% and at 100%.
+
 ## [1.36.0] - 2026-09-29
 
 ### Added

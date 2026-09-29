@@ -28,7 +28,6 @@ export interface DashboardSummary {
   campaignGoal: number;
   averageGenerationMinutes: AverageGenerationMinutes;
   campaignMaximumSongs: number | null;
-  campaignSongsGenerated: number | null;
   songsCompletedToday: number;
   songsCompletedLast7Days: number;
   songsCompletedLast30Days: number;

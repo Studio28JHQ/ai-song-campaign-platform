@@ -1,4 +1,4 @@
-import { CampaignStatus, type PrismaClient } from "@/generated/prisma/client";
+import { CampaignStatus, type PrismaClient, SongStatus } from "@/generated/prisma/client";
 import type { CampaignGate } from "@/application/song/contracts/CampaignGate";
 import { DatabaseError } from "@/shared/errors";
 import { prisma as defaultPrismaClient } from "../client";
@@ -19,7 +19,6 @@ export class PrismaCampaignGate implements CampaignGate {
           status: true,
           isGenerationEnabled: true,
           maximumSongs: true,
-          songsGenerated: true,
         },
       });
 
@@ -27,11 +26,30 @@ export class PrismaCampaignGate implements CampaignGate {
         return false;
       }
 
-      return (
-        campaign.status === CampaignStatus.ACTIVE &&
-        campaign.isGenerationEnabled === true &&
-        campaign.songsGenerated < campaign.maximumSongs
-      );
+      if (campaign.status !== CampaignStatus.ACTIVE || campaign.isGenerationEnabled !== true) {
+        return false;
+      }
+
+      // Counted, not read from `campaigns.songsGenerated`.
+      //
+      // The cap means "how many finished songs the campaign is holding",
+      // and that is a property of the `songs` table, not of a number kept
+      // alongside it. Keeping a copy in sync required two code paths to
+      // agree forever, and they stopped agreeing: on 2026-09-29 the
+      // counter read 430 against 395 stored songs, because it is only
+      // ever incremented and deleting a family never gave the slot back.
+      // A campaign would have stopped 35 songs early on a number that
+      // described songs nobody could listen to any more.
+      //
+      // Counting cannot drift, because there is nothing to keep in sync.
+      // It costs an index-only scan of `songs_status_idx` once per
+      // authorisation — measured at cost 22 against ~400 rows — and it
+      // makes deleting a song give its slot back for free.
+      const completedSongs = await this.client.song.count({
+        where: { status: SongStatus.COMPLETED },
+      });
+
+      return completedSongs < campaign.maximumSongs;
     } catch (error) {
       throw new DatabaseError("Unexpected database error while checking campaign status.", {
         code: "song.unexpected_database_error",

@@ -50,8 +50,6 @@ export interface DashboardSummaryCounts {
   averageGenerationMinutes: AverageGenerationMinutes;
   /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists (or that section failed to load). */
   campaignMaximumSongs: number | null;
-  /** The campaign's `songsGenerated` counter — the same field the generation gate enforces against — `null` if no campaign row exists (or that section failed to load). */
-  campaignSongsGenerated: number | null;
   /** New leads registered per day, oldest first, over the last 30 days (including days with zero). */
   registrationsByDay: DailyCount[];
   /** Songs completed per day, oldest first, over the last 30 days (including days with zero). */

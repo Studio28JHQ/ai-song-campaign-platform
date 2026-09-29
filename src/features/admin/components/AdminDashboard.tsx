@@ -33,18 +33,20 @@ function formatMinutes(value: number | null): string {
  * bar — "3000 canciones" — driven by `summary.campaignGoal`
  * (`CAMPAIGN_MAX_SONGS`), never a hardcoded number.
  *
- * RC-final — Production Hardening: the numerator is
- * `campaignSongsGenerated` (`Campaign.songsGenerated`), the same
- * persisted counter the generation gate enforces against, falling back
- * to the live `songsCompleted` count only if no campaign row exists —
- * so this bar can never disagree with what the system is actually
- * enforcing.
+ * The numerator is `songsCompleted` — how many finished songs the
+ * campaign is holding right now, counted from `songs`. It used to be
+ * `Campaign.songsGenerated`, a stored counter that only ever went up:
+ * by 2026-09-29 it read 430 against 395 stored songs, so this bar was
+ * claiming a consumption that included songs nobody could listen to any
+ * more. The generation gate now counts the same way, so the bar and what
+ * the system enforces cannot disagree — not because they read the same
+ * field, but because they ask the same question.
  */
 function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
-  const songsGenerated = summary.campaignSongsGenerated ?? summary.songsCompleted;
+  const songsStored = summary.songsCompleted;
   const percentage =
     summary.campaignGoal > 0
-      ? Math.min(100, Math.round((songsGenerated / summary.campaignGoal) * 100))
+      ? Math.min(100, Math.round((songsStored / summary.campaignGoal) * 100))
       : 0;
   const failed = (summary.unavailableSections ?? []).includes("campaign");
 
@@ -53,7 +55,7 @@ function CampaignGoalProgress({ summary }: { summary: DashboardSummary }) {
       <div className="flex items-center justify-between">
         <span className="text-label text-muted-foreground">Meta de la campaña</span>
         <span className="text-sm font-semibold text-foreground">
-          {songsGenerated} / {summary.campaignGoal} ({percentage}%)
+          {songsStored} / {summary.campaignGoal} ({percentage}%)
         </span>
       </div>
       <div

@@ -126,15 +126,11 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       settle("generationTime", "avgGenerationMinutes(30d)", null, () =>
         this.averageGenerationMinutesSince(thirtyDaysAgo),
       ),
-      settle(
-        "campaign",
-        "campaign.findFirst",
-        null as { maximumSongs: number; songsGenerated: number } | null,
-        () =>
-          this.client.campaign.findFirst({
-            orderBy: { createdAt: "asc" },
-            select: { maximumSongs: true, songsGenerated: true },
-          }),
+      settle("campaign", "campaign.findFirst", null as { maximumSongs: number } | null, () =>
+        this.client.campaign.findFirst({
+          orderBy: { createdAt: "asc" },
+          select: { maximumSongs: true },
+        }),
       ),
       settle("windowCounts", "song.count(completedToday)", 0, () =>
         this.client.song.count({
@@ -182,7 +178,6 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       emailsResent,
       averageGenerationMinutes: { today, last7Days, last30Days },
       campaignMaximumSongs: campaign?.maximumSongs ?? null,
-      campaignSongsGenerated: campaign?.songsGenerated ?? null,
       songsCompletedToday,
       songsCompletedLast7Days,
       songsCompletedLast30Days,

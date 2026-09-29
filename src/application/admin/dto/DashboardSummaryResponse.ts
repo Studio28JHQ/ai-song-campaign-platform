@@ -25,8 +25,6 @@ export interface DashboardSummaryResponse {
   averageGenerationMinutes: AverageGenerationMinutes;
   /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists. */
   campaignMaximumSongs: number | null;
-  /** The campaign's `songsGenerated` counter — the same field the generation gate enforces against — `null` if no campaign row exists. */
-  campaignSongsGenerated: number | null;
   songsCompletedToday: number;
   songsCompletedLast7Days: number;
   songsCompletedLast30Days: number;

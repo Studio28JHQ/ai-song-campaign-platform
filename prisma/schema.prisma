@@ -89,6 +89,17 @@ model Campaign {
   name                String
   status              CampaignStatus @default(DRAFT)
   maximumSongs        Int
+  // LEGACY as of Sprint FINAL-6 — Derived Campaign Capacity. This is a
+  // historical tally of how many songs ever reached COMPLETED: it is
+  // only ever incremented (by `SongCompletionService`), never
+  // decremented, so it keeps counting songs that have since been
+  // deleted. On 2026-09-29 it read 430 against 395 stored songs.
+  //
+  // It is NOT the campaign's current consumption and must not be used
+  // to enforce `maximumSongs`, to report capacity, or to show a client
+  // how many songs the campaign holds. All three now count
+  // `songs WHERE status = 'COMPLETED'` directly — see
+  // `PrismaCampaignGate.isActiveAndGenerationEnabled`.
   songsGenerated      Int            @default(0)
   startsAt            DateTime
   endsAt              DateTime
