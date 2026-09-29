@@ -9,6 +9,13 @@ const MUREKA_QUERY_PATH = "/v1/song/query";
 const MUREKA_BILLING_PATH = "/v1/account/billing";
 
 /**
+ * Which call failed. Mureka reuses HTTP 400 across endpoints for causes
+ * that have nothing to do with each other, so the mapping below cannot
+ * be read from the status alone.
+ */
+type MurekaOperation = "submit" | "query" | "billing";
+
+/**
  * Minimal HTTP client for Mureka's official asynchronous song
  * generation endpoints — talks to Mureka and nothing else, built on the
  * shared `httpRequest` helper (`src/shared/http/`) rather than a vendor
@@ -44,7 +51,7 @@ export class MurekaClient {
 
     if (!response.ok) {
       const details = await response.json().catch(() => null);
-      throw MurekaClient.mapErrorResponse(response.status, details);
+      throw MurekaClient.mapErrorResponse(response.status, details, "submit");
     }
 
     return MurekaClient.parseJsonBody(response);
@@ -64,7 +71,7 @@ export class MurekaClient {
 
     if (!response.ok) {
       const details = await response.json().catch(() => null);
-      throw MurekaClient.mapErrorResponse(response.status, details);
+      throw MurekaClient.mapErrorResponse(response.status, details, "query");
     }
 
     return MurekaClient.parseJsonBody(response);
@@ -87,7 +94,7 @@ export class MurekaClient {
 
     if (!response.ok) {
       const details = await response.json().catch(() => null);
-      throw MurekaClient.mapErrorResponse(response.status, details);
+      throw MurekaClient.mapErrorResponse(response.status, details, "billing");
     }
 
     return MurekaClient.parseJsonBody(response);
@@ -112,8 +119,13 @@ export class MurekaClient {
    * body's message, never the status code alone, so the body is
    * inspected to tell them apart.
    */
-  private static mapErrorResponse(status: number, details: unknown): ExternalApiError {
-    const context = { status, details };
+  private static mapErrorResponse(
+    status: number,
+    details: unknown,
+    operation: MurekaOperation,
+  ): ExternalApiError {
+    const context = { status, details, operation };
+    const reported = MurekaClient.describeProviderError(details);
 
     if (status === 401) {
       return new ExternalApiError("Mureka API rejected the request: invalid authentication.", {
@@ -142,10 +154,32 @@ export class MurekaClient {
     }
 
     if (status === 400) {
-      return new ExternalApiError("Mureka API rejected the request: invalid payload.", {
-        code: "mureka.invalid_request",
-        context,
-      });
+      // Mureka answers 400 for two unrelated things, and collapsing them
+      // sent a real investigation down the wrong path: a song whose
+      // submission Mureka had *accepted* (it returned a task id, and the
+      // lyrics were 318 characters, well inside every limit) was recorded
+      // as "invalid payload" because the later *poll* returned 400.
+      //
+      // On the generation endpoint a 400 really is our request being
+      // malformed. On the query endpoint it means the task id is unknown
+      // to the authenticated account — verified live when this
+      // integration shipped, with a deliberately non-existent id (see
+      // docs/Architecture/External_Services.md, "Live validation"). The
+      // payload is not even part of that call, which takes no body.
+      if (operation === "query") {
+        return new ExternalApiError(
+          MurekaClient.withReported(
+            "Mureka does not recognise this task id for the authenticated account.",
+            reported,
+          ),
+          { code: "mureka.task_not_found", context },
+        );
+      }
+
+      return new ExternalApiError(
+        MurekaClient.withReported("Mureka API rejected the request: invalid payload.", reported),
+        { code: "mureka.invalid_request", context },
+      );
     }
 
     if (status >= 500) {
@@ -164,5 +198,40 @@ export class MurekaClient {
   private static extractErrorMessage(details: unknown): string | null {
     const message = (details as { error?: { message?: unknown } } | null)?.error?.message;
     return typeof message === "string" ? message : null;
+  }
+
+  /**
+   * Mureka's own explanation, ready to be recorded next to ours.
+   *
+   * It was already being captured into the error's `context`, but
+   * nothing downstream reads that: `Song.markFailed` stores the message
+   * and `classifyPollFailure` logs the message, so the provider's actual
+   * words were reaching the database as a discarded object. Folding them
+   * into the message is what turns "invalid payload" from a guess into
+   * something the campaign team can act on.
+   *
+   * Truncated, and scrubbed of the API key: Mureka has never echoed a
+   * credential back, but this string now lands in `songs.providerError`
+   * and is shown in the admin panel, so it is not the place to find out.
+   */
+  private static describeProviderError(details: unknown): string | null {
+    const message =
+      MurekaClient.extractErrorMessage(details) ??
+      (typeof (details as { message?: unknown } | null)?.message === "string"
+        ? (details as { message: string }).message
+        : null);
+
+    const trimmed = message?.trim();
+    if (!trimmed) return null;
+
+    const apiKey = appConfig.mureka.apiKey;
+    const scrubbed = apiKey ? trimmed.split(apiKey).join("[redacted]") : trimmed;
+
+    return scrubbed.slice(0, 200);
+  }
+
+  /** Appends Mureka's own wording to ours, when there is any. */
+  private static withReported(message: string, reported: string | null): string {
+    return reported ? `${message} Mureka reported: "${reported}".` : message;
   }
 }
