@@ -8,6 +8,7 @@ import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlReso
 import type { SongEmailSender } from "@/application/song/contracts/SongEmailSender";
 import type { ResendSongEmailRequest } from "../dto/ResendSongEmailRequest";
 import type { ResendSongEmailResponse } from "../dto/ResendSongEmailResponse";
+import { buildSongShareUrl } from "@/application/song/services/songShareUrl";
 
 /**
  * The manual "Resend email" operational recovery action (see
@@ -77,6 +78,11 @@ export class ResendSongEmailUseCase {
       songId: song.id,
       audioUrl,
       duration: song.duration,
+      // The same share page the automatic email links to — a resend must
+      // not hand the family a different URL. `null` for a song that
+      // completed before this column existed and was never backfilled,
+      // which simply omits the share section.
+      shareUrl: buildSongShareUrl(song.publicShareToken),
     });
 
     await this.auditLogRepository.create(

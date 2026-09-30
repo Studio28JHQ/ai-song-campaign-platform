@@ -11,6 +11,12 @@ export interface SongReadyEmailInput {
   songId: string;
   audioUrl: string;
   duration: number | null;
+  /**
+   * The song's own public share page, or `null` when it has none. Built
+   * by the caller (`buildSongShareUrl`) so the template never handles a
+   * token — see `SongReadyEmailTemplate`.
+   */
+  shareUrl: string | null;
 }
 
 export interface SongEmailSender {

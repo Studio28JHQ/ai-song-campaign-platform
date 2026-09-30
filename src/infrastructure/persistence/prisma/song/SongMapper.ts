@@ -46,6 +46,7 @@ export class SongMapper {
       generatedAt: record.generatedAt,
       completedAt: record.completedAt,
       emailedAt: record.emailedAt,
+      publicShareToken: record.publicShareToken,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
@@ -72,6 +73,7 @@ export class SongMapper {
       submittedAt: song.submittedAt,
       generatedAt: song.generatedAt,
       completedAt: song.completedAt,
+      publicShareToken: song.publicShareToken,
       createdAt: song.createdAt,
       updatedAt: song.updatedAt,
     };
@@ -97,6 +99,10 @@ export class SongMapper {
       submittedAt: song.submittedAt,
       generatedAt: song.generatedAt,
       completedAt: song.completedAt,
+      // Carried on update because it is minted by `markCompleted`, which
+      // is persisted through this path — without it the token would be
+      // generated in memory and immediately thrown away.
+      publicShareToken: song.publicShareToken,
       updatedAt: song.updatedAt,
     };
   }

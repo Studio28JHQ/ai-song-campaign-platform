@@ -209,6 +209,7 @@ describe("Song.fromPersistence / toSnapshot", () => {
       generatedAt: song.generatedAt,
       completedAt: song.completedAt,
       emailedAt: song.emailedAt,
+      publicShareToken: song.publicShareToken,
       createdAt: song.createdAt,
       updatedAt: song.updatedAt,
     });

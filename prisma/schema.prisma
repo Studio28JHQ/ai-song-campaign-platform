@@ -322,10 +322,10 @@ model GenerationAttempt {
 // last-reported state for diagnostics; `submittedAt`/`completedAt`
 // bound how long a generation was in flight.
 model Song {
-  id              String     @id @default(uuid()) @db.Uuid
-  leadId          String     @unique @db.Uuid
-  lyricsId        String     @db.Uuid
-  moodId          String     @db.Uuid
+  id               String     @id @default(uuid()) @db.Uuid
+  leadId           String     @unique @db.Uuid
+  lyricsId         String     @db.Uuid
+  moodId           String     @db.Uuid
   // The provider that actually generated this song, written by
   // `GenerationDispatcher` at submission time — never the currently
   // configured primary. `GenerationPoller` resolves its adapter from
@@ -333,25 +333,38 @@ model Song {
   // song that is already in flight. The default moved from the legacy
   // "suno" to "mureka" (the real provider since the pre-beta switch);
   // historical rows are untouched.
-  provider        String     @default("mureka")
+  provider         String     @default("mureka")
   // The provider's own model identifier for this generation
   // ("mureka-9", "lyria-3.5"). Nullable: rows created before this column
   // existed never recorded it.
-  providerModel   String?
-  providerSongId  String?
-  providerTaskId  String?
-  providerTraceId String?
-  providerStatus  String?
-  providerError   String?
-  audioStorageKey String?
-  duration        Int?
-  status          SongStatus @default(QUEUED)
-  submittedAt     DateTime?
-  generatedAt     DateTime?
-  completedAt     DateTime?
-  emailedAt       DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  providerModel    String?
+  providerSongId   String?
+  providerTaskId   String?
+  providerTraceId  String?
+  providerStatus   String?
+  providerError    String?
+  audioStorageKey  String?
+  duration         Int?
+  status           SongStatus @default(QUEUED)
+  submittedAt      DateTime?
+  generatedAt      DateTime?
+  completedAt      DateTime?
+  emailedAt        DateTime?
+  // The opaque token in this song's public share URL
+  // (`/song/share/[shareToken]`), minted by `Song.markCompleted` from
+  // `crypto.getRandomValues` — 32 bytes, hex. Deliberately its own value
+  // rather than the song id, which is already exposed to the parent's
+  // own browser: a public link has to be revocable without disturbing
+  // anything that references the song internally, and clearing this
+  // column kills the public page and nothing else.
+  //
+  // Nullable and unique. `null` means "no public page": not completed
+  // yet, created before this column existed, or deliberately revoked.
+  // The unique index is also the lookup index — the public route
+  // resolves a song by this column and nothing else.
+  publicShareToken String?    @unique
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   lyrics Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Restrict)

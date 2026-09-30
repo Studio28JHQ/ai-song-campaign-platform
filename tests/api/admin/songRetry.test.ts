@@ -80,6 +80,7 @@ function fakeFailedSong(): Song {
     generatedAt: null,
     completedAt: null,
     emailedAt: null,
+    publicShareToken: null,
     createdAt: now,
     updatedAt: now,
   });

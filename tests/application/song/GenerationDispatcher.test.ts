@@ -300,6 +300,7 @@ describe("GenerationDispatcher", () => {
       generatedAt: null,
       completedAt: null,
       emailedAt: null,
+      publicShareToken: null,
       createdAt: submittedAt,
       updatedAt: submittedAt,
     });

@@ -15,6 +15,48 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.41.0] - 2026-09-30
+
+### Added
+
+- **A public page per song, so a share link plays the actual song.** The share buttons previously carried the campaign landing page, because nothing in the application could be handed to a stranger: the audio URL is an R2 presigned link whose query string embeds `X-Amz-Credential` and which expires after 7 days, `/song` is behind a parent session, and `/resume/[token]` _issues_ that session. `/song/share/[shareToken]` is now the one page built to be shared. It shows the baby's first name, a player and a "crea tu propia canción" CTA — and nothing else about the family.
+- **`songs.publicShareToken`** — 32 random bytes as hex (`crypto.getRandomValues`, the same generator and bar as `Lead.resumeToken`), minted by `Song.markCompleted` at the moment a song becomes shareable. Deliberately not the song id, which is already exposed to the parent's own browser: a public link has to be revocable without disturbing anything internal, and clearing this column kills the public page and nothing else. Nullable and unique; the unique index is also the lookup index.
+- **`GET /song/share/[shareToken]/audio`** — the player's source. It answers 302 to a signed URL minted at that moment, so the credential lives in one redirect for one listener instead of sitting in the source of a page anyone can view. Verified: the rendered page contains no `X-Amz`, no `cloudflarestorage` host, no storage key, no email, no parent name and no resume token.
+- **Per-song Open Graph and Twitter tags** — `og:title` names the child, `og:url` is that song's own URL, `og:image` is the absolute campaign banner, and the card is `summary_large_image`. `robots: noindex` is deliberate: social scrapers read the tags directly, while a search engine indexing these would turn private shares into a searchable directory of babies' names.
+- **`PublicSongShareGate`** — the application's only unauthenticated read. Shareability is enforced in the `where` clause (`COMPLETED` **and** stored audio **and** a matching token), never filtered after the fact, and the `select` is an allowlist of three fields, so adding a column to `songs` cannot widen it. Every failure — unknown token, revoked token, still generating, no audio — answers identically, so probing tokens reveals nothing.
+- **72 tests** across the token, the gate, the page, the audio route, the Open Graph tags and the email.
+
+### Changed
+
+- **`SongReadyEmailInput`/`SongReadyEmailContent` take `shareUrl`.** Built by the callers through `buildSongShareUrl`, so the template never handles a token. Both send paths pass it — the automatic email from `SongCompletionService` and the admin resend from `ResendSongEmailUseCase`, which must not hand a family a different URL than the original. `null` omits the share section rather than pointing it somewhere that is not this song.
+- `audioUrl` is unchanged and still appears exactly twice, on "escuchar" and "descargar". The visual design of both emails is untouched.
+
+### Notes
+
+- **The migration was applied to production.** `20260930140000_song_public_share_token` adds one nullable column, its unique index, and backfilled a token for all 530 songs that were already `COMPLETED` with stored audio, so existing families can share too. It is additive; `pgcrypto` was verified present in the database and `gen_random_bytes(32)` produces the same 64-character hex the application mints. Production verification confirmed 530/530 eligible songs have a unique valid token.
+- **The reported Resend 403 is not reproducible and the premise was wrong.** `GET https://api.resend.com/domains` answers **200**, and `bassa.com.ec` — the domain `EMAIL_FROM` uses — is `"status": "verified"` with `capabilities.sending: "enabled"`. No Resend configuration was touched. The only 403 this codebase could plausibly produce from Resend is on `/domains`, which is used exclusively by `GET /api/internal/health`, never by sending: a sending-only key is refused there while delivering mail normally.
+- **Production `NEXT_PUBLIC_APP_URL` is correct** (`https://miprimeracancion.bassa.com.ec`) and was not modified. Local `.env` resolves to the preview host, which is why locally rendered previews show that domain.
+
+## [1.40.0] - 2026-09-30
+
+### Changed
+
+- **Both campaign emails now carry the approved campaign design.** The welcome email and the "song ready" email were a dark navy bar with the campaign name over a 480px card; they now open with the approved `banner-campaign.jpg` hero and use the campaign's own palette, taken from `.theme-campaign` in `app/globals.css` — navy `#243b53` headings, violet `#8b5cf6` primary buttons, `#f8fcff` page — on a fluid 600px card. Still table-based markup with inline styles only: no `<style>` block (Gmail strips it), no flex or grid (Outlook renders through Word), no web fonts, no SVG, no JavaScript. Verified rendered at desktop and at 390px.
+- **The welcome email explains what happens next.** A three-step "¿Qué sigue?" block, worded against the real flow rather than a generic funnel — and step 2 is _"Revisa y aprueba la letra"_, named explicitly because approving is exactly where families stall: 86 of the families without a song are sitting on a generated lyric they never approved. The "Guarda este correo" note is now a highlighted block rather than grey small print.
+- **Dynamic values are escaped before they reach the HTML.** Both templates interpolated `parentName` and `babyName` straight into the markup. `sanitizePlainText` already rejects `<` and `>` at the API boundary, so this was not an open hole, but nothing escaped `&` — "Ana & Luis" reached the inbox as a broken entity. Escaping now happens next to the interpolation, where it can be seen.
+
+### Added
+
+- **`emailChrome`** — the shell, banner header, footer, buttons, support block and palette both templates share. They had drifted into two hand-maintained copies of the same table skeleton and this redesign would have made that two copies of a much larger one. The banner resolves through the existing `buildAppUrl` (`NEXT_PUBLIC_APP_URL`), the same helper the resume link already uses, so the domain is written down once and a mail client gets the absolute `https://` URL it needs.
+- **A share section in the "song ready" email** — WhatsApp, Facebook and X, plus the campaign link as selectable text. No LinkedIn, by requirement. No JavaScript: an email cannot reach a clipboard, so "copiar enlace" is a link the reader can select and copy, which is the substitution the brief allows.
+- **28 tests** across `emailChrome.test.ts` and the two template suites: escaping, absolute banner URL, dynamic duration (`0:07`/`1:00`/`1:35`), the three steps, the save-this-email block, share-link encoding, the absence of LinkedIn and of any script, and that neither template emits `<style>`, flex, grid or SVG.
+
+### Notes
+
+- **The share buttons deliberately do not share the song's audio URL.** That URL is an R2 presigned link: its query string embeds `X-Amz-Credential` — the bucket's access key id — and it stops working after 7 days (`R2_SIGNED_URL_EXPIRY_SECONDS`). Publishing it to Facebook or X would post both problems for every family. It stays exactly where it already was, on the parent's own "escuchar" and "descargar" buttons; the share buttons carry the campaign landing page instead. Letting family actually listen needs a public, link-shareable song page, which is a new route with its own access and privacy model — recorded under "Social Sharing" in `BACKLOG_V2.md`.
+- **Nothing outside presentation changed.** `LeadEmailSender`, `SongEmailSender`, `ResendEmailService`, `ResendClient`, the subjects, the send sites (`POST /api/leads`, `SongCompletionService`, `ResendSongEmailUseCase`) and every template input are untouched; the pre-existing template tests pass unmodified.
+- **Requires `NEXT_PUBLIC_APP_URL` to be the real production domain.** The banner and the share links are built from it. The local `.env` currently resolves it to a `*.vercel.app` preview host, which `buildAppUrl`'s own contract already warns against — if production carries the same value, both will point at the preview domain.
+
 ## [1.39.0] - 2026-09-30
 
 ### Changed

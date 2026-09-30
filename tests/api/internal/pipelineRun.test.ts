@@ -174,6 +174,7 @@ describe("GET /api/internal/pipeline/run", () => {
       generatedAt: null,
       completedAt: null,
       emailedAt: null,
+      publicShareToken: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -210,6 +211,7 @@ describe("GET /api/internal/pipeline/run", () => {
       generatedAt: null,
       completedAt: null,
       emailedAt: null,
+      publicShareToken: null,
       createdAt: now,
       updatedAt: now,
     });

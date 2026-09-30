@@ -12,7 +12,9 @@ Deeper campaign analytics beyond basic admin reporting.
 
 ## Social Sharing
 
-Allow users to share their generated song on social platforms.
+**Implemented.** The "song ready" email's WhatsApp, Facebook and X buttons share the song's own public page, `/song/share/[shareToken]`, which shows the baby's first name, a player and a "crea tu propia canción" CTA, and carries per-song Open Graph tags so the link previews with the campaign banner.
+
+What remains in V2 is everything beyond that first step: in-app sharing from `/song` rather than only from the email, a share count or any analytics on it, per-song Open Graph images rendered with the child's name, and an admin screen to revoke a share link. Revocation itself is already possible — clearing `songs.publicShareToken` kills the public page and nothing else — but there is no UI for it.
 
 ## Voice Cloning
 

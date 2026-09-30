@@ -80,6 +80,7 @@ function completedEmailedSong(): Song {
     generatedAt: now,
     completedAt: now,
     emailedAt: now,
+    publicShareToken: null,
     createdAt: now,
     updatedAt: now,
   });
@@ -148,6 +149,7 @@ describe("POST /api/admin/songs/[songId]/resend-email", () => {
         generatedAt: null,
         completedAt: null,
         emailedAt: null,
+        publicShareToken: null,
         createdAt: now,
         updatedAt: now,
       }),
@@ -183,6 +185,7 @@ describe("POST /api/admin/songs/[songId]/resend-email", () => {
         generatedAt: now,
         completedAt: now,
         emailedAt: null,
+        publicShareToken: null,
         createdAt: now,
         updatedAt: now,
       }),

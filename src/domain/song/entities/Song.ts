@@ -19,6 +19,30 @@ import {
  */
 const DEFAULT_PROVIDER = "mureka";
 
+/** 256 bits, the same bar `Lead`'s resume token and the session token use. */
+const PUBLIC_SHARE_TOKEN_BYTE_LENGTH = 32;
+
+/**
+ * The opaque token that identifies this song on its public share page.
+ *
+ * Deliberately its own random value and not the song id: the id is
+ * already handed to the parent's own browser by `GET /api/song/[songId]`,
+ * and a public link has to stay revocable without disturbing anything
+ * that references the song internally — clearing this column kills the
+ * public page and nothing else. It is never derived from the id, the
+ * lead, the baby's name, the email or a timestamp, so possessing one
+ * reveals nothing and guessing another is a 256-bit search.
+ *
+ * Uses the platform's Web Crypto API, the same generator and the same
+ * hex encoding as `Lead`'s resume token, so this file needs no
+ * Node-specific import.
+ */
+function generatePublicShareToken(): string {
+  const bytes = new Uint8Array(PUBLIC_SHARE_TOKEN_BYTE_LENGTH);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /**
  * `FAILED -> GENERATING` is allowed so a transient provider failure can be
  * retried against the *same* row: `Song.leadId` is unique at the database
@@ -69,6 +93,10 @@ export class Song {
       providerError: null,
       audioStorageKey: null,
       duration: null,
+      // Minted on completion, not here: a song with no audio has nothing
+      // to share, and handing out a token before there is a page behind
+      // it would only create a link that 404s.
+      publicShareToken: null,
       status: SongStatus.QUEUED,
       submittedAt: null,
       generatedAt: null,
@@ -219,6 +247,11 @@ export class Song {
     this.props.providerError = null;
     this.props.generatedAt = now;
     this.props.completedAt = now;
+    // The moment the song becomes shareable is the moment it gets its
+    // public token. Minted once and kept: a retry cannot reach this
+    // method (`COMPLETED` has no outgoing transition), so a link already
+    // sent to a family can never be silently repointed.
+    this.props.publicShareToken ??= generatePublicShareToken();
   }
 
   /** Records a failed generation attempt. Not terminal — see `ALLOWED_TRANSITIONS`. */
@@ -321,6 +354,25 @@ export class Song {
     return this.props.emailedAt;
   }
 
+  get publicShareToken(): string | null {
+    return this.props.publicShareToken;
+  }
+
+  /**
+   * Whether this song may be served from its public share page: it
+   * finished, it has audio, and it still has a token. Expressed over the
+   * domain's existing states rather than a new "published" flag, so
+   * there is one definition of "ready" and clearing the token is enough
+   * to revoke the link.
+   */
+  get isPubliclyShareable(): boolean {
+    return (
+      this.props.status === SongStatus.COMPLETED &&
+      this.props.audioStorageKey !== null &&
+      this.props.publicShareToken !== null
+    );
+  }
+
   get createdAt(): Date {
     return this.props.createdAt;
   }
@@ -349,6 +401,7 @@ export class Song {
       generatedAt: this.props.generatedAt,
       completedAt: this.props.completedAt,
       emailedAt: this.props.emailedAt,
+      publicShareToken: this.props.publicShareToken,
       createdAt: this.props.createdAt,
       updatedAt: this.props.updatedAt,
     };

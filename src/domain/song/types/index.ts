@@ -66,6 +66,14 @@ export interface SongProps {
   completedAt: Date | null;
   /** When the one-time "song ready" email was delivered — `null` until then. Written exclusively by `EmailDeliveryTracker`'s atomic claim; read-only from this entity's perspective. */
   emailedAt: Date | null;
+  /**
+   * The opaque token in this song's public share URL, minted when the
+   * song completes (see `Song.markCompleted`). `null` means the song has
+   * no public page — because it has not completed, because it predates
+   * this field, or because the token was cleared to revoke the link.
+   * Never derived from `id`, the lead, or any timestamp.
+   */
+  publicShareToken: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +98,7 @@ export interface SongSnapshot {
   generatedAt: Date | null;
   completedAt: Date | null;
   emailedAt: Date | null;
+  publicShareToken: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
