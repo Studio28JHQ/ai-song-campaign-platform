@@ -17,6 +17,34 @@ const appName = process.env.NEXT_PUBLIC_APP_NAME || "Mi primera canción";
 const description =
   "Recibe una canción personalizada creada con IA para tu bebé, totalmente gratis. Regístrate en minutos, aprueba la letra y recibe tu canción única por correo electrónico.";
 
+/**
+ * The campaign banner, reused as this page's social card — the same
+ * asset the emails already use (`emailChrome.bannerUrl`), so the link
+ * preview and the inbox show the same artwork. Dimensions are the
+ * file's real ones (1920×1000, a 1.92:1 ratio, which is what Facebook
+ * and X want for a large card).
+ *
+ * The path stays relative on purpose. `metadataBase` in `app/layout.tsx`
+ * resolves it to an absolute `https://` URL in the rendered tag, which
+ * is what the scrapers require, while keeping the domain declared once
+ * instead of hardcoded here — the same treatment `canonical` and
+ * `openGraph.url` above already get.
+ */
+const OG_IMAGE = {
+  url: "/campaign/banners/banner-campaign.jpg",
+  width: 1920,
+  height: 1000,
+  alt: "Mi primera canción — una canción personalizada para tu bebé",
+  type: "image/jpeg",
+};
+
+/**
+ * Note that this `openGraph` block *replaces* the one in
+ * `app/layout.tsx` rather than merging with it — Next.js overwrites
+ * nested metadata objects instead of deep-merging them. That is why
+ * `type` is repeated here: without it the landing rendered no
+ * `og:type` at all, even though the layout declares one.
+ */
 export const metadata: Metadata = {
   title: "Una canción personalizada para tu bebé | Bassa",
   description,
@@ -24,13 +52,17 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   openGraph: {
+    type: "website",
     url: "/",
     title: "Una canción personalizada para tu bebé | Bassa",
     description,
+    images: [OG_IMAGE],
   },
   twitter: {
+    card: "summary_large_image",
     title: "Una canción personalizada para tu bebé | Bassa",
     description,
+    images: [OG_IMAGE],
   },
 };
 
