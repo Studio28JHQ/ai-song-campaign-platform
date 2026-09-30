@@ -15,6 +15,21 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.43.0] - 2026-09-30
+
+### Fixed
+
+- **The sung performance now has a time budget, so the last line survives.** `MUREKA_STYLE` had been rebuilt from memory when the Mureka path was restored on 2026-09-14, and in the process it lost the two instructions that gave the vocal a deadline. Measured before this change: **257 of 267 `mureka-9` songs (96.3%) arrived at `FfmpegAudioProcessor` already at or past 60 seconds and had to be cut** — the performance was still going when the cap hit. Because the campaign's brand line is the last thing in every lyric (it lands in the final 90 characters of 529 of 534 approved lyrics), it is the first thing lost. Three corrections, all inside the one constant:
+  - **`finish the vocal performance naturally around second 50, leaving only a short instrumental ending`** replaces a bare "finish naturally", which set no deadline for the singing at all. This is the anchor that matters most, and it pairs with the fade: `FfmpegAudioProcessor` starts fading at second 55, so a vocal ending near 50 fades over instrument instead of over the last words.
+  - **`vocals begin within the first two seconds with an immediate vocal hook, no instrumental intro`** replaces "lead vocals enter by about second 5, only a brief musical pickup, no **long** instrumental intro". The old wording licensed exactly what it meant to forbid — "only a brief musical pickup" permits an intro, and "no _long_ intro" makes an absolute ban a matter of degree. Roughly three seconds of the sixty go back to the song.
+  - **`sing every line of the lyrics exactly once, continuously and naturally, including the final line before the instrumental ending begins`** is new — neither this constant nor the external script it was rebuilt from ever stated it.
+
+### Notes
+
+- **The style stays inside Mureka's 1024-character limit.** The three additions pushed it to 1029, over the hard limit that Mureka rejects with `HTTP 400`, so the duplicated "sing the lyrics exactly once" / "sing every line of the lyrics" clauses were merged into one rather than dropping any instruction. Final length **1013**, with the existing contract tests still asserting the bound.
+- **Deliberately unchanged, one variable at a time:** 86 BPM, `mureka-9`, the two-verse/chorus/ending structure (a hypothesis the audit could not demonstrate), FFmpeg and its 60-second cap and fade, the 360-character lyric limit, the 280–320 target, and the position of the brand line.
+- **Not verified against real audio.** This changes the instructions Mureka receives; whether its output actually lands the vocal by second 50 needs a real generation to confirm. The measurable check afterwards is the share of songs stored at exactly 60 seconds — today 96.3% for `mureka-9`.
+
 ## [1.42.1] - 2026-09-30
 
 ### Fixed

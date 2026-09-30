@@ -43,13 +43,17 @@ describe("PromptBuilder.build", () => {
     const payload = PromptBuilder.build(baseInput);
     expect(payload.prompt).toMatch(/no instrumental padding/i);
     expect(payload.prompt).toMatch(/no filler vocalizations \(humming, mmm, uh, ooh\)/i);
-    expect(payload.prompt).toMatch(/no long instrumental intro/i);
+    expect(payload.prompt).toMatch(/no instrumental intro/i);
   });
 
-  it("instructs singing the provided lyrics continuously and naturally, using the vocal time for the story", () => {
+  it("requires every line to be sung once, the final line included, before the ending", () => {
+    // The brand phrase is the last thing in every lyric (see
+    // `ai/claude/PromptBuilder`'s Brand Placement), so "sing every line"
+    // and "including the final line" are what keep the campaign audible
+    // when the performance runs short of time.
     const payload = PromptBuilder.build(baseInput);
     expect(payload.prompt).toMatch(
-      /sing the lyrics exactly once, continuously and naturally, using the vocal time for the story/i,
+      /sing every line of the lyrics exactly once, continuously and naturally, including the final line before the instrumental ending begins/i,
     );
   });
 
@@ -60,13 +64,39 @@ describe("PromptBuilder.build", () => {
     );
   });
 
-  it("gives vocal-entry timing around second 5, not a deterministic guarantee, allowing only a brief pickup", () => {
+  it("puts the vocals in the first two seconds and bans the intro outright", () => {
     const payload = PromptBuilder.build(baseInput);
-    expect(payload.prompt).toMatch(/lead vocals enter by about second 5/i);
-    expect(payload.prompt).toMatch(/only a brief musical pickup/i);
-    expect(payload.prompt).toMatch(/no long instrumental intro/i);
-    // The earlier, apparently-ineffective "within the first two seconds" wording must be gone.
-    expect(payload.prompt).not.toMatch(/within the first two seconds/i);
+
+    expect(payload.prompt).toMatch(
+      /vocals begin within the first two seconds with an immediate vocal hook/i,
+    );
+    expect(payload.prompt).toMatch(/no instrumental intro/i);
+  });
+
+  it("does not soften the intro ban or the vocal entry back into a matter of degree", () => {
+    // The regression this replaces: "by about second 5" handed Mureka
+    // three extra seconds, "only a brief musical pickup" licensed the
+    // very intro the next clause forbade, and "no *long* instrumental
+    // intro" turned an absolute ban into a question of length.
+    const payload = PromptBuilder.build(baseInput);
+
+    expect(payload.prompt).not.toMatch(/second 5\b/i);
+    expect(payload.prompt).not.toMatch(/pickup/i);
+    expect(payload.prompt).not.toMatch(/no long instrumental intro/i);
+  });
+
+  it("gives the vocal performance a deadline, leaving the fade window instrumental", () => {
+    // `FfmpegAudioProcessor` starts its fade at second 55. A vocal that
+    // ends near 50 fades out over instrument; one with no deadline is
+    // still singing when the cut arrives — which is what 257 of 267
+    // truncated songs showed.
+    const payload = PromptBuilder.build(baseInput);
+
+    expect(payload.prompt).toMatch(
+      /finish the vocal performance naturally around second 50, leaving only a short instrumental ending/i,
+    );
+    // A bare "finish naturally" sets no budget and must not come back.
+    expect(payload.prompt).not.toMatch(/finish naturally/i);
   });
 
   it("uses the exact same fixed STYLE regardless of the Lyrics version's own musicMood/musicDirection", () => {
