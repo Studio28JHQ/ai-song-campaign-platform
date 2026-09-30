@@ -1,6 +1,7 @@
 import type {
   PublicSongShareGate,
   PublicSongShareView,
+  SongShareTarget,
 } from "@/application/song/contracts/PublicSongShareGate";
 import { type PrismaClient, SongStatus } from "@/generated/prisma/client";
 import { DatabaseError } from "@/shared/errors";
@@ -29,6 +30,21 @@ import { prisma as defaultPrismaClient } from "../client";
 export class PrismaPublicSongShareGate implements PublicSongShareGate {
   constructor(private readonly client: PrismaClient = defaultPrismaClient) {}
 
+  /**
+   * The one definition of "this song has a public page": the token
+   * matches, the song finished, and its audio is stored. Both reads
+   * below build their `where` from this, so the page and the share
+   * tracker can never disagree about what is shareable — and revoking a
+   * link by clearing the token kills both at once.
+   */
+  private static shareableWhere(shareToken: string) {
+    return {
+      publicShareToken: shareToken,
+      status: SongStatus.COMPLETED,
+      audioStorageKey: { not: null },
+    };
+  }
+
   async findShareableByToken(shareToken: string): Promise<PublicSongShareView | null> {
     // Guarded before the query: an empty token must never be allowed to
     // become a `where` that matches a row with a null token.
@@ -36,11 +52,7 @@ export class PrismaPublicSongShareGate implements PublicSongShareGate {
 
     try {
       const record = await this.client.song.findFirst({
-        where: {
-          publicShareToken: shareToken,
-          status: SongStatus.COMPLETED,
-          audioStorageKey: { not: null },
-        },
+        where: PrismaPublicSongShareGate.shareableWhere(shareToken),
         select: {
           duration: true,
           audioStorageKey: true,
@@ -62,6 +74,25 @@ export class PrismaPublicSongShareGate implements PublicSongShareGate {
         // Never the token itself: this message can reach a log, and the
         // token is the credential.
         context: { operation: "findShareableByToken" },
+      });
+    }
+  }
+
+  async findShareTargetByToken(shareToken: string): Promise<SongShareTarget | null> {
+    if (!shareToken) return null;
+
+    try {
+      const record = await this.client.song.findFirst({
+        where: PrismaPublicSongShareGate.shareableWhere(shareToken),
+        select: { id: true, leadId: true },
+      });
+
+      return record ? { songId: record.id, leadId: record.leadId } : null;
+    } catch (cause) {
+      throw new DatabaseError("Failed to resolve a song share target.", {
+        code: "song.share_target_lookup_failed",
+        cause,
+        context: { operation: "findShareTargetByToken" },
       });
     }
   }

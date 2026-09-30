@@ -9,6 +9,7 @@ const mockSongFindByLead = vi.fn();
 const mockAuditCreate = vi.fn();
 const mockAuditFindByEntity = vi.fn();
 const mockAttemptsFindByLead = vi.fn();
+const mockShareEventsFindByLead = vi.fn().mockResolvedValue([]);
 
 vi.mock("@/infrastructure/auth/getAdminSession", () => ({
   getAdminSession: mockGetAdminSession,
@@ -45,6 +46,12 @@ vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository", ()
 vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAdminLyricsAttemptGate", () => ({
   PrismaAdminLyricsAttemptGate: vi.fn().mockImplementation(function PrismaAdminLyricsAttemptGate() {
     return { findByLead: mockAttemptsFindByLead };
+  }),
+}));
+
+vi.mock("@/infrastructure/persistence/prisma/admin/PrismaAdminShareEventGate", () => ({
+  PrismaAdminShareEventGate: vi.fn().mockImplementation(function PrismaAdminShareEventGate() {
+    return { findByLead: mockShareEventsFindByLead };
   }),
 }));
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CheckCircle2, Clock3, FileText, Mic2, Music, User } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, FileText, Mic2, Music, Share2, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,17 @@ function formatDuration(seconds: number | null): string | null {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+/** Share Tracking — the three platforms, in the order the screen lists them. */
+const SHARE_PLATFORM_LABELS = [
+  { platform: "WHATSAPP", label: "WhatsApp" },
+  { platform: "FACEBOOK", label: "Facebook" },
+  { platform: "X", label: "X" },
+] as const;
+
+function sharePlatformLabel(platform: string): string {
+  return SHARE_PLATFORM_LABELS.find((entry) => entry.platform === platform)?.label ?? platform;
 }
 
 function formatTimestamp(value: string | null): string {
@@ -93,6 +104,7 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
   }
 
   const { lead, lyricsHistory, approvedLyrics, song, executionHistory, lyricsAttempts } = detail;
+  const shareEvents = detail.shareEvents ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -263,6 +275,50 @@ export function LeadDetailView({ leadId }: LeadDetailViewProps) {
           </div>
         ) : (
           <EmptyState icon={Music} title="Aún no se ha generado ninguna canción" />
+        )}
+      </DetailCard>
+
+      <DetailCard>
+        <SectionHeader icon={Share2} title="Compartidos" />
+        {shareEvents.length === 0 ? (
+          <EmptyState
+            icon={Share2}
+            title="Esta familia todavía no ha compartido su canción"
+            description="Se registra cada clic en los enlaces de compartir del correo."
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {/*
+              The counts answer "¿cuántas veces?" at a glance; the list
+              below answers "¿cuándo?" and "¿por dónde?". A summary alone
+              would not answer when.
+            */}
+            <div className="flex flex-wrap gap-2">
+              {SHARE_PLATFORM_LABELS.map(({ platform, label }) => {
+                const count = shareEvents.filter((event) => event.platform === platform).length;
+                if (count === 0) return null;
+                return (
+                  <span
+                    key={platform}
+                    className="rounded-full bg-secondary px-3 py-1 text-label font-medium text-secondary-foreground"
+                  >
+                    {label}: {count}
+                  </span>
+                );
+              })}
+            </div>
+            <ul className="flex flex-col gap-2">
+              {shareEvents.map((event, index) => (
+                <li
+                  key={`${event.createdAt}-${index}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 text-sm"
+                >
+                  <span className="text-foreground">{sharePlatformLabel(event.platform)}</span>
+                  <span className="text-muted-foreground">{formatTimestamp(event.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </DetailCard>
 

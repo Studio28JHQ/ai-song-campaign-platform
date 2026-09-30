@@ -831,4 +831,99 @@ describe("GenerationDispatcher", () => {
       expect(lyria.submitGeneration).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * Diagnosing a failed submission.
+   *
+   * Song `9a2cedaf` failed on 2026-09-30 with `providerError` reading only
+   * "Request to https://api.mureka.ai/v1/song/generate failed after 1
+   * attempt(s)". That sentence is `httpRequest`'s wrapper; the real error —
+   * a timeout, a DNS failure, a reset — sits in `cause` and was discarded,
+   * which made those outcomes indistinguishable afterwards. These tests
+   * hold the cause in place. They change no behaviour: the song still
+   * fails, is still not retried, and is still not handed to the fallback.
+   */
+  describe("GenerationDispatcher — the root cause of a failed submission", () => {
+    function timeoutLikeMurekaFailure(): ExternalApiError {
+      const cause = new Error("The operation was aborted due to timeout");
+      cause.name = "TimeoutError";
+      return new ExternalApiError(
+        "Request to https://api.mureka.ai/v1/song/generate failed after 1 attempt(s)",
+        { code: "http_request_failed", cause },
+      );
+    }
+
+    it("records the underlying network error alongside our own message", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(timeoutLikeMurekaFailure(), {
+        name: "mureka",
+        model: "mureka-9",
+      });
+
+      const dispatcher = buildDispatcher({ providers: [mureka] });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      const persisted = await songRepository.findById(song.id);
+      const stored = persisted?.providerError ?? "";
+
+      expect(stored).toContain("failed after 1 attempt(s)");
+      // The part that was missing, and the reason this incident could not
+      // be diagnosed from the record alone.
+      expect(stored).toContain("TimeoutError");
+      expect(stored).toContain("aborted due to timeout");
+    });
+
+    it("still fails the song and still does not fall back — behaviour is unchanged", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(timeoutLikeMurekaFailure(), {
+        name: "mureka",
+        model: "mureka-9",
+      });
+      const lyria = fakeSongGenerator(undefined, { name: "lyria", model: "lyria-3.5" });
+
+      const dispatcher = buildDispatcher({
+        providers: [mureka, lyria],
+        routing: { primaryProvider: "mureka", fallbackProvider: "lyria" },
+      });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      // A timeout may have started a billable generation, so the fallback
+      // must not run — see `providerFallbackPolicy`.
+      expect(lyria.submitGeneration).not.toHaveBeenCalled();
+      expect((await songRepository.findById(song.id))?.status).toBe(SongStatus.FAILED);
+    });
+
+    it("leaves the message alone when there is no underlying cause", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(
+        new ExternalApiError("Mureka rejected the request.", { code: "mureka.api_error" }),
+        { name: "mureka", model: "mureka-9" },
+      );
+
+      const dispatcher = buildDispatcher({ providers: [mureka] });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect((await songRepository.findById(song.id))?.providerError).toBe(
+        "Mureka rejected the request.",
+      );
+    });
+
+    it("bounds what it stores, so a verbose cause cannot flood the column", async () => {
+      const song = seedQueuedSong();
+      const mureka = fakeSongGenerator(
+        new ExternalApiError("Request failed.", {
+          code: "http_request_failed",
+          cause: new Error("x".repeat(5_000)),
+        }),
+        { name: "mureka", model: "mureka-9" },
+      );
+
+      const dispatcher = buildDispatcher({ providers: [mureka] });
+      await expect(dispatcher.execute()).rejects.toThrow();
+
+      expect(((await songRepository.findById(song.id))?.providerError ?? "").length).toBeLessThan(
+        300,
+      );
+    });
+  });
 });

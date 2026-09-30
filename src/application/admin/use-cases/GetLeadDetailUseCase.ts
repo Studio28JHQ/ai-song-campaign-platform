@@ -7,6 +7,7 @@ import { SongStatus, type SongSnapshot } from "@/domain/song/types";
 import type { AudioUrlResolver } from "@/application/song/contracts/AudioUrlResolver";
 import { BusinessRuleError } from "@/shared/errors";
 import type { AdminLyricsAttemptGate } from "../contracts/AdminLyricsAttemptGate";
+import type { AdminShareEventGate } from "../contracts/AdminShareEventGate";
 import type { ExecutionHistoryItem } from "../dto/ExecutionHistoryItem";
 import type { GetLeadDetailRequest } from "../dto/GetLeadDetailRequest";
 import type { GetLeadDetailResponse, LeadDetailSongView } from "../dto/GetLeadDetailResponse";
@@ -32,6 +33,7 @@ export class GetLeadDetailUseCase {
     private readonly auditLogRepository: AuditLogRepository,
     private readonly audioUrlResolver: AudioUrlResolver,
     private readonly lyricsAttemptGate: AdminLyricsAttemptGate,
+    private readonly shareEventGate: AdminShareEventGate,
   ) {}
 
   async execute(request: GetLeadDetailRequest): Promise<GetLeadDetailResponse> {
@@ -44,11 +46,14 @@ export class GetLeadDetailUseCase {
       });
     }
 
-    const [lyricsHistory, approvedLyrics, song, lyricsAttempts] = await Promise.all([
+    const [lyricsHistory, approvedLyrics, song, lyricsAttempts, shareEvents] = await Promise.all([
       this.lyricsRepository.findAllByLead(lead.id),
       this.lyricsRepository.findApprovedByLead(lead.id),
       this.songRepository.findByLead(lead.id),
       this.lyricsAttemptGate.findByLead(lead.id),
+      // Joins the screen's existing fan-out rather than adding a round
+      // trip of its own — the pool is capped at five per process.
+      this.shareEventGate.findByLead(lead.id),
     ]);
 
     await this.auditLogRepository.create(
@@ -76,6 +81,7 @@ export class GetLeadDetailUseCase {
       song: songSnapshot ? await this.toSongView(songSnapshot) : null,
       executionHistory,
       lyricsAttempts,
+      shareEvents,
     };
   }
 

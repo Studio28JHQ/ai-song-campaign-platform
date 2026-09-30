@@ -69,6 +69,20 @@ enum SongStatus {
   @@map("song_status")
 }
 
+// Share Tracking. The platforms a song's share link can point at — a
+// closed set, and closed on purpose: the public tracking endpoint maps a
+// value of this enum to a destination URL it builds itself, so there is
+// no path by which a caller-supplied URL could become a redirect target.
+// Adding a platform means adding a value here *and* a destination in
+// `shareDestinations`, never just accepting a new string.
+enum SharePlatform {
+  WHATSAPP
+  FACEBOOK
+  X
+
+  @@map("share_platform")
+}
+
 // Sprint v1.1 — AI Musical Direction. The parent's requested narrator
 // voice for the song, selected on the lyrics generation form and
 // carried through to the Mureka prompt only (see `Lyrics.voice`) —
@@ -160,6 +174,7 @@ model Lead {
   generationAttempts GenerationAttempt[]
   sessions           LeadSession[]
   consent            Consent?
+  shareEvents        ShareEvent[]
 
   @@index([campaignId])
   @@index([status])
@@ -366,14 +381,60 @@ model Song {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  lyrics Lyrics @relation(fields: [lyricsId], references: [id], onDelete: Restrict)
-  mood   Mood   @relation(fields: [moodId], references: [id], onDelete: Restrict)
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lyrics      Lyrics       @relation(fields: [lyricsId], references: [id], onDelete: Restrict)
+  mood        Mood         @relation(fields: [moodId], references: [id], onDelete: Restrict)
+  shareEvents ShareEvent[]
 
   @@index([status])
   @@index([createdAt])
   @@index([providerTaskId])
   @@map("songs")
+}
+
+// Share Tracking. One row per click on a share link in the "song ready"
+// email — what the campaign team reads as "compartidos".
+//
+// What a row means, precisely: our tracking endpoint was reached with a
+// valid share token and a known platform. It does **not** mean WhatsApp,
+// Facebook or X published or sent anything — we do not control those
+// platforms and never observe the outcome. It does not even mean a
+// person clicked: these links live in email, and mail providers and
+// corporate security scanners follow links to inspect them, so some
+// rows are machines. The metric is "share attempts recorded", and the
+// admin UI says so.
+//
+// `songId` is strictly redundant — `songs.leadId` is unique, so the lead
+// already identifies the song — and is kept anyway: the family screen
+// and the export both read events by lead, and carrying the song id
+// keeps that a single-table read instead of a join, which matters with
+// the small connection pool this deployment runs (see
+// `persistence/prisma/client.ts`).
+//
+// Deliberately no unique constraint: every click is its own event, so a
+// parent who shares twice produces two rows.
+model ShareEvent {
+  id          String        @id @default(uuid()) @db.Uuid
+  songId      String        @db.Uuid
+  leadId      String        @db.Uuid
+  platform    SharePlatform
+  // Recorded as data only. Derived server-side from the validated
+  // platform, never read back to decide anything — least of all a
+  // redirect target.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  createdAt   DateTime      @default(now())
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // Daily totals for the dashboard, per-platform breakdowns, and one
+  // family's history — the three reads that exist.
+  @@index([createdAt])
+  @@index([platform, createdAt])
+  @@index([leadId, createdAt])
+  @@map("share_events")
 }
 
 model AdminUser {

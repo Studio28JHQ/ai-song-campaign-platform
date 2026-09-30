@@ -30,7 +30,7 @@ export class ResendEmailService implements SongEmailSender, LeadEmailSender {
         babyName: input.babyName,
         audioUrl: input.audioUrl,
         duration: input.duration,
-        shareUrl: input.shareUrl,
+        shareLinks: input.shareLinks,
       }),
     });
   }

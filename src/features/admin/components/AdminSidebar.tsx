@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Music,
   Settings,
+  Share2,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/admin/lyrics", label: "Letras", icon: FileText },
   { href: "/admin/users", label: "Administradores", icon: ShieldCheck },
   { href: "/admin/audit", label: "Auditoría", icon: History },
+  { href: "/admin/shares", label: "Compartidos", icon: Share2 },
   { href: "/admin/consents", label: "Consentimientos", icon: Cookie },
   { href: "/admin/settings", label: "Configuración", icon: Settings },
 ] as const;

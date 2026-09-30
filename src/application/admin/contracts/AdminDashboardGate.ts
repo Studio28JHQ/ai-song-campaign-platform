@@ -20,7 +20,40 @@ export interface DailyCount {
  * batch), so a single failing query degrades only its own widget —
  * see `unavailableSections` on `DashboardSummaryCounts`.
  */
-export type DashboardSection = "core" | "campaign" | "windowCounts" | "dailyTrends";
+export type DashboardSection = "core" | "campaign" | "windowCounts" | "dailyTrends" | "shares";
+
+/**
+ * Share Tracking — one day's share events, split by platform, for the
+ * stacked daily chart. `date` is a campaign day (`YYYY-MM-DD`), the same
+ * convention `DailyCount` uses.
+ */
+export interface DailySharePlatformCount {
+  date: string;
+  whatsapp: number;
+  facebook: number;
+  x: number;
+}
+
+/**
+ * Share Tracking — what the campaign team reads as "compartidos".
+ *
+ * Every number here counts *recorded share attempts*: our tracking
+ * endpoint was reached with a valid token and a known platform. It is
+ * not a count of posts published — we never observe what WhatsApp,
+ * Facebook or X did — and not strictly a count of humans either, since
+ * the links live in email and mail providers and security scanners
+ * follow links to inspect them. The admin UI says so in as many words.
+ */
+export interface ShareCounts {
+  total: number;
+  whatsapp: number;
+  facebook: number;
+  x: number;
+  /** Distinct families, not songs: each family has exactly one song. */
+  familiesShared: number;
+  /** Last 30 campaign days, oldest first, zero-filled. */
+  sharesByDay: DailySharePlatformCount[];
+}
 
 export interface DashboardSummaryCounts {
   totalLeads: number;
@@ -52,6 +85,8 @@ export interface DashboardSummaryCounts {
    * The real cause of each failure is always logged server-side (see
    * `PrismaAdminDashboardGate`), never only swallowed here.
    */
+  /** Share Tracking — see `ShareCounts`. Zeroed when the `shares` section fails to load. */
+  shares: ShareCounts;
   unavailableSections: DashboardSection[];
 }
 

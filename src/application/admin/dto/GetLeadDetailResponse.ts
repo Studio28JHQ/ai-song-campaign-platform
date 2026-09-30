@@ -2,6 +2,7 @@ import type { LeadSnapshot } from "@/domain/lead/types";
 import type { LyricsSnapshot } from "@/domain/lyrics/types";
 import type { SongSnapshot } from "@/domain/song/types";
 import type { AdminLyricsAttemptView } from "../contracts/AdminLyricsAttemptGate";
+import type { AdminShareEventView } from "../contracts/AdminShareEventGate";
 import type { ExecutionHistoryItem } from "./ExecutionHistoryItem";
 
 /**
@@ -30,4 +31,6 @@ export interface GetLeadDetailResponse {
    * make the table a worse source of truth than an honest gap.
    */
   lyricsAttempts: AdminLyricsAttemptView[];
+  /** Share Tracking — recorded share attempts for this family's song, newest first. */
+  shareEvents: AdminShareEventView[];
 }

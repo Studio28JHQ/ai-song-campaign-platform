@@ -46,6 +46,11 @@ function fakeClient(counts: {
     lead: { count: leadCount, findMany: leadFindMany },
     lyrics: { count: lyricsCount },
     song: { count: songCount, findMany: songFindMany },
+    // Share Tracking — the two aggregates the gate runs for the shares
+    // section. Defaulted to empty so every existing assertion keeps
+    // describing the behaviour it was written for.
+    shareEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     auditLog: { count: auditLogCount },
     campaign: { findFirst: campaignFindFirst },
   } as unknown as PrismaClient;
@@ -86,6 +91,15 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       songsCompletedLast30Days: 0,
       registrationsByDay: expect.any(Array),
       completedSongsByDay: expect.any(Array),
+      // Share Tracking — no events recorded in this fixture.
+      shares: {
+        total: 0,
+        whatsapp: 0,
+        facebook: 0,
+        x: 0,
+        familiesShared: 0,
+        sharesByDay: expect.any(Array),
+      },
       unavailableSections: [],
     });
   });
@@ -329,5 +343,117 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
       // The rest of the summary is unaffected.
       expect(summary.totalLeads).toBe(1);
     });
+  });
+});
+
+/**
+ * Share Tracking — the dashboard's share aggregates.
+ *
+ * Two things are being protected here. First, that the numbers are
+ * produced by the *database*: the gate issues one aggregate for the
+ * totals and one for the daily split, and nothing walks rows in
+ * JavaScript — share events are the one table on this screen that can
+ * grow without bound. Second, that a failure in this section degrades
+ * only itself, which is what `settle` exists for.
+ */
+describe("PrismaAdminDashboardGate — shares", () => {
+  const ZERO_COUNTS = {
+    totalLeads: 0,
+    lyricsGenerated: 0,
+    lyricsApproved: 0,
+    songsRequested: 0,
+    songsQueued: 0,
+    songsGenerating: 0,
+    songsCompleted: 0,
+    songsFailed: 0,
+    emailsSent: 0,
+    emailsResent: 0,
+    songsCompletedToday: 0,
+    songsCompletedLast7Days: 0,
+    songsCompletedLast30Days: 0,
+  };
+
+  /** A client whose `$queryRaw` answers the totals first, then the daily rows. */
+  function clientWithShares(
+    totals: { whatsapp: number; facebook: number; x: number; families: number },
+    dayRows: Array<{ day: string; platform: string; count: number }>,
+  ) {
+    const client = fakeClient(ZERO_COUNTS);
+    const queryRaw = vi
+      .fn()
+      .mockResolvedValueOnce([totals])
+      .mockResolvedValueOnce(dayRows)
+      .mockResolvedValue([]);
+    (client as unknown as { $queryRaw: unknown }).$queryRaw = queryRaw;
+    return { client, queryRaw };
+  }
+
+  it("reports the per-platform totals and the number of families, not songs", async () => {
+    const { client } = clientWithShares({ whatsapp: 7, facebook: 3, x: 2, families: 5 }, []);
+
+    const summary = await new PrismaAdminDashboardGate(client).getSummary();
+
+    expect(summary.shares.whatsapp).toBe(7);
+    expect(summary.shares.facebook).toBe(3);
+    expect(summary.shares.x).toBe(2);
+    expect(summary.shares.total).toBe(12);
+    // Five families produced twelve shares — the headline metric counts
+    // families, because each family has exactly one song.
+    expect(summary.shares.familiesShared).toBe(5);
+  });
+
+  it("splits the daily series by platform and zero-fills quiet days", async () => {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Guayaquil",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    const { client } = clientWithShares({ whatsapp: 4, facebook: 1, x: 0, families: 2 }, [
+      { day: today, platform: "WHATSAPP", count: 4 },
+      { day: today, platform: "FACEBOOK", count: 1 },
+    ]);
+
+    const summary = await new PrismaAdminDashboardGate(client).getSummary();
+    const days = summary.shares.sharesByDay;
+
+    // A full 30-day window, oldest first, ending today.
+    expect(days.length).toBeGreaterThan(1);
+    expect(days[days.length - 1].date).toBe(today);
+    expect(days[days.length - 1]).toMatchObject({ whatsapp: 4, facebook: 1, x: 0 });
+    // Every other day is present and explicitly zero, not missing.
+    expect(days[0]).toMatchObject({ whatsapp: 0, facebook: 0, x: 0 });
+  });
+
+  it("aggregates in the database — no share rows are walked in JavaScript", async () => {
+    const { client, queryRaw } = clientWithShares(
+      { whatsapp: 1, facebook: 0, x: 0, families: 1 },
+      [],
+    );
+    const shareFindMany = vi.fn();
+    (client as unknown as { shareEvent: { findMany: unknown } }).shareEvent = {
+      findMany: shareFindMany,
+    };
+
+    await new PrismaAdminDashboardGate(client).getSummary();
+
+    // Two aggregates, and never a row scan.
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(shareFindMany).not.toHaveBeenCalled();
+  });
+
+  it("degrades only its own section when the share queries fail", async () => {
+    const client = fakeClient(ZERO_COUNTS);
+    (client as unknown as { $queryRaw: unknown }).$queryRaw = vi
+      .fn()
+      .mockRejectedValue(new Error("connection lost"));
+
+    const summary = await new PrismaAdminDashboardGate(client).getSummary();
+
+    expect(summary.unavailableSections).toContain("shares");
+    expect(summary.shares).toMatchObject({ total: 0, familiesShared: 0 });
+    // The rest of the dashboard still loaded.
+    expect(summary.unavailableSections).not.toContain("core");
   });
 });

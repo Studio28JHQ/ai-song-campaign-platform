@@ -50,6 +50,50 @@ import type { SongGenerationProviderRegistry } from "../services/SongGenerationP
  * How this gets invoked is deliberately not this class's concern — see
  * `GenerationPoller`'s doc comment for the same note.
  */
+/**
+ * The root cause of a thrown provider error, as a short string.
+ *
+ * `httpRequest` wraps whatever actually went wrong — an aborted fetch, a
+ * DNS failure, a socket reset — in an `ExternalApiError` whose message is
+ * only "Request to <url> failed after N attempt(s)" and keeps the real
+ * error in `cause`. Nothing downstream read that, so a submission that
+ * never got a response was recorded with no indication of *why*.
+ *
+ * That is not hypothetical: song `9a2cedaf` failed on 2026-09-30 with
+ * exactly that sentence and nothing else, which made "timeout" and
+ * "connection reset" indistinguishable after the fact.
+ *
+ * This is the same treatment `MurekaClient.describeProviderError` already
+ * gives the provider's own words on an HTTP *status* error — applied to
+ * the one path it was never applied to, the no-response case.
+ */
+function rootCauseOf(error: unknown): string | null {
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  if (!cause) return null;
+
+  const described =
+    cause instanceof Error
+      ? `${cause.name}: ${cause.message}`
+      : typeof cause === "string"
+        ? cause
+        : null;
+
+  return described?.trim().slice(0, 200) || null;
+}
+
+/**
+ * What gets persisted to `songs.providerError`. Our own message, plus the
+ * root cause when there is one — never a raw object, never a credential
+ * (the only values folded in are an error's `name`/`message`, and the
+ * provider's own wording is already scrubbed upstream by
+ * `MurekaClient.describeProviderError`).
+ */
+function describeProviderFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = rootCauseOf(error);
+  return cause ? `${message} (${cause})` : message;
+}
+
 export class GenerationDispatcher {
   constructor(
     private readonly songRepository: SongRepository,
@@ -198,7 +242,7 @@ export class GenerationDispatcher {
       // and `Song` has no `FAILED -> FAILED` transition, so re-marking
       // would throw a state-machine error over the top of the real cause.
       if (song.status === SongStatus.GENERATING) {
-        song.markFailed(error instanceof Error ? error.message : String(error));
+        song.markFailed(describeProviderFailure(error));
         await this.songRepository.update(song);
       }
 
@@ -208,6 +252,9 @@ export class GenerationDispatcher {
         providerModel: song.providerModel,
         status: song.status,
         errorCode: providerErrorCode(error),
+        // The underlying network error, not just our wrapper's sentence —
+        // see `describeProviderFailure`.
+        cause: rootCauseOf(error),
       });
 
       throw error;

@@ -9,7 +9,7 @@ import type { CampaignGate } from "../contracts/CampaignGate";
 import type { EmailDeliveryTracker } from "../contracts/EmailDeliveryTracker";
 import type { GeneratedAudio } from "../contracts/SongGenerationProvider";
 import type { SongEmailSender } from "../contracts/SongEmailSender";
-import { buildSongShareUrl } from "@/application/song/services/songShareUrl";
+import { buildSongShareLinks } from "@/application/song/services/songShareUrl";
 
 const AUDIO_STORAGE_CONTENT_TYPE_FALLBACK = "audio/mpeg";
 
@@ -137,7 +137,7 @@ export class SongCompletionService {
         duration: song.duration,
         // Minted by `Song.markCompleted`, which has already run by the
         // time this song is being emailed.
-        shareUrl: buildSongShareUrl(song.publicShareToken),
+        shareLinks: buildSongShareLinks(song.publicShareToken),
       });
     } catch (error) {
       logger.error("Failed to send song-ready email", {

@@ -1,10 +1,31 @@
 import type { DailyCount } from "../services/getDashboardSummary";
 
+/**
+ * Share Tracking. One slice of a stacked bar: where its value lives on a
+ * `DailyCount`, what to call it, and which existing token colours it.
+ * Optional — without `segments` the chart behaves exactly as it always
+ * has, which is what keeps the two existing charts untouched.
+ */
+export interface BarSegment {
+  /** Key on `DailyCount.breakdown` holding this segment's value. */
+  key: string;
+  label: string;
+  /** A background utility class from the existing palette — no new colours. */
+  className: string;
+}
+
 interface DailyBarChartProps {
   title: string;
   data: DailyCount[];
   /** What one unit is, for the per-bar description: "registros", "canciones completadas". */
   unitLabel: string;
+  /**
+   * When given, each bar is split into these parts, stacked bottom-up,
+   * and the chart renders a legend. The bar's total height still comes
+   * from `count`, so the square-root scale and the zero handling are
+   * identical to the single-series mode.
+   */
+  segments?: BarSegment[];
 }
 
 /**
@@ -98,7 +119,7 @@ function axisLabelIndices(length: number): Set<number> {
  * series is readable by a screen reader one day at a time rather than only
  * as a picture with a summary.
  */
-export function DailyBarChart({ title, data, unitLabel }: DailyBarChartProps) {
+export function DailyBarChart({ title, data, unitLabel, segments }: DailyBarChartProps) {
   const max = Math.max(0, ...data.map((day) => day.count));
   const total = data.reduce((sum, day) => sum + day.count, 0);
   const labelIndices = axisLabelIndices(data.length);
@@ -117,7 +138,12 @@ export function DailyBarChart({ title, data, unitLabel }: DailyBarChartProps) {
           <div className="flex h-32 items-end gap-px sm:gap-1" role="list" aria-label={title}>
             {data.map((day) => {
               const height = barHeightPercent(day.count, max);
-              const label = `${formatDayLabel(day.date)}: ${day.count} ${unitLabel}`;
+              const breakdown = segments
+                ?.map((segment) => `${segment.label} ${day.breakdown?.[segment.key] ?? 0}`)
+                .join(", ");
+              const label = breakdown
+                ? `${formatDayLabel(day.date)}: ${day.count} ${unitLabel} (${breakdown})`
+                : `${formatDayLabel(day.date)}: ${day.count} ${unitLabel}`;
 
               return (
                 <div
@@ -132,6 +158,30 @@ export function DailyBarChart({ title, data, unitLabel }: DailyBarChartProps) {
                       className="w-full rounded-sm bg-muted-foreground/30"
                       style={{ height: `${ZERO_MARK_PERCENT}%` }}
                     />
+                  ) : segments ? (
+                    /*
+                      Stacked: the bar keeps the height the square-root
+                      scale gave it, and the segments divide that height
+                      in proportion to their share of the day's count —
+                      so a stacked bar is never taller or shorter than
+                      the single-series bar for the same total.
+                    */
+                    <div
+                      className="flex w-full flex-col-reverse overflow-hidden rounded-t-sm"
+                      style={{ height: `${height}%` }}
+                    >
+                      {segments.map((segment) => {
+                        const value = day.breakdown?.[segment.key] ?? 0;
+                        if (value <= 0) return null;
+                        return (
+                          <div
+                            key={segment.key}
+                            className={segment.className}
+                            style={{ height: `${(value / day.count) * 100}%` }}
+                          />
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div
                       className="w-full rounded-t-sm bg-primary"
@@ -162,6 +212,23 @@ export function DailyBarChart({ title, data, unitLabel }: DailyBarChartProps) {
                 </span>
               ))}
           </div>
+
+          {segments ? (
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              {segments.map((segment) => (
+                <span
+                  key={segment.key}
+                  className="flex items-center gap-1.5 text-label text-muted-foreground"
+                >
+                  <span
+                    className={`h-2.5 w-2.5 rounded-sm ${segment.className}`}
+                    aria-hidden="true"
+                  />
+                  {segment.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           {max === 0 ? <p className="text-sm text-muted-foreground">Sin actividad.</p> : null}
         </>

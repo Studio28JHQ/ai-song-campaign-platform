@@ -1,10 +1,34 @@
 export interface DailyCount {
   date: string;
   count: number;
+  /** Share Tracking — per-segment values for a stacked bar. Absent for single-series charts. */
+  breakdown?: Record<string, number>;
 }
 
 export type DashboardSection =
-  "core" | "generationTime" | "campaign" | "windowCounts" | "dailyTrends";
+  "core" | "generationTime" | "campaign" | "windowCounts" | "dailyTrends" | "shares";
+
+/** Share Tracking — one day's share attempts, split by platform. */
+export interface DailySharePlatformCount {
+  date: string;
+  whatsapp: number;
+  facebook: number;
+  x: number;
+}
+
+/**
+ * Share Tracking — recorded share *attempts*, not confirmed posts. The
+ * links live in email, so mail providers and security scanners that
+ * follow links produce some of these too.
+ */
+export interface ShareCounts {
+  total: number;
+  whatsapp: number;
+  facebook: number;
+  x: number;
+  familiesShared: number;
+  sharesByDay: DailySharePlatformCount[];
+}
 
 export interface DashboardSummary {
   totalLeads: number;
@@ -26,6 +50,7 @@ export interface DashboardSummary {
   songsCompletedLast30Days: number;
   registrationsByDay: DailyCount[];
   completedSongsByDay: DailyCount[];
+  shares: ShareCounts;
   unavailableSections: DashboardSection[];
 }
 

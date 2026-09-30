@@ -2,8 +2,10 @@ import { SongStatus as PrismaSongStatus, type PrismaClient } from "@/generated/p
 import type {
   AdminDashboardGate,
   DailyCount,
+  DailySharePlatformCount,
   DashboardSection,
   DashboardSummaryCounts,
+  ShareCounts,
 } from "@/application/admin/contracts/AdminDashboardGate";
 import { logger } from "@/shared/logger/logger";
 import { prisma as defaultPrismaClient } from "../client";
@@ -19,6 +21,26 @@ import { prisma as defaultPrismaClient } from "../client";
  * days by comparing strings.
  */
 const CAMPAIGN_TIME_ZONE = "America/Guayaquil";
+
+/** The window every daily trend on this screen covers. */
+const DAILY_TREND_DAYS = 30;
+
+/** One `(day, platform)` bucket, already aggregated by the database. */
+interface SharesByDayRow {
+  day: string;
+  platform: string;
+  count: number;
+}
+
+/** All-time share totals, aggregated in one row by the database. */
+interface ShareTotalsRow {
+  whatsapp: number;
+  facebook: number;
+  x: number;
+  families: number;
+}
+
+const EMPTY_SHARE_TOTALS: ShareTotalsRow = { whatsapp: 0, facebook: 0, x: 0, families: 0 };
 
 const campaignDayFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: CAMPAIGN_TIME_ZONE,
@@ -124,6 +146,8 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
       songsCompletedLast30Days,
       recentLeadTimestamps,
       recentCompletedSongTimestamps,
+      shareTotals,
+      shareDayRows,
     ] = await Promise.all([
       settle("core", "lead.count", 0, () => this.client.lead.count()),
       settle("core", "lyrics.count", 0, () => this.client.lyrics.count()),
@@ -186,6 +210,42 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
             select: { completedAt: true },
           }),
       ),
+      // Share Tracking. Three aggregates, never a row scan: share events
+      // are the one table here that can grow without bound, so the
+      // per-platform totals come back as three rows, the family count as
+      // one, and the chart as at most thirty. Nothing is grouped in
+      // JavaScript, and all three ride the same `Promise.all` as
+      // everything else — the pool is capped at five connections.
+      settle(
+        "shares",
+        "shareEvent.totals",
+        [EMPTY_SHARE_TOTALS],
+        () =>
+          this.client.$queryRaw<ShareTotalsRow[]>`
+          SELECT
+            COUNT(*) FILTER (WHERE platform = 'WHATSAPP')::int AS whatsapp,
+            COUNT(*) FILTER (WHERE platform = 'FACEBOOK')::int AS facebook,
+            COUNT(*) FILTER (WHERE platform = 'X')::int        AS x,
+            COUNT(DISTINCT "leadId")::int                      AS families
+          FROM "share_events"
+        `,
+      ),
+      settle(
+        "shares",
+        "shareEvent.byDay",
+        [] as SharesByDayRow[],
+        () =>
+          this.client.$queryRaw<SharesByDayRow[]>`
+          SELECT
+            to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${CAMPAIGN_TIME_ZONE})::date,
+                    'YYYY-MM-DD') AS day,
+            platform::text AS platform,
+            COUNT(*)::int AS count
+          FROM "share_events"
+          WHERE "createdAt" >= ${thirtyDaysAgo}
+          GROUP BY 1, 2
+        `,
+      ),
     ]);
 
     return {
@@ -213,7 +273,50 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
           .filter((date): date is Date => date !== null),
         thirtyDaysAgo,
       ),
+      shares: this.buildShareCounts(shareTotals, shareDayRows, thirtyDaysAgo),
       unavailableSections: [...failedSections],
+    };
+  }
+
+  /**
+   * Share Tracking. Folds the three aggregates into the shape the
+   * Dashboard renders. The only arithmetic here is over at most ~33
+   * already-aggregated rows — the grouping itself happened in the
+   * database.
+   */
+  private buildShareCounts(
+    totals: ShareTotalsRow[],
+    dayRows: SharesByDayRow[],
+    since: Date,
+  ): ShareCounts {
+    const { whatsapp, facebook, x, families } = totals[0] ?? EMPTY_SHARE_TOTALS;
+
+    // Zero-filled the same way the other daily trends are, so a quiet
+    // day is a visible zero rather than a missing bar.
+    const byDay = new Map<string, DailySharePlatformCount>();
+    const today = toCampaignDayKey(new Date());
+    let day = toCampaignDayKey(since);
+    for (let guard = 0; guard <= DAILY_TREND_DAYS; guard += 1) {
+      byDay.set(day, { date: day, whatsapp: 0, facebook: 0, x: 0 });
+      if (day === today) break;
+      day = nextCampaignDay(day);
+    }
+
+    for (const row of dayRows) {
+      const bucket = byDay.get(row.day);
+      if (!bucket) continue;
+      if (row.platform === "WHATSAPP") bucket.whatsapp += row.count;
+      else if (row.platform === "FACEBOOK") bucket.facebook += row.count;
+      else if (row.platform === "X") bucket.x += row.count;
+    }
+
+    return {
+      total: whatsapp + facebook + x,
+      whatsapp,
+      facebook,
+      x,
+      familiesShared: families,
+      sharesByDay: [...byDay.values()],
     };
   }
 

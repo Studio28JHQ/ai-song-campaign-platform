@@ -25,6 +25,20 @@ export interface PublicSongShareView {
   audioStorageKey: string;
 }
 
+/**
+ * Share Tracking — what recording a share needs, which is exactly the two
+ * ids the public view deliberately withholds.
+ *
+ * Kept separate from `PublicSongShareView` rather than added to it: that
+ * view is what renders to a stranger, and its guarantee is that a field
+ * it does not carry cannot leak. These ids never reach a page — they go
+ * into a `share_events` row and nowhere else.
+ */
+export interface SongShareTarget {
+  songId: string;
+  leadId: string;
+}
+
 export interface PublicSongShareGate {
   /**
    * Resolves a share token to the song behind it, or `null` when there
@@ -34,4 +48,13 @@ export interface PublicSongShareGate {
    * learns nothing about which songs exist.
    */
   findShareableByToken(shareToken: string): Promise<PublicSongShareView | null>;
+
+  /**
+   * The song behind a share token, identified rather than described, for
+   * recording a share event. Applies the *same* shareability rule as
+   * `findShareableByToken` — a song that has no public page cannot
+   * produce a share event either — and answers `null` identically for
+   * every reason it might not resolve.
+   */
+  findShareTargetByToken(shareToken: string): Promise<SongShareTarget | null>;
 }

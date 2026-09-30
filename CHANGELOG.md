@@ -30,6 +30,30 @@ Ideas identified during development but deliberately not implemented, since they
 - **Deliberately unchanged, one variable at a time:** 86 BPM, `mureka-9`, the two-verse/chorus/ending structure (a hypothesis the audit could not demonstrate), FFmpeg and its 60-second cap and fade, the 360-character lyric limit, the 280–320 target, and the position of the brand line.
 - **Not verified against real audio.** This changes the instructions Mureka receives; whether its output actually lands the vocal by second 50 needs a real generation to confirm. The measurable check afterwards is the share of songs stored at exactly 60 seconds — today 96.3% for `mureka-9`.
 
+## [1.43.0] - 2026-09-30
+
+### Added
+
+- **Share tracking.** The three share buttons in the "song ready" email now point at this application before they point at a platform: `GET /song/share/[shareToken]/to/[platform]` records the click and answers `302` to WhatsApp, Facebook or X. What reaches the platform — and therefore the people a family shares with — is still the song's clean public page. Those two URLs must never swap: a tracking URL travelling inside a shared message would record an event for every recipient who opened it, and the metric would be measuring its own echo. A test asserts `/to/<platform>` appears only inside an `href`, never as text.
+- **`share_events`** — one row per recorded click, with `songId`, `leadId`, the platform, the UTM triple and a timestamp. `songId` is strictly redundant (`songs.leadId` is unique) and is kept anyway so the family screen and the export read one table instead of joining. No unique constraint: every click is its own event.
+- **An admin "Compartidos" screen** (`/admin/shares`) with total, per-platform and **families-that-shared** counts, plus a stacked daily chart. It reads the Dashboard's own endpoint rather than adding a second one computing the same numbers.
+- **A "Compartidos" section on the family page**, listing each event with its platform and timestamp plus a per-platform tally — enough to answer whether a family shared, when, where and how many times.
+- **`GET /api/admin/shares/export`** — the full table as CSV, following the consents export exactly: admin session required, audited (`export_shares`) before the first byte, streamed in keyset-paginated batches, and escaped through `toCsvLine` so a name beginning with `=` opens as text. Dates render in `America/Guayaquil`, like every other date in the panel.
+
+### Changed
+
+- **`DailyBarChart` gained an optional stacked mode.** Passing `segments` splits each bar and renders a legend; the square-root scale, the zero handling, the axis labels and the per-bar `aria-label` (now including the breakdown) are unchanged, and the two existing charts pass `segments` nowhere and behave exactly as before.
+- `SongReadyEmailInput`/`SongReadyEmailContent` take `shareLinks` instead of `shareUrl`, built once by `buildSongShareLinks` and passed by both send paths — the automatic email and the admin resend, which must not hand a family different URLs. The template still never sees a token.
+
+### Notes
+
+- **What a "compartido" is, precisely.** Our tracking endpoint was reached with a valid share token and a known platform. It is **not** confirmation that WhatsApp, Facebook or X published or sent anything — we never observe that — and not strictly a count of people either: these links live in email, and mail providers and corporate security scanners follow links to inspect them, so some rows are machines. The admin screen says this in as many words rather than leaving the number to be misread.
+- **No open redirect is possible.** The destination is never read from the request. The platform is a path segment resolved against a closed set; anything else is a 404, and the URL is then built from that resolved value. A query parameter naming a destination is ignored because nothing reads one — asserted by test.
+- **Recording never blocks sharing.** A failed insert, a failed rate-limit check or an exceeded limit all still return the `302`. Losing a metric is acceptable; breaking a family's share button is not.
+- **Facebook is untouched.** `u` plus `quote`, exactly as before. Whether Facebook honours `quote` remains unresolved and out of scope; the tracking does not depend on it.
+- **Migration `20260930160000_share_events` is applied.** Strictly additive — one enum, one table, three indexes, two cascading foreign keys. No existing column altered, no row read or written, no backfill: shares before today were never observable and are not invented.
+- **Aggregation happens in SQL.** Two aggregates ride the Dashboard's existing `Promise.all`/`settle` — one row for the totals, at most ~90 for the daily split — so the connection pool (five per process) is unaffected and no share rows are grouped in JavaScript. A failure degrades only the shares section.
+
 ## [1.42.1] - 2026-09-30
 
 ### Fixed

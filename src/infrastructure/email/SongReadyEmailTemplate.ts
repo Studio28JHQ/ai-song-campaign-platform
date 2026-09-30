@@ -1,3 +1,4 @@
+import type { SongShareLinks } from "@/application/song/services/songShareUrl";
 import { appConfig } from "@/config/app";
 import {
   EMAIL_PALETTE,
@@ -15,13 +16,13 @@ export interface SongReadyEmailContent {
   audioUrl: string;
   duration: number | null;
   /**
-   * The song's own public share page (see `buildSongShareUrl`), already
-   * built by the caller — this template never sees a token and has no
-   * idea one exists. `null` when the song has no public page, in which
-   * case the share section is omitted rather than pointed somewhere
-   * else.
+   * The song's public page and the three tracking URLs its share buttons
+   * point at, already built by the caller (`buildSongShareLinks`) — this
+   * template never sees a token and has no idea one exists. `null` when
+   * the song has no public page, in which case the share section is
+   * omitted rather than pointed somewhere else.
    */
-  shareUrl: string | null;
+  shareLinks: SongShareLinks | null;
 }
 
 function formatDuration(seconds: number | null): string | null {
@@ -32,47 +33,23 @@ function formatDuration(seconds: number | null): string | null {
 }
 
 /**
- * What the share buttons point at — and, just as importantly, what they
- * do not.
+ * The share row: WhatsApp, Facebook and X, each a plain `<a>`. No
+ * LinkedIn, by requirement.
  *
- * They share `shareUrl`: the song's **own** public page,
- * `/song/share/[shareToken]`, so a recipient opens a page about this
- * child and can actually listen. Nothing else in this email is
- * shareable. `audioUrl` is a Cloudflare R2 presigned link whose query
- * string carries `X-Amz-Credential` — the bucket's access key id — and
- * which stops working after `R2_SIGNED_URL_EXPIRY_SECONDS` (7 days), so
- * it stays exactly where it belongs, on the parent's own "escuchar" and
- * "descargar" buttons. The resume link is the family's session and is
- * not in this email at all.
+ * The buttons no longer point at the platforms directly. They point at
+ * this application's own tracking route, which records the click and
+ * then redirects to the platform with the message and the song's public
+ * URL (see `shareDestinations`). Two consequences worth stating, because
+ * getting either wrong is silent:
+ *
+ * - The message text is no longer built here. It is composed at redirect
+ *   time from the platform the route validated, so there is one
+ *   definition of what WhatsApp, Facebook and X receive.
+ * - The URL shown under "O copia este enlace" and the URL that reaches
+ *   the platforms is the song's **public page**, never the tracking URL.
+ *   A tracking URL inside a shared message would record an event for
+ *   every recipient who opened it.
  */
-function shareMessage(babyName: string): string {
-  return `🎵 Escucha la canción personalizada que creamos para ${babyName} en ${appConfig.campaign.name} ❤️`;
-}
-
-/**
- * The same sentence without emoji, for WhatsApp and Facebook.
- *
- * Why two messages rather than one. Our encoding is not the problem and
- * removing the emoji is not a workaround for a bug in this file: the
- * WhatsApp href we emit is pure ASCII, percent-encoded UTF-8
- * (`%F0%9F%8E%B5` for the note, `%C3%B3` for the ó), and
- * `decodeURIComponent` round-trips it exactly. What a real share showed
- * is that the emoji still arrived as the replacement character `�`
- * in WhatsApp while the accented text arrived intact — so the loss
- * happens somewhere past our URL, in a chain we neither control nor can
- * test from here. The fix is therefore to stop depending on emoji for
- * the channels where it was observed to break, not to re-encode
- * something that is already correct and not to strip characters with a
- * regex after the fact.
- *
- * X keeps `shareMessage` above, unchanged: a real share confirmed it
- * renders the emoji correctly there, and there is no reason to change a
- * channel that works.
- */
-function plainShareMessage(babyName: string): string {
-  return `¡Escucha la canción personalizada que creamos para ${babyName} en ${appConfig.campaign.name}!`;
-}
-
 /**
  * The share row: WhatsApp, Facebook and X, each a plain `<a>` to the
  * network's own public share endpoint. No LinkedIn, by requirement.
@@ -82,31 +59,21 @@ function plainShareMessage(babyName: string): string {
  * HTML — the two are not interchangeable, and a baby's name containing
  * `&` needs both.
  */
-function renderShareSection(babyName: string, url: string): string {
-  const message = shareMessage(babyName);
-  const plainMessage = plainShareMessage(babyName);
-  const encodedUrl = encodeURIComponent(url);
-  const encodedMessage = encodeURIComponent(message);
+function renderShareSection(babyName: string, links: SongShareLinks): string {
+  const url = links.shareUrl;
 
   const networks = [
     {
       label: "WhatsApp",
-      href: `https://wa.me/?text=${encodeURIComponent(`${plainMessage} ${url}`)}`,
+      href: links.tracking.whatsapp,
     },
     {
-      // `quote` is what carries the text through Facebook's share dialog.
-      // `u` alone hands Facebook nothing but the link, and it then builds
-      // the whole post from the page's Open Graph tags — which is why a
-      // real share showed the right song with no sentence of ours. The
-      // two parameters stay separate: `u` is the song's page, `quote` is
-      // the message, and the URL is never repeated inside the text.
       label: "Facebook",
-      href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodeURIComponent(plainMessage)}`,
+      href: links.tracking.facebook,
     },
     {
-      // Unchanged, deliberately: a real share confirmed X works.
       label: "X",
-      href: `https://twitter.com/intent/tweet?text=${encodedMessage}&url=${encodedUrl}`,
+      href: links.tracking.x,
     },
   ];
 
@@ -204,7 +171,7 @@ export class SongReadyEmailTemplate {
                   download: true,
                 })}
 
-                ${content.shareUrl ? renderShareSection(content.babyName, content.shareUrl) : ""}
+                ${content.shareLinks ? renderShareSection(content.babyName, content.shareLinks) : ""}
 
                 ${renderSupport(supportEmail)}`;
 

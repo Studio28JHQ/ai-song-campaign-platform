@@ -1,32 +1,23 @@
 import "dotenv/config";
 import { describe, expect, it } from "vitest";
-import { appConfig } from "@/config/app";
 import { bannerUrl } from "@/infrastructure/email/emailChrome";
 import { SongReadyEmailTemplate } from "@/infrastructure/email/SongReadyEmailTemplate";
 
-const SHARE_URL = "https://miprimeracancion.bassa.com.ec/song/share/aabbccdd11223344";
+const SHARE_TOKEN = "aabbccdd11223344";
+const SHARE_URL = `https://miprimeracancion.bassa.com.ec/song/share/${SHARE_TOKEN}`;
 
-/** Mirrors the template's own X wording, so the encoding assertions test the real string. */
-function shareMessageFor(babyName: string): string {
-  return `🎵 Escucha la canción personalizada que creamos para ${babyName} en ${appConfig.campaign.name} ❤️`;
-}
+/** The tracking URLs the buttons point at — what the parent clicks. */
+const TRACKING = {
+  whatsapp: `${SHARE_URL}/to/whatsapp?utm_source=whatsapp&utm_medium=social&utm_campaign=family_song`,
+  facebook: `${SHARE_URL}/to/facebook?utm_source=facebook&utm_medium=social&utm_campaign=family_song`,
+  x: `${SHARE_URL}/to/x?utm_source=x&utm_medium=social&utm_campaign=family_song`,
+};
 
-/** The emoji-free wording WhatsApp and Facebook receive. */
-function plainShareMessageFor(babyName: string): string {
-  return `¡Escucha la canción personalizada que creamos para ${babyName} en ${appConfig.campaign.name}!`;
-}
+const SHARE_LINKS = { shareUrl: SHARE_URL, tracking: TRACKING };
 
-/** The three share hrefs, with HTML entities decoded back into the real URL. */
-function shareHrefs(html: string): Record<"whatsapp" | "facebook" | "x", URL> {
-  const found = [
-    ...html.matchAll(/href="(https:\/\/(?:wa\.me|www\.facebook\.com|twitter\.com)[^"]*)"/g),
-  ].map((match) => new URL(match[1].replace(/&amp;/g, "&")));
-
-  return {
-    whatsapp: found.find((url) => url.host === "wa.me") as URL,
-    facebook: found.find((url) => url.host === "www.facebook.com") as URL,
-    x: found.find((url) => url.host === "twitter.com") as URL,
-  };
+/** A URL as it appears inside an HTML attribute, with `&` escaped. */
+function inHtml(url: string): string {
+  return url.replace(/&/g, "&amp;");
 }
 
 const SIGNED_AUDIO_URL =
@@ -37,7 +28,7 @@ const CONTENT = {
   babyName: "Baby Doe",
   audioUrl: SIGNED_AUDIO_URL,
   duration: 60,
-  shareUrl: SHARE_URL,
+  shareLinks: SHARE_LINKS,
 };
 
 describe("SongReadyEmailTemplate", () => {
@@ -51,7 +42,7 @@ describe("SongReadyEmailTemplate", () => {
       babyName: "Baby Doe",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: 125,
-      shareUrl: SHARE_URL,
+      shareLinks: SHARE_LINKS,
     });
 
     expect(html).toContain("<!doctype html>");
@@ -83,81 +74,64 @@ describe("SongReadyEmailTemplate", () => {
   });
 
   describe("share section", () => {
-    it("offers WhatsApp, Facebook and X, and nothing else", () => {
+    it("points every button at this application's tracking route, not at the platform", () => {
+      // The parent clicks our URL; the platform URL is built at redirect
+      // time (see `shareDestinations`). Nothing in the email addresses
+      // wa.me, facebook.com or twitter.com any more.
+      const html = SongReadyEmailTemplate.html(CONTENT);
+
+      expect(html).toContain(inHtml(TRACKING.whatsapp));
+      expect(html).toContain(inHtml(TRACKING.facebook));
+      expect(html).toContain(inHtml(TRACKING.x));
+
+      expect(html).not.toContain("wa.me");
+      expect(html).not.toContain("facebook.com/sharer");
+      expect(html).not.toContain("twitter.com/intent");
+    });
+
+    it("offers exactly WhatsApp, Facebook and X, and nothing else", () => {
       const html = SongReadyEmailTemplate.html(CONTENT);
 
       expect(html).toContain("Comparte este momento");
-      expect(html).toContain("https://wa.me/?text=");
-      expect(html).toContain("https://www.facebook.com/sharer/sharer.php?u=");
-      expect(html).toContain("https://twitter.com/intent/tweet?");
-    });
-
-    it("puts the share URL in all three buttons and nowhere unsafe", () => {
-      const html = SongReadyEmailTemplate.html(CONTENT);
-      const encoded = encodeURIComponent(SHARE_URL);
-
-      // WhatsApp carries it inside the message text; the other two as a
-      // dedicated url parameter.
-      expect(html.split(encoded).length - 1).toBeGreaterThanOrEqual(3);
-      // And it is offered as copyable text as well.
-      expect(html).toContain(SHARE_URL);
+      expect(html).toContain(">WhatsApp<");
+      expect(html).toContain(">Facebook<");
+      expect(html).toContain(">X<");
     });
 
     it("has no LinkedIn anywhere, by explicit requirement", () => {
-      const html = SongReadyEmailTemplate.html(CONTENT).toLowerCase();
+      expect(SongReadyEmailTemplate.html(CONTENT).toLowerCase()).not.toContain("linkedin");
+    });
 
-      expect(html).not.toContain("linkedin");
+    it("shows the clean public URL as the copyable link, never the tracking URL", () => {
+      // This is the one place the reader sees a URL as text. A tracking
+      // URL here would be copied and pasted, and every recipient opening
+      // it would record a share that never happened.
+      const html = SongReadyEmailTemplate.html(CONTENT);
+
+      expect(html).toContain("O copia este enlace:");
+      expect(html).toContain(`>${SHARE_URL}<`);
+      expect(html).not.toContain(`>${inHtml(TRACKING.whatsapp)}<`);
+    });
+
+    it("never puts the tracking URL where a recipient would receive it", () => {
+      const html = SongReadyEmailTemplate.html(CONTENT);
+
+      // `/to/<platform>` may appear only inside an href, never as text.
+      const asText = html.replace(/href="[^"]*"/g, "");
+      expect(asText).not.toContain("/to/whatsapp");
+      expect(asText).not.toContain("/to/facebook");
+      expect(asText).not.toContain("/to/x");
     });
 
     it("never shares the signed audio URL, which carries a credential and expires", () => {
-      // `audioUrl` is an R2 presigned link: its query string embeds
-      // `X-Amz-Credential` (the bucket's access key id) and it dies after
-      // 7 days. Posting that to Facebook or X would publish both problems.
       const html = SongReadyEmailTemplate.html(CONTENT);
-
-      const shareHrefs = [
-        ...html.matchAll(/href="(https:\/\/(?:wa\.me|www\.facebook\.com|twitter\.com)[^"]*)"/g),
-      ].map((match) => match[1]);
+      const shareHrefs = [...html.matchAll(/href="([^"]*\/to\/[^"]*)"/g)].map((m) => m[1]);
 
       expect(shareHrefs).toHaveLength(3);
       for (const href of shareHrefs) {
         expect(href).not.toContain("X-Amz-Credential");
-        expect(href).not.toContain("AKIAKEYID");
         expect(href).not.toContain("r2.cloudflarestorage.com");
       }
-    });
-
-    it("shares THIS song's public page, never the campaign landing page", () => {
-      // Social Sharing: the previous version shared `/`, which meant a
-      // recipient could not hear the song the post was about. Every
-      // button now carries the song's own share URL.
-      const html = SongReadyEmailTemplate.html(CONTENT);
-      const encoded = encodeURIComponent(SHARE_URL);
-
-      expect(html).toContain(`sharer.php?u=${encoded}`);
-      expect(html).toContain(`&amp;url=${encoded}`);
-      expect(html).toContain(
-        encodeURIComponent(`${plainShareMessageFor("Baby Doe")} ${SHARE_URL}`),
-      );
-
-      // And the bare origin is never what gets shared.
-      const bareOrigin = encodeURIComponent(new URL("/", appConfig.url).toString());
-      expect(html).not.toContain(`sharer.php?u=${bareOrigin}`);
-    });
-
-    it("omits the whole share section when the song has no public page", () => {
-      // A song that completed before the token column existed and was
-      // never backfilled. Better to drop the section than to point it
-      // somewhere that is not this song.
-      const html = SongReadyEmailTemplate.html({ ...CONTENT, shareUrl: null });
-
-      expect(html).not.toContain("Comparte este momento");
-      expect(html).not.toContain("wa.me");
-      expect(html).not.toContain("facebook.com");
-      expect(html).not.toContain("twitter.com");
-      // The rest of the email is unaffected.
-      expect(html).toContain("Escuchar la canción");
-      expect(html).toContain("Descargar la canción");
     });
 
     it("never puts the resume link or any session token in a share button", () => {
@@ -167,143 +141,24 @@ describe("SongReadyEmailTemplate", () => {
       expect(html).not.toContain("resumeToken");
     });
 
-    describe("WhatsApp", () => {
-      it("carries this song's URL and the expected text", () => {
-        const { whatsapp } = shareHrefs(
-          SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Diana" }),
-        );
-        const text = whatsapp.searchParams.get("text") as string;
+    it("omits the whole share section when the song has no public page", () => {
+      const html = SongReadyEmailTemplate.html({ ...CONTENT, shareLinks: null });
 
-        expect(text).toContain(SHARE_URL);
-        expect(text).toContain("Escucha la canción personalizada que creamos para Diana");
-        expect(text).toContain(appConfig.campaign.name);
-      });
-
-      it("carries no emoji, which is what arrived as a replacement character", () => {
-        const { whatsapp } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-        const text = whatsapp.searchParams.get("text") as string;
-
-        // The two the real share showed as U+FFFD.
-        expect(text).not.toContain("🎵");
-        expect(text).not.toContain("❤️");
-        // And no astral-plane character at all, which is the class of
-        // thing that broke while accented Latin text came through fine.
-        expect([...text].every((character) => character.codePointAt(0)! <= 0xffff)).toBe(true);
-      });
-
-      it("never contains the replacement character itself", () => {
-        const { whatsapp } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect(whatsapp.href).not.toContain("\uFFFD");
-        expect(whatsapp.searchParams.get("text")).not.toContain("\uFFFD");
-      });
-
-      it("keeps accented Spanish, which was never the problem", () => {
-        const { whatsapp } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect(whatsapp.searchParams.get("text")).toContain("canción");
-      });
-
-      it("emits a correctly percent-encoded, pure-ASCII href", () => {
-        const html = SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Ana & Lía" });
-        const raw = /href="(https:\/\/wa\.me[^"]*)"/.exec(html)?.[1] as string;
-
-        // A URL is ASCII by construction once encoded; anything else
-        // means a raw character leaked into the query string.
-        expect([...raw].some((character) => character.charCodeAt(0) > 127)).toBe(false);
-        // And it decodes back to exactly what was intended.
-        expect(new URL(raw.replace(/&amp;/g, "&")).searchParams.get("text")).toContain("Ana & Lía");
-      });
+      expect(html).not.toContain("Comparte este momento");
+      expect(html).not.toContain("/to/whatsapp");
+      expect(html).not.toContain("O copia este enlace:");
+      // The rest of the email is unaffected.
+      expect(html).toContain("Escuchar la canción");
+      expect(html).toContain("Descargar la canción");
     });
 
-    describe("Facebook", () => {
-      it("carries this song's URL in `u` and the text in `quote`", () => {
-        const { facebook } = shareHrefs(
-          SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Diana" }),
-        );
-
-        expect(facebook.pathname).toBe("/sharer/sharer.php");
-        expect(facebook.searchParams.get("u")).toBe(SHARE_URL);
-        expect(facebook.searchParams.get("quote")).toBe(plainShareMessageFor("Diana"));
-      });
-
-      it("does not depend on the page's Open Graph tags to supply the text", () => {
-        // `u` alone is what produced a correct link with no sentence of
-        // ours: Facebook built the post from the page's OG tags.
-        const { facebook } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect(facebook.searchParams.has("quote")).toBe(true);
-        expect((facebook.searchParams.get("quote") as string).length).toBeGreaterThan(0);
-      });
-
-      it("never falls back to the campaign landing page", () => {
-        const { facebook } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-        const shared = facebook.searchParams.get("u") as string;
-
-        expect(shared).toBe(SHARE_URL);
-        expect(shared).not.toBe(new URL("/", appConfig.url).toString());
-        expect(shared).toContain("/song/share/");
-      });
-
-      it("does not repeat the URL inside the quoted text", () => {
-        const { facebook } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect(facebook.searchParams.get("quote")).not.toContain(SHARE_URL);
-        expect(facebook.searchParams.get("quote")).not.toContain("http");
-      });
-
-      it("percent-encodes both parameters", () => {
-        const html = SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Ana & Lía" });
-        const raw = /href="(https:\/\/www\.facebook\.com[^"]*)"/.exec(html)?.[1] as string;
-
-        expect(raw).toContain(encodeURIComponent(SHARE_URL));
-        expect(raw).toContain(encodeURIComponent(plainShareMessageFor("Ana & Lía")));
-        // The `&` joining the two parameters is escaped for the HTML
-        // attribute; the ampersand inside the name is not a separator.
-        expect(raw).toContain("&amp;quote=");
-      });
-    });
-
-    describe("X — unchanged", () => {
-      it("still sends the emoji message in `text` and the song URL in `url`", () => {
-        const { x } = shareHrefs(SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Diana" }));
-
-        expect(x.pathname).toBe("/intent/tweet");
-        expect(x.searchParams.get("text")).toBe(shareMessageFor("Diana"));
-        expect(x.searchParams.get("url")).toBe(SHARE_URL);
-      });
-
-      it("keeps the emoji a real share confirmed working there", () => {
-        const { x } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect(x.searchParams.get("text")).toContain("🎵");
-        expect(x.searchParams.get("text")).toContain("❤️");
-      });
-
-      it("gains no new parameters", () => {
-        const { x } = shareHrefs(SongReadyEmailTemplate.html(CONTENT));
-
-        expect([...x.searchParams.keys()].sort()).toEqual(["text", "url"]);
-      });
-    });
-
-    it("percent-encodes the share text, including the baby's name and emoji", () => {
-      const html = SongReadyEmailTemplate.html({ ...CONTENT, babyName: "Lía & Ana" });
-
-      // Encoded for the query string...
-      expect(html).toContain(encodeURIComponent("Lía & Ana"));
-      // ...and the resulting `&` separators escaped for the HTML attribute.
-      expect(html).toContain("&amp;url=");
-      expect(html).not.toMatch(/href="[^"]*text=[^"]*\sLía & Ana/);
-    });
-
-    it("replaces 'copy link' with a selectable link, since email cannot run a clipboard", () => {
+    it("contains no JavaScript", () => {
       const html = SongReadyEmailTemplate.html(CONTENT);
 
-      expect(html).toContain("O copia este enlace:");
       expect(html).not.toContain("<script");
       expect(html).not.toContain("onclick");
       expect(html).not.toContain("navigator.clipboard");
+      expect(html).not.toContain("javascript:");
     });
   });
 
@@ -334,7 +189,7 @@ describe("SongReadyEmailTemplate", () => {
       babyName: "Baby Doe",
       audioUrl: "https://cdn.example.com/song.mp3",
       duration: null,
-      shareUrl: SHARE_URL,
+      shareLinks: SHARE_LINKS,
     });
 
     expect(html).not.toContain("Duración:");

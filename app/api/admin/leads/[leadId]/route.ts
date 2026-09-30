@@ -4,6 +4,7 @@ import { GetLeadDetailUseCase } from "@/application/admin/use-cases/GetLeadDetai
 import { getAdminSession } from "@/infrastructure/auth/getAdminSession";
 import { PrismaAdminLeadDeletionGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminLeadDeletionGate";
 import { PrismaAdminLyricsAttemptGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminLyricsAttemptGate";
+import { PrismaAdminShareEventGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminShareEventGate";
 import { PrismaAuditLogRepository } from "@/infrastructure/persistence/prisma/admin/PrismaAuditLogRepository";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
@@ -28,6 +29,7 @@ const getLeadDetailUseCase = new GetLeadDetailUseCase(
   new PrismaAuditLogRepository(),
   new R2AudioUrlResolver(),
   new PrismaAdminLyricsAttemptGate(),
+  new PrismaAdminShareEventGate(),
 );
 
 // Sprint FINAL-5 — Test Data Cleanup. Shares this route because it acts

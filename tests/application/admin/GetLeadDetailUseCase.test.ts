@@ -182,6 +182,9 @@ function findEvent(
   return history.find((item) => item.type === type);
 }
 
+/** Share Tracking — a family with no recorded shares, the common case. */
+const shareEventGate = { findByLead: async () => [] };
+
 describe("GetLeadDetailUseCase", () => {
   let leadRepository: InMemoryLeadRepository;
   let lyricsRepository: InMemoryLyricsRepository;
@@ -205,6 +208,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     await expect(
@@ -252,6 +256,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -273,6 +278,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -293,6 +299,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-42" });
@@ -312,6 +319,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -357,6 +365,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -399,6 +408,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -442,6 +452,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -480,6 +491,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
     const beforeEmail = await useCaseBeforeEmail.execute({
       leadId: lead.id,
@@ -536,6 +548,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -577,6 +590,7 @@ describe("GetLeadDetailUseCase", () => {
       auditLogRepository,
       fakeAudioUrlResolver(),
       lyricsAttemptGate,
+      shareEventGate,
     );
 
     const result = await useCase.execute({ leadId: lead.id, viewingAdminId: "admin-1" });
@@ -601,6 +615,7 @@ describe("GetLeadDetailUseCase — lyrics generation attempts", () => {
       new InMemoryAuditLogRepository(),
       fakeAudioUrlResolver(),
       gate,
+      shareEventGate,
     );
   }
 

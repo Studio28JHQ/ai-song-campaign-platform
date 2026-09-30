@@ -14,7 +14,14 @@ describe("ResendEmailService.sendSongReadyEmail", () => {
     songId: "song-1",
     audioUrl: "https://cdn.example.com/song.mp3",
     duration: 120,
-    shareUrl: "https://example.com/song/share/tok",
+    shareLinks: {
+      shareUrl: "https://example.com/song/share/tok",
+      tracking: {
+        whatsapp: "https://example.com/song/share/tok/to/whatsapp",
+        facebook: "https://example.com/song/share/tok/to/facebook",
+        x: "https://example.com/song/share/tok/to/x",
+      },
+    },
   };
 
   it("builds the subject/html and calls the client exactly once", async () => {

@@ -1,4 +1,4 @@
-import type { DailyCount, DashboardSection } from "../contracts/AdminDashboardGate";
+import type { DailyCount, DashboardSection, ShareCounts } from "../contracts/AdminDashboardGate";
 
 /** Output of `GetDashboardSummaryUseCase`. Plain indicators plus two 30-day daily trend series — no BI engine, no stored aggregates. */
 export interface DashboardSummaryResponse {
@@ -20,6 +20,8 @@ export interface DashboardSummaryResponse {
   campaignGoal: number;
   /** The campaign's `maximumSongs` budget, straight from the DB — `null` if no campaign row exists. */
   campaignMaximumSongs: number | null;
+  /** Share Tracking — recorded share attempts; see `ShareCounts`. */
+  shares: ShareCounts;
   songsCompletedToday: number;
   songsCompletedLast7Days: number;
   songsCompletedLast30Days: number;

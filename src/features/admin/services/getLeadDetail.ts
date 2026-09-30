@@ -78,6 +78,12 @@ export interface LeadDetailLyricsAttempt {
   completedAt: string | null;
 }
 
+/** Share Tracking — one recorded share attempt, as the API serialises it. */
+export interface LeadDetailShareEvent {
+  platform: string;
+  createdAt: string;
+}
+
 export interface LeadDetailResult {
   lead: LeadDetailLead;
   lyricsHistory: LeadDetailLyrics[];
@@ -85,6 +91,8 @@ export interface LeadDetailResult {
   song: LeadDetailSong | null;
   executionHistory: LeadDetailExecutionHistoryItem[];
   lyricsAttempts: LeadDetailLyricsAttempt[];
+  /** Newest first. Absent on a response predating share tracking. */
+  shareEvents?: LeadDetailShareEvent[];
 }
 
 export class GetLeadDetailError extends Error {
