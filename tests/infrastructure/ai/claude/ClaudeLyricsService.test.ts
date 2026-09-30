@@ -75,7 +75,7 @@ describe("ClaudeLyricsService.generateAndModerate", () => {
   });
 });
 
-describe("ClaudeLyricsService.generateAndModerate — Sprint v1.6 (300-330 character target): bounded retry on over-limit lyrics", () => {
+describe("ClaudeLyricsService.generateAndModerate — bounded retry on over-limit lyrics", () => {
   function responseWith(overrides: Record<string, unknown> = {}) {
     return {
       content: [

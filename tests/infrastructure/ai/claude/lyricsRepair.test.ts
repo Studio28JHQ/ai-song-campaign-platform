@@ -5,7 +5,11 @@ import {
   MODERATION_CATEGORIES,
   PUBLIC_MODERATION_REASON,
 } from "@/infrastructure/ai/claude/moderationCategories";
-import { PromptBuilder } from "@/infrastructure/ai/claude/PromptBuilder";
+import {
+  LYRICS_TARGET_MAX_LENGTH,
+  LYRICS_TARGET_MIN_LENGTH,
+  PromptBuilder,
+} from "@/infrastructure/ai/claude/PromptBuilder";
 import { LYRICS_MAX_LENGTH, ResponseParser } from "@/infrastructure/ai/claude/ResponseParser";
 
 /**
@@ -124,18 +128,84 @@ describe("Length repair (TOO_LONG)", () => {
     expect(repair.user).toContain(String(draft.length));
   });
 
-  it("[4] states the 340-360 target window, not merely 'shorten it'", async () => {
+  it("[4][6] aims the repair at the target window, not at the hard maximum", async () => {
     const repair = PromptBuilder.buildLengthRepair(baseInput, {
       lyrics: lyricsOf(420),
       musicMood: "Warm",
       musicDirection: "Acoustic",
     });
 
-    expect(repair.user).toContain("340");
-    expect(repair.user).toContain("360");
-    expect(repair.user).toMatch(/between 340 and 360 characters/i);
-    // The window is a target, never a second validation rule.
-    expect(repair.user).toMatch(/quality and fidelity to the original come first/i);
+    expect(repair.user).toMatch(
+      new RegExp(
+        `rewrite them to between ${LYRICS_TARGET_MIN_LENGTH} and ${LYRICS_TARGET_MAX_LENGTH} characters`,
+        "i",
+      ),
+    );
+    expect(repair.user).toContain(String(LYRICS_MAX_LENGTH));
+    // Sprint FINAL-8: the superseded window asked for 340-360, which put
+    // the repair's own goal 20 characters from the limit it was trying to
+    // escape. Landing there is now stated to be a failed edit.
+    expect(repair.user).not.toMatch(/between 340 and 360/i);
+    expect(repair.user).toMatch(
+      new RegExp(`landing at ${LYRICS_MAX_LENGTH} is a failed edit`, "i"),
+    );
+    // Under the window is still explicitly preferred over padding.
+    expect(repair.user).toMatch(
+      new RegExp(
+        `lands under ${LYRICS_TARGET_MIN_LENGTH} and still tells a complete story, keep it`,
+        "i",
+      ),
+    );
+  });
+
+  it("[6] names the size of the cut in characters and percent, rather than asking it to shorten", async () => {
+    // The convergence failure this replaces: told only to "shorten", the
+    // repair came back 5-8% smaller per pass (422 → 397 → 385) and ran
+    // out of budget just short of the limit. A draft of 420 has to lose
+    // 100 characters to reach the top of the window, and is told so.
+    const repair = PromptBuilder.buildLengthRepair(baseInput, {
+      lyrics: lyricsOf(420),
+      musicMood: "Warm",
+      musicDirection: "Acoustic",
+    });
+
+    expect(repair.user).toMatch(
+      new RegExp(`removing at least ${420 - LYRICS_TARGET_MAX_LENGTH} characters`, "i"),
+    );
+    expect(repair.user).toMatch(/about 24% of what is there/i);
+  });
+
+  it("[6] asks for whole details to be dropped, which is what a cut that size requires", async () => {
+    const repair = PromptBuilder.buildLengthRepair(baseInput, {
+      lyrics: lyricsOf(420),
+      musicMood: "Warm",
+      musicDirection: "Acoustic",
+    });
+
+    expect(repair.user).toMatch(/comes from dropping whole details, not from trimming words/i);
+    expect(repair.user).toMatch(/prefer removing a whole line over shortening several/i);
+    expect(repair.user).toMatch(/does not have to keep every scene or every detail/i);
+    // But it is still an edit of the same song, not a fresh one.
+    expect(repair.user).toMatch(/still be recognisably the same song/i);
+    expect(repair.user).toMatch(/do not write a different song/i);
+  });
+
+  it("[6] keeps the requested cut positive even for a draft only one character over", async () => {
+    // 361 is below the top of the target window, so the raw subtraction
+    // would ask for a negative cut. The floor keeps the sentence sane.
+    const repair = PromptBuilder.buildLengthRepair(baseInput, {
+      lyrics: lyricsOf(LYRICS_MAX_LENGTH + 1),
+      musicMood: "Warm",
+      musicDirection: "Acoustic",
+    });
+
+    expect(repair.user).toMatch(
+      new RegExp(
+        `removing at least ${LYRICS_MAX_LENGTH + 1 - LYRICS_TARGET_MAX_LENGTH} characters`,
+      ),
+    );
+    expect(repair.user).not.toMatch(/removing at least -/);
+    expect(repair.user).not.toMatch(/removing at least 0 characters/);
   });
 
   it("[5] leaves 360 as the hard limit: 360 passes, 361 does not", async () => {

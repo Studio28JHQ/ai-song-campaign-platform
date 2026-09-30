@@ -30,7 +30,7 @@ This document describes every external integration used by the platform: purpose
 
 **Targeted repair (Sprint FINAL-4 — Targeted Lyrics Repair)** — A single request may spend at most **3 Claude calls in total** (`MAX_CLAUDE_CALLS_PER_REQUEST`), one budget shared by every kind of call, so generations and repairs can never multiply. The calls after the first are aimed at the specific problem rather than repeating the same prompt:
 
-- **Lyrics over the 360-character maximum** — the draft is still in memory inside the raw response, so the next call asks Claude to _edit that draft_ into the 340–360 target window (`PromptBuilder.buildLengthRepair`). A repair that is still too long is repaired again from the most recent draft, never from the original. `ResponseParser` remains the only authority on the limit; the target window is prompt guidance, not a second rule. Motivated by production measurement on 2026-09-29: 41.6% of calls overshot 360, with a median overshoot to 406.
+- **Lyrics over the 360-character maximum** — the draft is still in memory inside the raw response, so the next call asks Claude to _edit that draft_ into the 280–320 target window (`PromptBuilder.buildLengthRepair`). A repair that is still too long is repaired again from the most recent draft, never from the original. `ResponseParser` remains the only authority on the limit; the target window is prompt guidance, not a second rule. See "Length control" below for why the window moved down from 340–360 in Sprint FINAL-8.
 - **Moderation rejection** — Claude names the rule it applied in `moderationCategory`, and exactly one directed call (`PromptBuilder.buildModerationRepair`) asks for the same song with that element left out. It runs the full, unmodified `SAFETY_RULES` again and may reject again, which ends the request: there is never a second moderation repair.
 
 Neither repair is persisted anywhere: the draft and the parent's message live in memory for the request and are then gone. Every repair is a real Claude call and is recorded as its own `GenerationAttempt` row.
@@ -65,7 +65,41 @@ or
 
 `null` is deliberately not the same as `OTHER_UNSAFE_CONTENT`: the category is what a repair aims at, so without one there is nothing to correct and the repair would be a paid call asking Claude to remove something neither side can name. An unresolvable label therefore costs the repair, never the response — parsing still succeeds, the parent still gets `PUBLIC_MODERATION_REASON`, and the attempt is still recorded (as `UNCATEGORISED — <the model's own wording>`, so the gap is visible rather than disguised as a category).
 
-When approved, the lyrics follow a fixed structure (Title, Verse 1, Chorus, Verse 2, Final Chorus) sized for roughly 2–3 minutes of music, as plain text.
+When approved, the lyrics follow the fixed four-section commercial-jingle structure (`[Verse] [Verse] [Chorus] [Ending]`, Sprint v1.5), as plain text, sized for a short jingle rather than a full-length song — see "Length control" immediately below.
+
+**Length control (Sprint FINAL-8 — Lyrics Length Control)**
+
+`LYRICS_MAX_LENGTH = 360` is a hard maximum and the single source of truth for it: declared once in `ResponseParser`, imported by `PromptBuilder`, never restated as a literal. It is a production constraint, not a stylistic one — the finished song is cut to a fixed duration, so a longer lyric yields a song whose ending is never heard. Nothing accepts a lyric over it and nothing truncates one to fit.
+
+Alongside it, `PromptBuilder` exports a target window, `LYRICS_TARGET_MIN_LENGTH`–`LYRICS_TARGET_MAX_LENGTH` (**280–320**), which every prompt in the file aims at — the first generation and the length repair alike. It is prompt guidance only; no validation rule refers to it.
+
+Why the window sits well below the maximum. Measured on 2026-09-30 over the 854 calls recorded since tracing began (2026-09-29 04:40):
+
+| Population                                                   |   n | Detail                                                                   |
+| ------------------------------------------------------------ | --: | ------------------------------------------------------------------------ |
+| Calls that produced a usable lyric (`SUCCESS`)               | 403 | length p50 330, p90 352, max 360, min 257 — and **255 of them over 320** |
+| Calls discarded for exceeding 360 (`CLAUDE_OUTPUT_TOO_LONG`) | 378 | mean 418; ~31% of them over by 20 characters or less                     |
+| Moderation rejections                                        |  70 | not a length outcome                                                     |
+| Rows still `STARTED`                                         |   3 | request died mid-call                                                    |
+
+378 of 781 length-relevant calls — **48.4%** — were discarded, at a cost of **2.12 calls per usable lyric**. The maximum was sitting near the median of the model's own output for this prompt, so roughly half of every generation fell on the wrong side of it.
+
+The cause was not a missing instruction. `WRITING_INSTRUCTIONS` stated the 360 limit four times and required an internal count before responding. The same block also ranked compactness **last of five** creative priorities and said in as many words never to "cut the story itself down to fit" — so whenever the parent's message and the limit collided, the prompt itself instructed Claude to keep the message. Sprint FINAL-8 therefore changed the logic rather than adding another reminder:
+
+- The maximum is stated as a technical constraint that sits **outside** the creative priority order and never trades against it; the remaining priorities are sing naturally → land emotionally → tell one small complete story → be memorable, and a conflict is resolved by carrying less of the parent's message.
+- The parent's message is described as **source material, not a script**: covering it is explicitly not a goal, and Claude is told to choose the one or two most emotionally telling details and leave the rest out.
+- Length is reached by **dropping whole details**, never by clipped phrasing, abbreviations or a truncated line.
+- The repair prompt names the size of the cut outright — "removing at least N characters, about X% of what is there" — and states that landing just under 360 is a failed edit. The superseded 340–360 target aimed the repair 20 characters from the limit it was escaping, which produced ~5–8% reduction per pass (422 → 397 → 385) and exhausted the budget just short of success.
+
+What did **not** change: the maximum (still 360), the parent's 600-character story limit, the model, `max_tokens`, the call budget, and the music pipeline. The audit refuted the story as the driver — over a matched population, calls from stories of ≤150 characters were too long 41% of the time against 44% for stories of 451–600, with no monotonic trend — so nothing was taken away from what a parent may write.
+
+**Per-call metrics** — `ClaudeLyricsService` emits one structured `logger.info("claude.lyrics_call", …)` line per real Claude call, carrying `leadId`, `call`/`maxCalls`, `kind` (`generation` | `length_repair` | `moderation_repair`), `parentMessageLength`, `promptLength`, `outputLength`, `durationMs`, `result` and `errorCode`. Sizes and outcomes only — no lyric, no prompt, no parent message, and no fragment of any of them, the same rule `toLyricsAttemptFailureReason` applies to the database. Emitting these needed no migration and none was run.
+
+This closes the two gaps the audit hit: `GenerationAttempt` records an over-long length only because it appears in the failure message this codebase writes, records nothing at all about a _successful_ call's size, and a lead whose every call failed leaves no `lyrics` row and therefore no trace of the story it was given. Putting the four numbers in a column instead would mean a migration on a campaign with weeks left to run, for data that is answerable from logs. If the campaign later wants them joinable, the change is four nullable `Int` columns on `generation_attempts` (`parentMessageLength`, `promptLength`, `outputLength`, plus a `callNumber` distinct from the lifetime `attemptNumber`) — additive, no backfill, no data loss.
+
+**Cost: what is bounded and what is not** — One request spends at most 3 Claude calls. That ceiling is per _request_, not per lead: a request that exhausts the budget on over-long lyrics throws, and `GenerateLyricsForLeadUseCase` consumes the parent's functional attempt only _after_ the provider returns — so an internal failure costs the parent nothing and they may ask again, spending up to 3 more calls, with no lifetime limit. Leads with 10 and 12 recorded calls exist for this reason.
+
+This was audited in Sprint FINAL-8 and deliberately left as it is. Every available bound — a lifetime call cap per lead, or charging a functional attempt for a length failure — penalises a parent for a defect on our side, and the campaign has no business rule stating how many of our own failures a family should absorb; inventing one was out of scope. The fix applied instead was to stop producing over-long lyrics. **The residual risk is that a family hitting a persistent generation failure can drive unbounded Claude spend by retrying.** The `claude.lyrics_call` metrics above are what will show whether it remains material once the retargeted prompt is live; if the discard rate does not fall, a lifetime cap becomes a product decision to take deliberately rather than a rule to guess at.
 
 **Failure Scenarios** — Network errors and timeouts are retried transparently by the shared `httpRequest` helper; once retries are exhausted, or on a non-ok HTTP status, an invalid response body, missing text content, invalid JSON, or a response that doesn't match the expected schema, `ClaudeClient`/`ResponseParser` throw the shared `ExternalApiError` (`src/shared/errors/`) — no raw Claude exception, payload, or stack trace ever escapes the infrastructure layer.
 

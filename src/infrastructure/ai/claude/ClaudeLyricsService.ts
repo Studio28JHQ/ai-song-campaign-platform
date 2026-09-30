@@ -30,6 +30,55 @@ import type { ClaudeLyricsResult, ClaudeMessageResponse, ClaudeModeratedResult }
 const MAX_CLAUDE_CALLS_PER_REQUEST = 3;
 
 /**
+ * Sprint FINAL-8 — Lyrics Length Control. What a given call in the budget
+ * was spent on, so the metrics line below can distinguish "the first
+ * generation came back at 412" from "the repair of a 412 came back at
+ * 388" — the difference between a prompt that overshoots and a repair
+ * that converges too slowly, which the attempt rows alone cannot tell
+ * apart.
+ */
+type ClaudeCallKind = "generation" | "length_repair" | "moderation_repair";
+
+/**
+ * Sprint FINAL-8 — Lyrics Length Control. One structured line per real
+ * Claude call, carrying only sizes and outcomes.
+ *
+ * Why a log line and not a column. The one thing the 2026-09-30 audit
+ * could not answer from the database was what a *successful* call
+ * produced and how big its inputs were: `GenerationAttempt` records the
+ * over-long lengths (they are quoted in the failure message this codebase
+ * writes) but nothing about an approval, and a lead whose every call
+ * failed leaves no `lyrics` row and therefore no trace of the story it
+ * was given. Closing that gap in the table means a migration for four
+ * numbers on a campaign with weeks left to run; these fields answer the
+ * same questions at zero schema cost. `GenerationAttempt` keeps recording
+ * what it already records — the ordinal, the outcome, the error code, and
+ * the timestamps a duration comes from — and this adds the sizes next to
+ * it. See docs/Architecture/External_Services.md for what a column would
+ * involve if the campaign ever wants these joinable.
+ *
+ * Every field is a number, a small enum, or an error code. No lyric, no
+ * prompt, no parent message, and no fragment of any of them is ever
+ * written here — the same rule `toLyricsAttemptFailureReason` already
+ * applies to the database.
+ */
+interface ClaudeCallMetrics {
+  leadId: string;
+  call: number;
+  maxCalls: number;
+  kind: ClaudeCallKind;
+  /** Characters in the parent's story, as it reached the prompt. */
+  parentMessageLength: number;
+  /** Characters in the assembled prompt (system + user). */
+  promptLength: number;
+  /** Characters in the lyric Claude returned; `null` when it returned none. */
+  outputLength: number | null;
+  durationMs: number;
+  result: "SUCCESS" | "MODERATION_REJECTED" | "FAILED";
+  errorCode: string | null;
+}
+
+/**
  * Moderation + lyrics generation for one request, with a bounded budget
  * of Claude calls and two kinds of targeted repair.
  *
@@ -45,9 +94,9 @@ const MAX_CLAUDE_CALLS_PER_REQUEST = 3;
  *   into the target window rather than write a new song from scratch. A
  *   repair that is still too long is repaired again, always from the
  *   most recent draft, never back to the original. Measured in
- *   production on 2026-09-29: 41.6% of calls overshot the 360-character
- *   maximum, with a median overshoot to 406 — which a blind retry only
- *   ever fixed by luck.
+ *   production on 2026-09-30 over 848 recorded calls: 377 (48.6%)
+ *   overshot the 360-character maximum, averaging 418 characters — which
+ *   a blind retry only ever fixed by luck.
  * - **Moderation rejection** — Claude names the rule it applied
  *   (`moderationCategory`, internal). Exactly one directed call then
  *   asks for the same song with that element left out. That call
@@ -55,6 +104,24 @@ const MAX_CLAUDE_CALLS_PER_REQUEST = 3;
  *   the request: there is never a second moderation repair.
  * - **Anything else** — unchanged. A malformed response, a rate limit,
  *   an outage: thrown exactly as before, with no repair attempted.
+ *
+ * ## The cost this class bounds, and the cost it does not
+ *
+ * One request spends at most `MAX_CLAUDE_CALLS_PER_REQUEST` calls. That
+ * is the only ceiling here, and it is deliberately not a ceiling per
+ * lead: a request that exhausts the budget on over-long lyrics throws,
+ * and `GenerateLyricsForLeadUseCase` consumes the parent's functional
+ * attempt only *after* this service returns — so an internal failure
+ * costs the parent nothing and they can ask again, spending up to three
+ * more calls, without limit. Sprint FINAL-8 audited that path and left it
+ * alone on purpose: every bound that could be placed on it (a lifetime
+ * call cap per lead, charging a functional attempt for a length failure)
+ * penalises a parent for a defect on our side, and the campaign has no
+ * rule saying how many of our own failures a family should absorb. The
+ * fix applied instead was to stop generating over-long lyrics — see
+ * `PromptBuilder`'s target window. The residual risk is real and is
+ * written down in docs/Architecture/External_Services.md; the metrics
+ * line below is what will show whether it is still worth acting on.
  *
  * Three boundaries this class keeps:
  *
@@ -86,6 +153,7 @@ export class ClaudeLyricsService {
     // is replaced by a repair prompt whenever the previous call gave us
     // something specific to fix.
     let prompt: ClaudePrompt = PromptBuilder.build(input);
+    let kind: ClaudeCallKind = "generation";
 
     // One directed moderation repair per request, ever.
     let moderationRepairSpent = false;
@@ -94,19 +162,53 @@ export class ClaudeLyricsService {
       const isLastCall = call === MAX_CLAUDE_CALLS_PER_REQUEST;
       const handle = await this.openAttempt(input.leadId);
 
+      // Captured before the call: the sizes that went in. `promptLength`
+      // is the whole assembled prompt, which is what an input-cost
+      // question is actually about.
+      const measured = {
+        leadId: input.leadId,
+        call,
+        maxCalls: MAX_CLAUDE_CALLS_PER_REQUEST,
+        kind,
+        parentMessageLength: input.parentMessage.length,
+        promptLength: prompt.system.length + prompt.user.length,
+      };
+      const startedAt = Date.now();
+
       let response: ClaudeMessageResponse;
       try {
         response = await this.client.sendMessage(prompt);
       } catch (error) {
-        await this.closeAttempt(handle, ClaudeLyricsService.failureOf(error));
+        const outcome = ClaudeLyricsService.failureOf(error);
+        ClaudeLyricsService.recordCall({
+          ...measured,
+          outputLength: null,
+          durationMs: Date.now() - startedAt,
+          result: outcome.result,
+          errorCode: outcome.errorCode,
+        });
+        await this.closeAttempt(handle, outcome);
         throw error;
       }
+
+      const durationMs = Date.now() - startedAt;
 
       let result: ClaudeModeratedResult;
       try {
         result = ResponseParser.parse(response);
       } catch (error) {
-        await this.closeAttempt(handle, ClaudeLyricsService.failureOf(error));
+        const outcome = ClaudeLyricsService.failureOf(error);
+        ClaudeLyricsService.recordCall({
+          ...measured,
+          // For a too-long rejection the parser puts the measured length
+          // in the error's context; for every other parse failure there
+          // is no lyric to have measured.
+          outputLength: ClaudeLyricsService.rejectedLyricsLength(error),
+          durationMs,
+          result: outcome.result,
+          errorCode: outcome.errorCode,
+        });
+        await this.closeAttempt(handle, outcome);
 
         const isLyricsTooLong =
           error instanceof ExternalApiError && error.code === "claude.lyrics_too_long";
@@ -121,8 +223,9 @@ export class ClaudeLyricsService {
         // service did before, rather than failing the request.
         const draft = ClaudeLyricsService.extractDraft(response);
         prompt = draft ? PromptBuilder.buildLengthRepair(input, draft) : PromptBuilder.build(input);
+        kind = draft ? "length_repair" : "generation";
 
-        logger.warn("Claude lyrics exceeded the 360-character maximum; repairing the draft", {
+        logger.warn("Claude lyrics exceeded the hard maximum; repairing the draft", {
           call,
           maxCalls: MAX_CLAUDE_CALLS_PER_REQUEST,
           repairing: draft !== null,
@@ -133,6 +236,13 @@ export class ClaudeLyricsService {
       }
 
       if (result.approved) {
+        ClaudeLyricsService.recordCall({
+          ...measured,
+          outputLength: result.lyrics?.length ?? null,
+          durationMs,
+          result: "SUCCESS",
+          errorCode: null,
+        });
         await this.closeAttempt(handle, {
           result: "SUCCESS",
           errorCode: null,
@@ -155,6 +265,13 @@ export class ClaudeLyricsService {
       // us can name, so the request ends here instead — the parent still
       // gets the same message, and the raw wording is still recorded.
       const category = result.moderationCategory;
+      ClaudeLyricsService.recordCall({
+        ...measured,
+        outputLength: null,
+        durationMs,
+        result: "MODERATION_REJECTED",
+        errorCode: null,
+      });
       await this.closeAttempt(handle, {
         result: "MODERATION_REJECTED",
         errorCode: null,
@@ -167,6 +284,7 @@ export class ClaudeLyricsService {
 
       moderationRepairSpent = true;
       prompt = PromptBuilder.buildModerationRepair(input, category);
+      kind = "moderation_repair";
 
       logger.warn("Claude rejected the parent's message; attempting one directed repair", {
         call,
@@ -182,6 +300,46 @@ export class ClaudeLyricsService {
       code: "claude.call_budget_exhausted",
       context: { maxCalls: MAX_CLAUDE_CALLS_PER_REQUEST },
     });
+  }
+
+  /**
+   * Sprint FINAL-8 — Lyrics Length Control. Emits the metrics line for
+   * one finished Claude call.
+   *
+   * `info`, not `warn`: this fires on every call including the successful
+   * ones, and the distribution is only readable if the successes are in
+   * it too — the whole point is being able to ask "where is output length
+   * landing now?" rather than only "which ones failed?". The existing
+   * `warn` lines for a repair and a rejection are unchanged and still say
+   * what they always said.
+   *
+   * Never throws and never affects the generation: an observability
+   * failure must not cost a parent a song. `logger` writes to the console
+   * and cannot realistically fail, but the guarantee is made here rather
+   * than assumed.
+   */
+  private static recordCall(metrics: ClaudeCallMetrics): void {
+    try {
+      logger.info("claude.lyrics_call", { ...metrics });
+    } catch {
+      // Intentionally empty — see above.
+    }
+  }
+
+  /**
+   * The lyric length a `claude.lyrics_too_long` rejection measured, read
+   * from the error's own context rather than from the response, so this
+   * and the parser can never disagree about what was counted. `null` for
+   * every other failure: nothing was measured, and a zero would read as
+   * "Claude returned an empty lyric", which is a different event.
+   */
+  private static rejectedLyricsLength(error: unknown): number | null {
+    if (!(error instanceof ExternalApiError) || error.code !== "claude.lyrics_too_long") {
+      return null;
+    }
+
+    const length = error.context?.lyricsLength;
+    return typeof length === "number" ? length : null;
   }
 
   /**

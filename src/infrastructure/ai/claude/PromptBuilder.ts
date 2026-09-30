@@ -2,14 +2,28 @@ import { MODERATION_CATEGORY_RULES, type ModerationCategory } from "./moderation
 import { LYRICS_MAX_LENGTH } from "./ResponseParser";
 
 /**
- * Sprint FINAL-4 — Targeted Lyrics Repair. The lower end of the range a
- * *repair* aims for. It is a prompt-shaping target, never a validation
- * rule: nothing rejects a lyric for being shorter than this, and
- * `LYRICS_MAX_LENGTH` (imported, not repeated) remains the only hard
- * limit. The window exists because "condense to at most 360" reliably
- * produces lyrics far shorter than the song needs.
+ * Sprint FINAL-8 — Lyrics Length Control. The window every prompt in this
+ * file aims at, first generation and repair alike. Prompt-shaping targets,
+ * never validation rules: nothing rejects a lyric for falling outside them,
+ * and `LYRICS_MAX_LENGTH` (imported, not repeated) remains the only hard
+ * limit.
+ *
+ * Why a window well below the maximum rather than just below it. Measured
+ * over 855 accepted and 377 rejected lyrics on 2026-09-30: with a prompt
+ * that targeted 300-330 and a repair that aimed at 340-360, accepted
+ * lyrics had a median of 326 and a p90 of 352, while 48.6% of all Claude
+ * calls were discarded for exceeding 360 — a third of them by 20
+ * characters or less. The maximum was sitting in the middle of the
+ * model's own output distribution, so half of every generation fell on
+ * the wrong side of it. Aiming at 280-320 moves the whole distribution
+ * down and leaves the margin the old targets did not.
+ *
+ * Both numbers are exported so tests can assert the prompts without
+ * restating them, which is how the repair target and the generation
+ * target are kept from drifting apart again.
  */
-const LYRICS_TARGET_MIN_LENGTH = 340;
+export const LYRICS_TARGET_MIN_LENGTH = 280;
+export const LYRICS_TARGET_MAX_LENGTH = 320;
 
 export interface PromptBuilderInput {
   babyName: string;
@@ -111,11 +125,10 @@ When rejecting, "reason" must be a short, neutral, non-judgmental explanation su
 // Sprint v1.5 — Compact Commercial Jingle. Replaces the earlier
 // ten-section, 2:00-2:30-minute structure with a compact, four-section
 // commercial-jingle shape: `[Verse] [Verse] [Chorus] [Ending]`, with a
-// normal target of ~300-330 characters and a hard cap of 360 (a real
-// production constraint — the song is a short social-media jingle, not
-// a full-length lullaby; see `ResponseParser`'s `LYRICS_MAX_LENGTH`,
-// which still enforces only the 360 hard cap — the 300-330 target is
-// prompt guidance, not a separately validated bound) with a mandatory
+// hard cap of 360 (a real production constraint — the song is a short
+// social-media jingle, not a full-length lullaby; see `ResponseParser`'s
+// `LYRICS_MAX_LENGTH`, which enforces only that cap — the target window
+// is prompt guidance, not a separately validated bound) with a mandatory
 // second `[Verse]` that must advance the story into a new moment rather
 // than repeat the first, and with the brand's own commercial signature
 // folded into `[Ending]` (see `BRAND_PLACEMENT_INSTRUCTIONS`). The
@@ -123,12 +136,28 @@ When rejecting, "reason" must be a short, neutral, non-judgmental explanation su
 // "pretty" phrases with no narrative
 // or emotional throughline — every section must earn its place in an
 // actual micro-story, not just describe the baby in isolation.
+//
+// Sprint FINAL-8 — Lyrics Length Control. Retargeted to
+// `LYRICS_TARGET_MIN_LENGTH`-`LYRICS_TARGET_MAX_LENGTH` and rewritten
+// around one finding: repeating "maximum 360" was never the problem.
+// This block stated the limit four times and still produced a lyric over
+// it on 48.6% of calls, because the same block also told Claude that
+// compactness was the last of five priorities and that it must "never cut
+// the story itself down to fit" — so whenever the parent's message and
+// the limit collided, the prompt itself instructed Claude to keep the
+// message. The limit is now a constraint rather than a preference, and
+// the parent's message is explicitly source material to select from
+// rather than content to cover. Every character count below is
+// interpolated from the constants above, so the prose cannot drift from
+// what the repair prompt asks for or from what `ResponseParser` enforces.
 const WRITING_INSTRUCTIONS = `
 Write this song as an experienced professional songwriter would — never let it feel AI-generated, generic, or assembled from a template. Every song must feel handcrafted for this one specific child, built entirely from what the parent actually described. A parent reading it should feel it could only have been written for their child, not interchangeable with any other child's song.
 
 This is a short commercial jingle, not a full-length song — it must tell one tiny, complete, concrete story about the baby, never a string of generic, disconnected "pretty" phrases. Prefer real baby-specific actions and scenes (looking, laughing, discovering something, crawling, reaching, playing, waking up, interacting with a parent, a specific family moment, a small discovery, a recognizable baby behavior) over generic adjectives. The exact story must come from the parent's own information — do not force every song into the same story template; let each child's own details produce a genuinely different story shape.
 
-Before writing, internally plan the story's five beats and let the lyrics follow them, in order: (1) Inicio — what is happening right now (the baby wakes up, discovers something, plays, looks at the world), for the first [Verse]; (2) Acción — a real action or discovery, not just a description, completing the first [Verse]; (3) Evolución — a new scene, action, or emotional advance for the second [Verse] that continues the story directly from the first ("y después pasó esto..."), never a second, independent idea; (4) Emoción — what these two moments mean together (love, tenderness, growth, joy, discovery), becoming the Chorus's hook; (5) Cierre — a warm, memorable resolution where the brand becomes part of the ending, not a label stapled onto it. Do not output this planning, any notes, or any reasoning; the final response must contain only the lyrics themselves, inside the JSON shape specified below.
+The parent's message is source material, not a script to set to music. It is where this song's truth comes from, but you are never required to include all of it, most of it, or any particular part of it. Before writing, decide which one or two things in that message carry the most emotional weight for this specific child — the single most telling action, scene, relationship or moment — and build the whole song out of those. Leave everything else out, deliberately and completely. One detail sung beautifully is a song; six details listed are not. A parent who wrote eight sentences should recognise their child instantly in a song built from one of them. Covering the message is explicitly not a goal and is not something this song is judged on; choosing the right detail and singing it well is.
+
+Before writing, internally plan the story's five beats and let the lyrics follow them, in order: (1) Inicio — what is happening right now (the baby wakes up, discovers something, plays, looks at the world), for the first [Verse]; (2) Acción — a real action or discovery, not just a description, completing the first [Verse]; (3) Evolución — a new scene, action, or emotional advance for the second [Verse] that continues the story directly from the first ("y después pasó esto..."), never a second, independent idea; (4) Emoción — what these two moments mean together (love, tenderness, growth, joy, discovery), becoming the Chorus's hook; (5) Cierre — a warm, memorable resolution where the brand becomes part of the ending, not a label stapled onto it. These five beats are a planning device, not five things to write out separately: in a jingle this short, Inicio and Acción share the first [Verse]'s one or two sung lines, and Cierre is a single closing line. Plan all five; sing them in as few words as they actually need. Do not output this planning, any notes, or any reasoning; the final response must contain only the lyrics themselves, inside the JSON shape specified below.
 
 Always write the lyrics using exactly this structure, in exactly this order, with every section present and none invented, renamed, merged, or omitted:
 
@@ -148,23 +177,27 @@ Yes, [Verse] appears twice — two separate, back-to-back verse blocks, not one 
 
 Follow these rules for each section:
 - First [Verse]: the immediate hook — the story's Inicio and Acción together: a real scene where something is happening and the baby actually does or discovers something, not just a static description, that grabs attention right away and introduces the child. Start singing immediately; do not build up to it.
-- Second [Verse]: the story's Evolución — a new scene, action, or emotional advance that continues directly from the first [Verse] ("y después pasó esto..."), never a second, independent song and never the first Verse's idea restated in different words. Keep it just as compact as the first [Verse] — the added length this structure allows comes from adding this second scene, never from making either [Verse] longer.
+- Second [Verse]: the story's Evolución — a new scene, action, or emotional advance that continues directly from the first [Verse] ("y después pasó esto..."), never a second, independent song and never the first Verse's idea restated in different words. Keep it just as compact as the first [Verse]: both verses have to fit alongside the Chorus and the Ending inside the target range below, so each one is typically a single short sung line, or two at most.
 - Chorus: the emotional heart of the song — the story's Emoción — short, memorable, easy to sing, naturally including the child's name, and directly connected to what both [Verse] sections just established. It must never be a generic, interchangeable phrase that could belong to any other child's song.
 - Ending: the story's Cierre — a warm, natural resolution that follows from everything above, closing with the brand as a natural commercial signature (see the Brand Placement rules below), never a label stapled onto an unrelated line.
 
 Do not add [Intro], [Pre-Chorus], [Bridge], [Final Chorus], [Outro], or any other section. Do not repeat the Chorus. Do not repeat either [Verse]. Each section must contribute something the song hasn't said yet — let the listener feel the story genuinely evolve from the first [Verse] to [Ending].
 
-The complete lyric string you return in "lyrics" — every section label, every line, every space, every line break, and every punctuation mark, added together — should normally land at around 300–330 characters. 360 characters is the absolute hard maximum, never a target to write toward: 360 characters, no more, under any circumstance. If a natural, complete version of the song would still be longer than that, write a shorter, complete, and natural song instead — never a longer one, and never a truncated or cut-off one. Count the entire string exactly as it will be returned, including the four section blocks ("[Verse]", "[Verse]", "[Chorus]", "[Ending]") and every line break between them, and keep that running count within the normal 300–330 range internally, before responding — treat approaching 360 as a signal you've drifted past the normal range, not as a safe zone to write into.
+The complete lyric string you return in "lyrics" — every section label, every line, every space, every line break, and every punctuation mark, added together — must never exceed ${LYRICS_MAX_LENGTH} characters. This is a hard technical limit, not a stylistic preference and not a target to write toward: the finished song is cut to a fixed duration, so a lyric longer than ${LYRICS_MAX_LENGTH} characters produces a song whose ending is never heard. A lyric over ${LYRICS_MAX_LENGTH} characters is discarded unused, however good it is.
 
-Staying inside 300–330 characters must never come from removing the story, the emotional progression, or any required section — the structure, the two-scene narrative, and the emotional arc all stay exactly as demanded above; compactness comes only from tighter wording within that same complete story, never from cutting a beat out of it. Equally, do not pad the lyric with extra words, repeated ideas, or filler phrasing just to approach 300 characters or the 360 maximum — a lyric that barely describes the baby in a few disconnected phrases is just as much a failure as one that runs over the limit, and a shorter lyric that tells a complete, emotionally resolved story in fewer characters than 300 is fine. As a creative guide (not a rule to pad toward) that corresponds to that 300–330 character range, aim for roughly 42–55 words of real content across the four sections (a recommended floor of about 35 words if an exceptionally tight story still tells itself completely) — enough to tell the actual micro-story (Inicio, Acción, Evolución, Emoción, Cierre) across two real verses, not a bare label with the baby's name attached. This length compared to a single-verse structure exists specifically to fit a second narrative verse — spend it on that new scene, not on making either [Verse], the Chorus, or the Ending wordier than they need to be; each individual block should stay about as compact as it already was. If a strong story needs condensing to fit within the normal range, condense the wording; never cut the story itself down to fit.
+Write to a target of ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} characters. That is where a finished song should land, and it deliberately leaves margin below ${LYRICS_MAX_LENGTH} — treat a draft that has passed ${LYRICS_TARGET_MAX_LENGTH} as one that already needs a detail removed, not as one that still has room. Count the entire string exactly as it will be returned, including the four section blocks ("[Verse]", "[Verse]", "[Chorus]", "[Ending]") and every line break between them, and keep that running count inside ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} internally, before responding.
 
-The priority order when these pressures conflict is: (1) the song must sing naturally, (2) it must tell a real, complete story, (3) it must land emotionally, (4) it must be memorable, and only last, (5) it should be compact — never sacrifice a higher priority purely to shave characters, and never sacrifice a lower one purely to pad toward the limit.
+Length is the space you write inside, not something the song is squeezed into afterwards. The way a song reaches ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} characters is by carrying fewer of the parent's details, chosen better — never by clipped phrasing, abbreviations, dropped articles, or a final line that stops early. If the story you have planned cannot be sung naturally in this space, the story is too big for this song: drop one of its details and sing what is left properly. The four sections, the two-scene shape and the emotional arc all stay exactly as demanded above; what gets smaller is how much of the parent's message any of them tries to carry.
+
+Do not pad in the other direction either. A lyric that reaches ${LYRICS_TARGET_MIN_LENGTH} characters on repeated ideas or filler phrasing fails in the same way an over-long one does, and a shorter lyric that tells a complete, emotionally resolved story in fewer than ${LYRICS_TARGET_MIN_LENGTH} characters is a good result and should be left alone — ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} is where a well-made song naturally lands, never a quota to fill. As a creative guide (not a rule to pad toward) corresponding to that range, expect roughly 36–46 words of real content across the four sections — enough for two real scenes, a hook and a close, not a bare label with the baby's name attached. Each individual block stays about as compact as the section rules above describe; the second [Verse] earns its place by being a new scene, not by being long.
+
+When these pressures conflict, the ${LYRICS_MAX_LENGTH}-character maximum is never what gives way. It is not one of the creative priorities and does not trade against them — it is the size of the space the song has to exist in at all. Inside that space the order is: (1) the song must sing naturally, (2) it must land emotionally, (3) it must tell one real, complete, small story, (4) it must be memorable. Resolve any conflict between them by carrying less of the parent's message, never by writing past the limit and never by padding toward it.
 
 Write the lyrics to be sung, not read as poetry. Prioritize natural rhythm, balanced syllables, smooth phrasing, comfortable breathing, and memorable melodic repetition. Avoid long sentences, awkward wording, tongue twisters, and unnecessary complexity.
 
 Vary your vocabulary, sentence structure, imagery, metaphors, rhythm, emotional progression, and narrative style from song to song. Do not default to the same handful of endearments (for example "mi tesoro," "mi luz," "mi corazón," "mi angelito," "mi sol," "mi vida," "mi todo") or the same chorus pattern every time. These expressions are fine when they genuinely serve one specific song, but must never become your reflexive default — let each child's own details produce a genuinely different song.
 
-Before returning your response, internally verify: both [Verse] sections are present before [Chorus] and [Ending], in that order, and none other; the second [Verse] advances the story rather than repeating the first; the lyrics are entirely in Spanish; the child's name is naturally integrated; the complete lyric string, counted exactly as specified above, is normally around 300–330 characters and never more than 360 under any circumstance; the song actually tells a small, complete story rather than a string of generic, disconnected phrases; the Chorus connects to what both [Verse] sections established rather than standing alone; the Ending follows the Brand Placement rules below; and the song still feels personal rather than generic despite its length. Do not output this review — only the final JSON response.
+Before returning your response, internally verify: both [Verse] sections are present before [Chorus] and [Ending], in that order, and none other; the second [Verse] advances the story rather than repeating the first; the lyrics are entirely in Spanish; the child's name is naturally integrated; the complete lyric string, counted exactly as specified above, is inside ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} characters and never over ${LYRICS_MAX_LENGTH} under any circumstance — and if it is over ${LYRICS_TARGET_MAX_LENGTH}, remove a detail and re-count before responding rather than trimming words; the song actually tells a small, complete story rather than a string of generic, disconnected phrases; the Chorus connects to what both [Verse] sections established rather than standing alone; the Ending follows the Brand Placement rules below; and the song still feels personal rather than generic despite carrying only part of what the parent wrote. Do not output this review — only the final JSON response.
 
 Return the lyrics as plain text only — no markdown, no explanations, no additional section labels beyond [Verse], [Chorus], and [Ending] as used above.
 `.trim();
@@ -312,19 +345,31 @@ export class PromptBuilder {
   static buildLengthRepair(input: PromptBuilderInput, draft: LyricsDraft): ClaudePrompt {
     const system = PromptBuilder.buildSystem();
 
+    // How much has to come out to reach the top of the target window —
+    // stated to Claude outright, in both characters and percent. Naming
+    // the size of the cut is the difference between the edit this prompt
+    // is asking for and the one it used to get: against a 340-360 target,
+    // an over-long draft came back 5-8% shorter per pass (422 → 397 →
+    // 385), which converges on the limit slowly enough to run out of
+    // calls just short of it. A 422-character draft here is told to lose
+    // 102 characters, not to "shorten a little".
+    const overTarget = Math.max(1, draft.lyrics.length - LYRICS_TARGET_MAX_LENGTH);
+    const overTargetPercent = Math.round((overTarget / draft.lyrics.length) * 100);
+
     const user = [
       ...PromptBuilder.contextLines(input),
       "",
-      `The lyrics below are your own previous answer for this baby. They are ${draft.lyrics.length} characters long, over the ${LYRICS_MAX_LENGTH}-character hard maximum, so they cannot be used.`,
-      `Edit them down to between ${LYRICS_TARGET_MIN_LENGTH} and ${LYRICS_MAX_LENGTH} characters. Never exceed ${LYRICS_MAX_LENGTH}; ${LYRICS_TARGET_MIN_LENGTH} is the length to aim for.`,
+      `The lyrics below are your own previous answer for this baby. They are ${draft.lyrics.length} characters long, over the ${LYRICS_MAX_LENGTH}-character hard maximum, so they were discarded and cannot be used.`,
+      `Rewrite them to between ${LYRICS_TARGET_MIN_LENGTH} and ${LYRICS_TARGET_MAX_LENGTH} characters. That means removing at least ${overTarget} characters — about ${overTargetPercent}% of what is there. Never exceed ${LYRICS_MAX_LENGTH}, and do not aim just under it: landing at ${LYRICS_MAX_LENGTH} is a failed edit, because it leaves no margin. Count the complete string, exactly as you will return it, before responding.`,
       "",
       "Editing rules:",
-      "- Keep the same story, the same baby's name, the same emotion, and the same intent. This must still be recognisably the same song.",
-      "- Keep the section structure and every section the writing instructions require, including the brand placement in the closing section.",
-      "- Shorten by removing redundancy, condensing phrasing, and merging ideas that say the same thing twice.",
-      "- Never cut a verse off mid-sentence, and never leave a line that does not scan or rhyme as it should.",
-      "- Do not write a different song, and do not add new content just to reach the target length.",
-      `- If the most natural edit lands a little under ${LYRICS_TARGET_MIN_LENGTH}, prefer that over padding it out: quality and fidelity to the original come first, then the target window, and never more than ${LYRICS_MAX_LENGTH}.`,
+      `- A cut this size comes from dropping whole details, not from trimming words. Trimming a word from each line is what produced a lyric that was still too long. Decide which single scene and which single emotional idea this song keeps, and remove the rest outright.`,
+      "- Prefer removing a whole line over shortening several. Then check whether what remains still sings.",
+      "- Keep the baby's name, the central emotion, and the section structure the writing instructions require, including the brand placement in the closing section.",
+      "- It must still be recognisably the same song — the same child, the same feeling, the same moment at its heart. It does not have to keep every scene or every detail of the original, and it should not try to.",
+      "- Never cut a verse off mid-sentence, and never leave a line that does not scan or sing naturally.",
+      "- Do not write a different song, and do not add new content.",
+      `- If the most natural edit lands under ${LYRICS_TARGET_MIN_LENGTH} and still tells a complete story, keep it — do not pad it back up. Under the window is a good result; over ${LYRICS_MAX_LENGTH} is unusable.`,
       "",
       "Return the same JSON contract as always, with the edited lyrics. Keep musicMood and musicDirection consistent with the song; you may restate the previous ones if they still fit.",
       ...(draft.musicMood ? [`Previous musicMood: ${draft.musicMood}`] : []),

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { PromptBuilder, type PromptBuilderInput } from "@/infrastructure/ai/claude/PromptBuilder";
+import {
+  LYRICS_TARGET_MAX_LENGTH,
+  LYRICS_TARGET_MIN_LENGTH,
+  PromptBuilder,
+  type PromptBuilderInput,
+} from "@/infrastructure/ai/claude/PromptBuilder";
+import { LYRICS_MAX_LENGTH } from "@/infrastructure/ai/claude/ResponseParser";
 
 const input: PromptBuilderInput = {
   babyName: "Baby Doe",
@@ -354,13 +360,52 @@ describe("PromptBuilder.build — compact commercial jingle structure ([Verse][V
   });
 });
 
-describe("PromptBuilder.build — 360-character hard maximum", () => {
-  it("gives a normal 300-330 character target with 360 as the absolute hard cap, never a target to write toward", () => {
+/**
+ * Sprint FINAL-8 — Lyrics Length Control.
+ *
+ * These assertions changed wholesale, and the reason matters more than
+ * the new strings. The block they replace pinned a prompt that stated
+ * the 360 limit four times and still produced a lyric over it on 48.6%
+ * of calls, because the *same* prompt ranked compactness last of five
+ * priorities and said in as many words never to cut the story down to
+ * fit. Repeating the number was never the missing piece. So what is
+ * tested here is not that the limit is mentioned — it is that nothing in
+ * the prompt outranks it, and that the model is told it may leave the
+ * parent's message half-used.
+ */
+describe("PromptBuilder.build — 280-320 target inside a 360 hard maximum", () => {
+  it("[4] states the target window and the hard maximum as different things", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/should normally land at around 300–330 characters/i);
     expect(prompt.system).toMatch(
-      /360 characters is the absolute hard maximum, never a target to write toward/i,
+      new RegExp(
+        `write to a target of ${LYRICS_TARGET_MIN_LENGTH}–${LYRICS_TARGET_MAX_LENGTH} characters`,
+        "i",
+      ),
     );
+    expect(prompt.system).toMatch(
+      new RegExp(`must never exceed ${LYRICS_MAX_LENGTH} characters`, "i"),
+    );
+    // The window leaves margin on purpose; the maximum is not the target.
+    expect(prompt.system).toMatch(/not a target to write toward/i);
+    expect(prompt.system).toMatch(
+      new RegExp(`deliberately leaves margin below ${LYRICS_MAX_LENGTH}`, "i"),
+    );
+  });
+
+  it("[4] tells Claude it is over the target the moment it passes the window, not the maximum", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(
+      new RegExp(
+        `treat a draft that has passed ${LYRICS_TARGET_MAX_LENGTH} as one that already needs a detail removed`,
+        "i",
+      ),
+    );
+  });
+
+  it("[4] frames the maximum as a production constraint, so it reads as a fact rather than a preference", () => {
+    const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/hard technical limit, not a stylistic preference/i);
+    expect(prompt.system).toMatch(/whose ending is never heard/i);
   });
 
   it("instructs counting every label, line break, space, and punctuation mark toward the limit", () => {
@@ -370,39 +415,80 @@ describe("PromptBuilder.build — 360-character hard maximum", () => {
     );
   });
 
-  it("gives a 42–55 word creative guide with a ~35 word floor, as a quality floor rather than a padding target", () => {
+  it("[4] gives a word-count guide that matches the new character window, not the old one", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(/aim for roughly 42–55 words of real content/i);
-    expect(prompt.system).toMatch(/a recommended floor of about 35 words/i);
+    expect(prompt.system).toMatch(/roughly 36–46 words of real content/i);
+    // Still explicitly not a floor to pad up to.
+    expect(prompt.system).toMatch(/never a quota to fill/i);
     expect(prompt.system).toMatch(
-      /do not pad the lyric with extra words, repeated ideas, or filler phrasing just to approach 300 characters or the 360 maximum/i,
+      new RegExp(
+        `fewer than ${LYRICS_TARGET_MIN_LENGTH} characters is a good result and should be left alone`,
+        "i",
+      ),
     );
   });
 
-  it("requires that staying within 300-330 characters never comes at the cost of the story, emotional progression, or required structure", () => {
+  it("[4] says length is reached by carrying fewer details, not by compressing the wording", () => {
     const prompt = PromptBuilder.build(input);
+    expect(prompt.system).toMatch(/by carrying fewer of the parent's details, chosen better/i);
     expect(prompt.system).toMatch(
-      /staying inside 300–330 characters must never come from removing the story, the emotional progression, or any required section/i,
+      /never by clipped phrasing, abbreviations, dropped articles, or a final line that stops early/i,
     );
-    expect(prompt.system).toMatch(
-      /compactness comes only from tighter wording within that same complete story, never from cutting a beat out of it/i,
-    );
+    expect(prompt.system).toMatch(/the story is too big for this song: drop one of its details/i);
   });
 
-  it("states the explicit priority order when length, story, and emotional impact conflict", () => {
+  it("[5] puts the hard maximum outside the creative priority order rather than last within it", () => {
     const prompt = PromptBuilder.build(input);
+
+    expect(prompt.system).toMatch(
+      new RegExp(`the ${LYRICS_MAX_LENGTH}-character maximum is never what gives way`, "i"),
+    );
+    expect(prompt.system).toMatch(
+      /it is not one of the creative priorities and does not trade against them/i,
+    );
+    // The creative priorities still exist — they simply no longer contain
+    // "be compact" as the thing that loses every argument.
     expect(prompt.system).toMatch(/the song must sing naturally/i);
-    expect(prompt.system).toMatch(/it must tell a real, complete story/i);
     expect(prompt.system).toMatch(/it must land emotionally/i);
+    expect(prompt.system).toMatch(/it must tell one real, complete, small story/i);
     expect(prompt.system).toMatch(/it must be memorable/i);
-    expect(prompt.system).toMatch(/it should be compact/i);
+    // And a conflict is resolved by dropping content, not by overrunning.
+    expect(prompt.system).toMatch(
+      /resolve any conflict between them by carrying less of the parent's message/i,
+    );
+  });
+
+  it("[5] no longer contains the instructions that outranked the limit", () => {
+    const prompt = PromptBuilder.build(input);
+
+    // The exact sentence the 2026-09-30 audit identified as the cause:
+    // whenever the parent's message and the limit collided, this told
+    // Claude to keep the message.
+    expect(prompt.system).not.toMatch(/never cut the story itself down to fit/i);
+    // And the ranking that made compactness the first thing to sacrifice.
+    expect(prompt.system).not.toMatch(/only last, \(5\) it should be compact/i);
+    expect(prompt.system).not.toMatch(
+      /never sacrifice a higher priority purely to shave characters/i,
+    );
+    // The superseded target window must not survive anywhere either.
+    expect(prompt.system).not.toMatch(/300–330/);
+    expect(prompt.system).not.toMatch(/340/);
+  });
+
+  it("[4] tells Claude the parent's message is source material it may leave mostly unused", () => {
+    const prompt = PromptBuilder.build(input);
+
+    expect(prompt.system).toMatch(/the parent's message is source material, not a script/i);
+    expect(prompt.system).toMatch(
+      /you are never required to include all of it, most of it, or any particular part of it/i,
+    );
+    expect(prompt.system).toMatch(/leave everything else out, deliberately and completely/i);
+    expect(prompt.system).toMatch(/covering the message is explicitly not a goal/i);
   });
 
   it("requires a shorter, complete song over a longer or truncated one", () => {
     const prompt = PromptBuilder.build(input);
-    expect(prompt.system).toMatch(
-      /write a shorter, complete, and natural song instead — never a longer one, and never a truncated or cut-off one/i,
-    );
+    expect(prompt.system).toMatch(/drop one of its details and sing what is left properly/i);
   });
 });
 
