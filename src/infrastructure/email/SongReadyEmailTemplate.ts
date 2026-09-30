@@ -50,6 +50,30 @@ function shareMessage(babyName: string): string {
 }
 
 /**
+ * The same sentence without emoji, for WhatsApp and Facebook.
+ *
+ * Why two messages rather than one. Our encoding is not the problem and
+ * removing the emoji is not a workaround for a bug in this file: the
+ * WhatsApp href we emit is pure ASCII, percent-encoded UTF-8
+ * (`%F0%9F%8E%B5` for the note, `%C3%B3` for the ó), and
+ * `decodeURIComponent` round-trips it exactly. What a real share showed
+ * is that the emoji still arrived as the replacement character `�`
+ * in WhatsApp while the accented text arrived intact — so the loss
+ * happens somewhere past our URL, in a chain we neither control nor can
+ * test from here. The fix is therefore to stop depending on emoji for
+ * the channels where it was observed to break, not to re-encode
+ * something that is already correct and not to strip characters with a
+ * regex after the fact.
+ *
+ * X keeps `shareMessage` above, unchanged: a real share confirmed it
+ * renders the emoji correctly there, and there is no reason to change a
+ * channel that works.
+ */
+function plainShareMessage(babyName: string): string {
+  return `¡Escucha la canción personalizada que creamos para ${babyName} en ${appConfig.campaign.name}!`;
+}
+
+/**
  * The share row: WhatsApp, Facebook and X, each a plain `<a>` to the
  * network's own public share endpoint. No LinkedIn, by requirement.
  *
@@ -60,19 +84,27 @@ function shareMessage(babyName: string): string {
  */
 function renderShareSection(babyName: string, url: string): string {
   const message = shareMessage(babyName);
+  const plainMessage = plainShareMessage(babyName);
   const encodedUrl = encodeURIComponent(url);
   const encodedMessage = encodeURIComponent(message);
 
   const networks = [
     {
       label: "WhatsApp",
-      href: `https://wa.me/?text=${encodeURIComponent(`${message} ${url}`)}`,
+      href: `https://wa.me/?text=${encodeURIComponent(`${plainMessage} ${url}`)}`,
     },
     {
+      // `quote` is what carries the text through Facebook's share dialog.
+      // `u` alone hands Facebook nothing but the link, and it then builds
+      // the whole post from the page's Open Graph tags — which is why a
+      // real share showed the right song with no sentence of ours. The
+      // two parameters stay separate: `u` is the song's page, `quote` is
+      // the message, and the URL is never repeated inside the text.
       label: "Facebook",
-      href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodeURIComponent(plainMessage)}`,
     },
     {
+      // Unchanged, deliberately: a real share confirmed X works.
       label: "X",
       href: `https://twitter.com/intent/tweet?text=${encodedMessage}&url=${encodedUrl}`,
     },

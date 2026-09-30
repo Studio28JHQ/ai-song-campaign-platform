@@ -15,6 +15,19 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.42.1] - 2026-09-30
+
+### Fixed
+
+- **WhatsApp no longer receives emoji in the share text.** A real share showed the message arriving as "� Escucha la canción … �" — the accented Spanish intact, both emoji replaced. The encoding was not at fault and was not changed: the href we emit is pure ASCII, percent-encoded UTF-8 (`%F0%9F%8E%B5` for the note, `%C3%B3` for the ó), and `decodeURIComponent` round-trips it exactly. The loss happens past our URL, in a chain we neither control nor can test from here, so the fix is to stop depending on emoji for that channel rather than to re-encode something already correct or strip characters after the fact. WhatsApp and Facebook now get "¡Escucha la canción personalizada que creamos para {bebé} en {campaña}!", with the baby's name still dynamic.
+- **Facebook now receives the text, not just the link.** `sharer.php?u=` hands Facebook nothing but the URL; it then builds the entire post from the destination's Open Graph tags, which is exactly what the real share showed — the right song, none of our wording. The message now travels explicitly in the share dialog's `quote` parameter, alongside `u`. The two stay separate: `u` is the song's own `/song/share/[shareToken]` page, `quote` is the sentence, and the URL is never repeated inside the text. No Open Graph metadata was touched.
+
+### Notes
+
+- **X is byte-identical and was deliberately not touched** — a real share confirmed it renders the emoji correctly, so it keeps the emoji message and its `text`/`url` parameters. That is why there are two message strings: the emoji one for X, a plain one for the channels where emoji was observed to break. A test asserts X gained no new parameter.
+- **Not verified against the real networks.** WhatsApp's rendering and Facebook's handling of `quote` were checked only by unit test here; Facebook has restricted pre-filled share text in the past, so whether it honours `quote` needs a real share to confirm.
+- Nothing outside the share links changed: the share token, the public page, the audio endpoint, R2, Open Graph metadata, the email design and the song pipeline are all untouched.
+
 ## [1.42.0] - 2026-09-30
 
 ### Fixed
