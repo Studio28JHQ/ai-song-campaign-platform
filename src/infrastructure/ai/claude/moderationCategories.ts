@@ -4,10 +4,16 @@
  *
  * Every value here is derived one-to-one from a rule that already exists
  * in `PromptBuilder`'s `SAFETY_RULES` (and, for `PROMPT_INJECTION`, from
- * the `AI_SAFETY_POLICY` those rules explicitly defer to). Nothing was
- * invented and no rule was added, removed, widened or narrowed: this is
- * a name for each decision Claude was already making, so that a
- * rejection can steer one targeted repair instead of ending the request.
+ * the `AI_SAFETY_POLICY` those rules explicitly defer to). Nothing here
+ * is invented: this is a name for each decision Claude was already
+ * making, so that a rejection can steer one targeted repair instead of
+ * ending the request.
+ *
+ * That correspondence is the whole contract, and it is worth stating why
+ * it matters: `RELIGIOUS_PROPAGANDA` drifted wider than the bullet it
+ * names, and because this text is what the prompt shows Claude, the
+ * drift became the rule. A category that is broader than its rule
+ * rejects messages the rule allows — see the comment on that value.
  *
  * The strict separation this module exists to enforce:
  *
@@ -32,7 +38,17 @@ export const MODERATION_CATEGORY_RULES = {
   ILLEGAL_ACTIVITY: "Illegal activity of any kind.",
   EXTREMIST_CONTENT: "Extremist content of any kind.",
   POLITICAL_PROPAGANDA: "Political propaganda.",
-  RELIGIOUS_PROPAGANDA: "Religious propaganda or religious content.",
+  // Narrowed to what `SAFETY_RULES` actually rejects. This value used to
+  // read "Religious propaganda or religious content", which is not the
+  // rule it maps to: the safety bullet says *propaganda*, and the extra
+  // "or religious content" silently widened it to cover any mention of
+  // faith. Combined with the campaign's "no religious content in the
+  // lyrics" writing rule, that made a parent's blessing — "dios bendiga a
+  // esta niña" — read as a message requiring forbidden content, and it
+  // was rejected. The category names a rule; it must never be broader
+  // than the rule.
+  RELIGIOUS_PROPAGANDA:
+    "Religious propaganda — content that preaches, promotes, persuades toward, or recruits for a faith. A parent's own blessing or expression of faith for their baby is not propaganda.",
   SEXUAL_CONTENT: "Sexual or otherwise explicit content.",
   COPYRIGHTED_CONTENT: "Copyrighted lyrics or melodies from existing songs.",
   DEFAMATORY_CONTENT: "Defamatory content about any real person or organization.",

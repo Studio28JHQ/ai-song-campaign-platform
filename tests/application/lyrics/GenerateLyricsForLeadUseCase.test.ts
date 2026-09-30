@@ -695,4 +695,30 @@ describe("GenerateLyricsForLeadUseCase — Sprint v1.2 (AI Safety Hardening): re
     expect(response.approved).toBe(false);
     expect(response.remainingAttempts).toBe(4);
   });
+
+  it("[F] a rejection rescued by the repair costs the parent nothing", async () => {
+    // Moderation rewrite: the case this work exists for. A first
+    // generation that Claude rejects and the directed repair then
+    // rescues is, from the parent's side, an ordinary successful first
+    // generation — which is free. The internal repair must not turn it
+    // into a paid attempt.
+    const lead = createLead();
+    leadRepository.seed(lead);
+
+    const rejectedThenWritten = vi
+      .fn()
+      .mockResolvedValueOnce(claudeRejection("RELIGIOUS_PROPAGANDA"))
+      .mockResolvedValue(claudeResponse("[Verse]\nSofia sonríe con el sol."));
+    const generator = new ClaudeLyricsService({
+      sendMessage: rejectedThenWritten,
+    } as unknown as ClaudeClient);
+    const useCase = new GenerateLyricsForLeadUseCase(leadRepository, lyricsRepository, generator);
+
+    const response = await useCase.execute({ leadId: lead.id, ...baseRequest });
+
+    expect(rejectedThenWritten).toHaveBeenCalledTimes(2);
+    expect(response.approved).toBe(true);
+    expect(response.remainingAttempts).toBe(5);
+    expect((await leadRepository.findById(lead.id))?.remainingAttempts).toBe(5);
+  });
 });

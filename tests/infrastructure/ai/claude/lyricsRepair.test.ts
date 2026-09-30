@@ -482,18 +482,25 @@ describe("Moderation repair", () => {
     const result = await new ClaudeLyricsService(client).generateAndModerate(baseInput);
 
     const repair = promptOfCall(sendMessage, 2);
-    // The rule behind the category, not the bare label.
-    expect(repair.user).toMatch(/Religious propaganda or religious content/i);
+    // The rule behind the category, not the bare label — and the rule as
+    // narrowed: propaganda, not any mention of faith.
+    expect(repair.user).toMatch(/Religious propaganda — content that preaches, promotes/i);
+    expect(repair.user).not.toMatch(/or religious content/i);
     // The original intent survives: same baby, same mood, same message.
     expect(repair.user).toContain(baseInput.babyName);
     expect(repair.user).toContain(baseInput.parentMessage);
     expect(repair.user).toContain("Alegre");
     expect(repair.user).toMatch(/Keep the legitimate intent/i);
     expect(repair.user).toMatch(/Do not invent a completely different story/i);
-    // The same safety rules run again, and rejecting again is allowed.
+    // The same safety rules run again, and rejecting again is allowed —
+    // but judged against the song this call would write, never against
+    // the unchanged message, which could only reproduce the rejection.
     expect(repair.system).toContain("Safety rules:");
-    expect(repair.user).toMatch(/Apply every safety rule again/i);
-    expect(repair.user).toMatch(/reject it again/i);
+    expect(repair.user).toMatch(/Judge the song you would now write, not the message/i);
+    expect(repair.user).toMatch(
+      /Reject again only if even this adjusted song cannot be written safely/i,
+    );
+    expect(repair.user).not.toMatch(/Apply every safety rule again to the message/i);
     // It corrects content; it never coaches Claude past the check.
     expect(repair.user.toLowerCase()).not.toContain("bypass");
     expect(repair.user.toLowerCase()).not.toContain("avoid the filter");
@@ -614,7 +621,7 @@ describe("Safety and regression", () => {
       "Violence, self-harm, or suicide",
       "Illegal activity of any kind",
       "Extremist content of any kind",
-      "Political propaganda or religious propaganda",
+      "Political propaganda, or religious propaganda",
       "Sexual or otherwise explicit content",
       "Copyrighted lyrics or melodies from existing songs",
       "Defamatory content about any real person",

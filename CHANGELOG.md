@@ -15,6 +15,26 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.42.0] - 2026-09-30
+
+### Fixed
+
+- **A parent blessing their own baby is no longer rejected as religious propaganda.** "dios bendiga a esta niña hermana" came back as `MODERATION_REJECTED` / `RELIGIOUS_PROPAGANDA`, and the directed repair that followed rejected it a second time, so the family got the generic refusal and lost an attempt. Three things in the prompt caused it, and all three are fixed:
+  - **The category claimed more than the rule it names.** `RELIGIOUS_PROPAGANDA` read _"Religious propaganda or religious content"_, while the `SAFETY_RULES` bullet it maps to says propaganda. Because that text is what the prompt shows Claude, the drift **was** the rule: any mention of faith matched it. `moderationCategories`' own contract is that a category never widens its rule — it had, silently. Narrowed to content that "preaches, promotes, persuades toward, or recruits for a faith", with a parent's own blessing named as explicitly not propaganda.
+  - **A writing constraint read as a veto.** `CAMPAIGN_RULES` said _"Avoid religious content of any kind"_ — a rule about what the lyrics may contain — while `SAFETY_RULES` rejects a message that "would require the lyrics to contain" a forbidden thing. Together they made a blessing look like a message demanding forbidden content. It now says to keep religious references out of the lyrics **and** that this is never a reason to refuse a message: the affection behind a blessing is carried into the song as warmth and good wishes instead.
+  - **The repair was instructed to reproduce its own rejection.** Its last editing rule said _"apply every safety rule again to the message and to the song you would write"_ — and the message is handed to that call unchanged, so re-judging it could only return the same verdict. A repair that can only confirm the rejection it exists to fix is not a repair. It now judges the song it would write, and may still reject if even that song cannot be written safely.
+- **Safety is unchanged in every other respect.** Actual proselytising, promotion and recruitment still reject, the category still exists and was not turned into an allow-list entry, and the other ten safety rules and the Immutable AI Safety Policy are untouched — asserted by test.
+
+### Added
+
+- **`moderationRewrite.test.ts`** (15 tests) covering the reported case end to end: the blessing generates normally; a rejection that the repair rescues reaches the generator and returns lyrics rather than a refusal; the repair carries the baby, the mood and the original message; genuine propaganda still rejects; a second rejection still ends the request; a provider or parsing failure is still an error and never a content rejection; and the category can never again be broader than its rule.
+- **An attempt-accounting test**: a first generation that Claude rejects and the repair then rescues costs the parent **nothing**, because it is an ordinary successful first generation. The internal repair must not turn it into a paid attempt.
+
+### Notes
+
+- **No attempt-accounting bug was found, and none was changed.** The reported "Intentos restantes: 2" is correct: a moderation rejection costs exactly one attempt (`GenerateLyricsForLeadUseCase` consumes once per request, whatever happens inside the provider), and the internal repair consumes nothing. That rule predates this work and is covered by an existing test.
+- **`outputLength: null` is not a lost field.** `ClaudeLyricsService.recordCall` records the length of the _lyric_ a call produced; a moderation rejection produces no lyric, so the value is `null` by construction. `outputTokens` counts the JSON rejection object Claude returned, which is why the two disagree. No reformulated message was parsed away — see the report.
+
 ## [1.41.0] - 2026-09-30
 
 ### Added
