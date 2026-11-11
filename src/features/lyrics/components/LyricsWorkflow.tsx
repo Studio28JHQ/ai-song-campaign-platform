@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   getLeadSession,
+  type LeadSessionResult,
   type LeadSessionSongStatus,
 } from "@/features/lead/services/getLeadSession";
 import { useApproveLyrics } from "../hooks/useApproveLyrics";
@@ -66,6 +68,15 @@ export function LyricsWorkflow({
 }: LyricsWorkflowProps) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
+  /**
+   * Set only when the session could not be loaded for a reason that is
+   * ours and temporary. `null` while loading and on success. Kept
+   * separate from `session` because "still loading" and "load failed"
+   * used to be the same value, and the failure branch navigated away
+   * before anything could render.
+   */
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const [remainingAttempts, setRemainingAttempts] = useState(0);
   const [lyrics, setLyrics] = useState<CurrentLyrics | null>(null);
   const [approvedLyrics, setApprovedLyrics] = useState<ApprovedLyricsRecord | null | undefined>(
@@ -81,14 +92,25 @@ export function LyricsWorkflow({
   useEffect(() => {
     let cancelled = false;
 
-    getLeadSession().then((state) => {
+    getLeadSession().then((result: LeadSessionResult) => {
       if (cancelled) return;
 
-      if (!state) {
+      // Only a genuine 401 means "not registered", and only that keeps
+      // the original behaviour of returning to the landing page. A
+      // transient failure is reported in place: the parent is registered,
+      // their welcome email has already been sent, and a database hiccup
+      // is not a reason to throw away the step they are on.
+      if (result.status === "no_session") {
         router.replace("/");
         return;
       }
 
+      if (result.status === "error") {
+        setLoadFailed(true);
+        return;
+      }
+
+      const state = result.state;
       setSession({ babyName: state.babyName });
       setRemainingAttempts(state.remainingAttempts);
       setApprovedLyrics(state.approvedLyrics);
@@ -125,7 +147,7 @@ export function LyricsWorkflow({
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, reloadToken]);
 
   async function handleGenerate(values: LyricsGenerationSubmitValues) {
     if (!session) return;
@@ -179,6 +201,33 @@ export function LyricsWorkflow({
     }
 
     setApprovedLyrics({ content: lyrics.content, version: lyrics.version });
+  }
+
+  if (loadFailed) {
+    return (
+      <div role="alert" className="flex flex-col items-center gap-4 text-center">
+        <p className="w-full rounded-lg border-l-4 border-destructive bg-[var(--destructive-background)] px-3 py-2 text-left text-sm text-foreground">
+          No pudimos cargar tu sesión en este momento. Tu registro sigue guardado. Inténtalo de
+          nuevo en unos segundos.
+        </p>
+        <Button
+          type="button"
+          onClick={() => {
+            setLoadFailed(false);
+            setReloadToken((token) => token + 1);
+          }}
+        >
+          Reintentar
+        </Button>
+        <p className="text-sm text-muted-foreground">
+          Si el problema continúa, escríbenos a{" "}
+          <a className="underline" href={`mailto:${supportEmail}`}>
+            {supportEmail}
+          </a>
+          .
+        </p>
+      </div>
+    );
   }
 
   if (!session || approvedLyrics === undefined) {

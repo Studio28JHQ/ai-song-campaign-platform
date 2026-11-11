@@ -76,15 +76,36 @@ function baseSession(overrides: Record<string, unknown> = {}) {
  */
 function routedFetch(options: {
   session: unknown | null;
+  /** HTTP status for `/api/leads/session`, when the test is about the failure itself. */
+  sessionStatus?: number;
+  /** Makes `fetch` itself reject, the way an offline browser does. */
+  sessionNetworkError?: boolean;
+  /** Responses served in order, so a retry can be given a different outcome from the first load. */
+  sessionSequence?: Array<{ status?: number; body?: unknown }>;
   generateResponses?: unknown[];
   approveResponse?: unknown;
 }) {
   const generateQueue = [...(options.generateResponses ?? [])];
+  const sessionQueue = [...(options.sessionSequence ?? [])];
 
   return vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>>((input) => {
     const url = String(input);
 
     if (url === "/api/leads/session") {
+      const next = sessionQueue.shift();
+      if (next) {
+        const status = next.status ?? 200;
+        return Promise.resolve(jsonResponse(next.body ?? options.session, status < 400, status));
+      }
+
+      if (options.sessionNetworkError) {
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+
+      if (options.sessionStatus !== undefined) {
+        return Promise.resolve(jsonResponse({ error: "failed" }, false, options.sessionStatus));
+      }
+
       return Promise.resolve(
         options.session === null
           ? jsonResponse({ error: "no_session" }, false, 401)
@@ -117,6 +138,62 @@ describe("LyricsWorkflow", () => {
     install(routedFetch({ session: null }));
     renderWorkflow();
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
+  });
+
+  /**
+   * The reported bug: registration succeeded, the welcome email went out,
+   * and `/generate` returned the parent to the landing page before the
+   * description form ever appeared.
+   *
+   * The trigger was a 500 from `GET /api/leads/session` (a Prisma P2022
+   * — the generated client still declared columns the database did not
+   * have), but the trigger is not the defect. The defect is that the
+   * client collapsed 401, 429, 5xx and a dead network into one `null`,
+   * and this component could only read that value as "not registered".
+   * Only a real 401 is that; everything else is ours and temporary.
+   */
+  describe("a temporary failure is reported, not answered by a redirect", () => {
+    it.each([
+      ["a 500 (what a Prisma P2022 surfaces as)", { session: null, sessionStatus: 500 }],
+      ["a 503 from the platform", { session: null, sessionStatus: 503 }],
+      ["a 429 rate limit", { session: null, sessionStatus: 429 }],
+      ["a dead network", { session: null, sessionNetworkError: true }],
+    ])("never sends the parent back to the landing page on %s", async (_label, options) => {
+      install(routedFetch(options as Parameters<typeof routedFetch>[0]));
+      renderWorkflow();
+
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(replaceMock).not.toHaveBeenCalled();
+      expect(pushMock).not.toHaveBeenCalled();
+    });
+
+    it("says the registration is safe and offers to try again", async () => {
+      install(routedFetch({ session: null, sessionStatus: 500 }));
+      renderWorkflow();
+
+      expect(await screen.findByText(/no pudimos cargar tu sesión/i)).toBeInTheDocument();
+      expect(screen.getByText(/tu registro sigue guardado/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    });
+
+    it("recovers into the real form when the retry succeeds", async () => {
+      const user = userEvent.setup();
+      install(
+        routedFetch({
+          session: baseSession(),
+          sessionSequence: [{ status: 500 }, { status: 200, body: baseSession() }],
+        }),
+      );
+      renderWorkflow();
+
+      await user.click(await screen.findByRole("button", { name: /reintentar/i }));
+
+      // The transient failure cost the parent nothing: same step, same
+      // attempts, no re-registration, no trip through the landing page.
+      expect(await screen.findByText("Baby Doe")).toBeInTheDocument();
+      expect(screen.getByText("Intentos restantes: 5")).toBeInTheDocument();
+      expect(replaceMock).not.toHaveBeenCalled();
+    });
   });
 
   it("shows the generation form with baby name and remaining attempts", async () => {

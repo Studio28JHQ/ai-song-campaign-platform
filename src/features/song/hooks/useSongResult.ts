@@ -42,13 +42,21 @@ export function useSongResult(): SongResultState {
     let cancelled = false;
 
     async function load(): Promise<void> {
-      const session = await getLeadSession();
+      const result = await getLeadSession();
       if (cancelled) return;
 
-      if (!session) {
+      // Behaviour deliberately unchanged on this screen: anything that is
+      // not a resolved session still returns to the landing page, exactly
+      // as before. `getLeadSession` now reports *why* it failed (see
+      // `LeadSessionResult`), and `/generate` acts on that distinction;
+      // this hook only needed adapting to the new shape, not fixing — the
+      // reported problem was the generation screen.
+      if (result.status !== "ok") {
         router.replace("/");
         return;
       }
+
+      const session = result.state;
 
       setState({
         babyName: session.babyName,
