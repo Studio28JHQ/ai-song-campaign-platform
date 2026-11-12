@@ -49,6 +49,18 @@ const campaignDayFormatter = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+/** The same zone, down to the second — used to measure its offset from UTC. */
+const campaignInstantFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: CAMPAIGN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
 /** Which campaign day an instant falls on, as `YYYY-MM-DD`. */
 function toCampaignDayKey(at: Date): string {
   return campaignDayFormatter.format(at);
@@ -63,6 +75,48 @@ function nextCampaignDay(dayKey: string): string {
   const noon = new Date(`${dayKey}T12:00:00Z`);
   noon.setUTCDate(noon.getUTCDate() + 1);
   return toCampaignDayKey(noon);
+}
+
+/**
+ * How far the campaign's zone is from UTC at a given instant, in
+ * milliseconds (negative west of Greenwich). Measured through `Intl`
+ * rather than hardcoded as -05:00, for the reason given on
+ * `CAMPAIGN_TIME_ZONE`.
+ */
+function campaignOffsetMs(at: Date): number {
+  const parts = new Map(
+    campaignInstantFormatter.formatToParts(at).map((part) => [part.type, part.value]),
+  );
+  const asIfUtc = Date.UTC(
+    Number(parts.get("year")),
+    Number(parts.get("month")) - 1,
+    Number(parts.get("day")),
+    Number(parts.get("hour")),
+    Number(parts.get("minute")),
+    Number(parts.get("second")),
+  );
+  // `formatToParts` has no milliseconds, so compare against whole seconds.
+  return asIfUtc - (at.getTime() - at.getMilliseconds());
+}
+
+/**
+ * The instant the campaign day containing `at` began.
+ *
+ * "Canciones hoy" used to take this from `new Date().setHours(0, 0, 0, 0)`,
+ * which is midnight in the *process's* zone — UTC on Vercel, and therefore
+ * 19:00 of the previous day in Ecuador. The card counted five hours of the
+ * night before while the chart beside it, which buckets by campaign day,
+ * did not: on 2026-11-12 the card read 145 against the chart's 55. Both now
+ * mean the campaign's day, the same one `bucketByDay` draws.
+ *
+ * Resolved in two passes: the offset is measured at `at`, then re-measured
+ * at the instant that produced, so a zone whose offset changed between its
+ * midnight and `at` still lands on the real start of the local day.
+ */
+function startOfCampaignDay(at: Date): Date {
+  const midnightAsIfUtc = Date.parse(`${toCampaignDayKey(at)}T00:00:00Z`);
+  const firstPass = new Date(midnightAsIfUtc - campaignOffsetMs(at));
+  return new Date(midnightAsIfUtc - campaignOffsetMs(firstPass));
 }
 
 /**
@@ -99,8 +153,7 @@ export class PrismaAdminDashboardGate implements AdminDashboardGate {
   constructor(private readonly client: PrismaClient = defaultPrismaClient) {}
 
   async getSummary(): Promise<DashboardSummaryCounts> {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    const startOfToday = startOfCampaignDay(new Date());
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 

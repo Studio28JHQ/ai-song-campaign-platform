@@ -15,6 +15,16 @@ Ideas identified during development but deliberately not implemented, since they
 - Evaluate additional Mureka request parameters
 - Improve Mureka adapter typing
 
+## [1.43.1] - 2026-11-12
+
+### Fixed
+
+- **"Canciones hoy" now means the campaign's day, the same one the chart beside it draws.** The card took its window from `new Date().setHours(0, 0, 0, 0)` — midnight in the _process's_ zone, which is UTC on Vercel and therefore 19:00 of the previous Ecuadorian day. It counted five hours of the night before that `bucketByDay` (already bucketing in `America/Guayaquil`) did not: measured in production on 2026-11-12 at 10:07 Ecuador time, the card read **145** against the chart's **55** — the 90 songs completed between 19:00 and 23:59 on the 11th. The offset is resolved through `Intl` in two passes rather than hardcoded as -05:00, so the rule stays true if Ecuador ever adopts daylight saving. The bug was invisible locally: a machine at -05:00 happens to give the right answer, so the regression test forces `process.env.TZ` to UTC.
+
+### Notes
+
+- **Deliberately unchanged:** "Canciones últimos 7 días" and "Canciones últimos 30 días" remain rolling `7 × 24h` / `30 × 24h` windows from the moment of the query. They are self-consistent and were not part of the reported fault; that they are not calendar windows like the chart's is recorded here rather than changed.
+
 ## [1.43.0] - 2026-09-30
 
 ### Fixed

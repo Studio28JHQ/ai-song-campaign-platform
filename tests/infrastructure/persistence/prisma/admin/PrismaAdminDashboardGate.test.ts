@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { PrismaAdminDashboardGate } from "@/infrastructure/persistence/prisma/admin/PrismaAdminDashboardGate";
 import { logger } from "@/shared/logger/logger";
@@ -255,6 +255,59 @@ describe("PrismaAdminDashboardGate.getSummary", () => {
     expect(on(summary.registrationsByDay, "2026-09-29")).toBe(1);
     expect(on(summary.completedSongsByDay, "2026-09-28")).toBe(1);
     expect(on(summary.completedSongsByDay, "2026-09-29")).toBe(0);
+  });
+
+  /**
+   * "Canciones hoy" means the campaign's day, the same one the chart
+   * beside it draws — not the day of whatever zone the process happens to
+   * run in.
+   *
+   * It used to come from `new Date().setHours(0, 0, 0, 0)`, so on Vercel
+   * (UTC) the window opened at 19:00 of the previous Ecuadorian day and
+   * the card counted five hours the chart did not: on 2026-11-12 it read
+   * 145 against the chart's 55. `process.env.TZ` is forced to UTC here
+   * because the machine this suite usually runs on is itself at -05:00,
+   * where the old code happened to give the right answer — the bug only
+   * showed in production.
+   */
+  it("counts today from the campaign day's midnight, not the process's", async () => {
+    // 02:00 UTC on the 12th is still 21:00 on the 11th in Ecuador, so the
+    // campaign day in progress began at 2026-11-11 05:00 UTC.
+    const originalTimeZone = process.env.TZ;
+    process.env.TZ = "UTC";
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-12T02:00:00.000Z"));
+
+    try {
+      const client = fakeClient({
+        totalLeads: 0,
+        lyricsGenerated: 0,
+        lyricsApproved: 0,
+        songsRequested: 0,
+        songsQueued: 0,
+        songsGenerating: 0,
+        songsCompleted: 0,
+        songsFailed: 0,
+        emailsSent: 0,
+        emailsResent: 0,
+      });
+
+      await new PrismaAdminDashboardGate(client).getSummary();
+
+      // Seventh `song.count` call — the windows run in the order the gate
+      // lists them: requested, queued, generating, completed, failed,
+      // emailed, then today.
+      const songCount = client.song.count as unknown as Mock;
+      const completedToday = songCount.mock.calls[6]?.[0] as {
+        where: { completedAt: { gte: Date } };
+      };
+
+      expect(completedToday.where.completedAt.gte).toEqual(new Date("2026-11-11T05:00:00.000Z"));
+    } finally {
+      vi.useRealTimers();
+      if (originalTimeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimeZone;
+    }
   });
 
   describe("partial-failure resilience (Sprint FINAL-3 — Dashboard Stabilization)", () => {
