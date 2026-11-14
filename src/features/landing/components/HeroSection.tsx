@@ -98,14 +98,7 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
           ¡Gracias por tu interés y por querer crear algo único con nosotros! 💛
         </p>
       }
-      // form={
-      //   <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6">
-      //     <CampaignHeading as="h3" variant="title" className="mb-2.5">
-      //       Crea la canción de tu bebé
-      //     </CampaignHeading>
-      //     <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
-      //   </CampaignCard>
-      // }
+      form={" "}
     />
   );
 }
