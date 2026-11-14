@@ -78,26 +78,34 @@ export function HeroSection({ turnstileSiteKey }: HeroSectionProps) {
           className="font-bold"
           style={{ fontSize: "2em" }}
         >
-          Una canción hecha con amor, solo para tu bebé
+          ¡Volvemos muy pronto! 🎵
         </CampaignHeading>
       }
       description={
         <p className="mt-5 max-w-full text-lg leading-[1.7] text-foreground">
-          Cuéntanos sobre tu familia y recibe, sin costo, una canción única{" "}
+          En este momento estamos realizando una pausa temporal en la creación de nuevas canciones.
+          <br />
+          <br />
+          Queremos que cada canción sea una experiencia especial, por eso pronto volveremos a estar
+          disponibles para ayudarte a convertir tus ideas y emociones en música.
+          <br />
+          <br />{" "}
           <em>
-            <strong>escrita e interpretada especialmente para tu bebé</strong>
+            <strong>Te invitamos a visitarnos nuevamente más adelante.</strong>
           </em>{" "}
-          directo a tu correo.
+          <br />
+          <br />
+          ¡Gracias por tu interés y por querer crear algo único con nosotros! 💛
         </p>
       }
-      form={
-        <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6">
-          <CampaignHeading as="h3" variant="title" className="mb-2.5">
-            Crea la canción de tu bebé
-          </CampaignHeading>
-          <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
-        </CampaignCard>
-      }
+      // form={
+      //   <CampaignCard className="mx-auto mt-8 w-full max-w-md animate-fade-up py-6 sm:py-6">
+      //     <CampaignHeading as="h3" variant="title" className="mb-2.5">
+      //       Crea la canción de tu bebé
+      //     </CampaignHeading>
+      //     <RegistrationForm turnstileSiteKey={turnstileSiteKey} />
+      //   </CampaignCard>
+      // }
     />
   );
 }
