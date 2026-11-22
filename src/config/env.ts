@@ -43,6 +43,26 @@ const envSchema = z.object({
   // `appConfig.lyria.apiKey`, never logged, never persisted.
   GEMINI_API_KEY: z.string().min(1).optional(),
   ADMIN_EMAIL: z.string().email(),
+  // Operational Alerting. The single address every platform alert goes
+  // to.
+  //
+  // Deliberately **optional and without a default**. A default would mean
+  // writing a real person's address into a source file that is committed,
+  // pushed to GitHub and shipped in every build — and an address in source
+  // is an address that leaks the moment any module holding it is ever
+  // pulled into a client bundle or printed in a stack trace. It lives in
+  // the environment only (`.env` locally, Vercel's project settings in
+  // production), which is also what lets it change without a deploy.
+  //
+  // Optional, not required, because a missing value must never stop the
+  // application from booting: a monitoring feature that can take the
+  // campaign down is worse than no monitoring. `ResendEmailService`
+  // instead refuses the send with an explicit, greppable error, and
+  // `GET /api/internal/health` reports it as unconfigured.
+  //
+  // Deliberately not `ADMIN_EMAIL`: who can sign in to the panel and who
+  // gets woken up by an incident are different decisions.
+  ALERT_EMAIL_TO: z.string().email().optional(),
   ADMIN_SESSION_SECRET: z
     .string()
     .min(32, "ADMIN_SESSION_SECRET must be at least 32 characters long."),

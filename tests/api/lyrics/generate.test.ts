@@ -27,6 +27,28 @@ const mockLyricsRepository: { [K in keyof LyricsRepository]: ReturnType<typeof v
 
 const mockGenerateAndModerate = vi.fn();
 const mockGetLeadSession = vi.fn();
+const mockSendAlertEmail = vi.fn().mockResolvedValue(undefined);
+
+// Operational Alerting. `after()` throws outside a real Next.js request
+// scope, so the scheduled callback is captured and run by hand (same
+// pattern as tests/api/leads/route.test.ts).
+const capturedAfterCallbacks: Array<() => Promise<void>> = [];
+
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return {
+    ...actual,
+    after: vi.fn((callback: () => Promise<void>) => {
+      capturedAfterCallbacks.push(callback);
+    }),
+  };
+});
+
+vi.mock("@/infrastructure/email/ResendEmailService", () => ({
+  ResendEmailService: vi.fn().mockImplementation(function ResendEmailService() {
+    return { sendAlertEmail: mockSendAlertEmail };
+  }),
+}));
 
 vi.mock("@/infrastructure/persistence/prisma/lead/PrismaLeadRepository", () => ({
   PrismaLeadRepository: vi.fn().mockImplementation(function PrismaLeadRepository() {
@@ -336,6 +358,73 @@ describe("POST /api/lyrics/generate", () => {
 
     expect(response.status).toBe(503);
     expect(body.error).toBe("claude_unavailable");
+  });
+
+  /**
+   * Operational Alerting. The alert is scheduled, not sent inline: a
+   * parent on a failing request waits for the 503 and nothing else. And
+   * the generic 503 body is unchanged — no provider detail, no status
+   * code and no billing wording ever reaches the browser, however
+   * specific the email is.
+   */
+  it("schedules an operational alert after the response, without changing what the parent sees", async () => {
+    capturedAfterCallbacks.length = 0;
+    mockLeadRepository.findById.mockResolvedValue(buildLead());
+    mockGenerateAndModerate.mockRejectedValue(
+      new ExternalApiError("Claude API responded with status 400.", {
+        code: "claude.api_error",
+        context: {
+          status: 400,
+          details: {
+            error: { message: "Your credit balance is too low to access the Anthropic API." },
+          },
+        },
+      }),
+    );
+
+    const response = await POST(postRequest(validPayload));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: "claude_unavailable",
+      message:
+        "The lyrics generation service is temporarily unavailable. Please try again shortly.",
+    });
+
+    // Scheduled exactly once, and nothing sent yet.
+    expect(capturedAfterCallbacks).toHaveLength(1);
+    expect(mockSendAlertEmail).not.toHaveBeenCalled();
+
+    await capturedAfterCallbacks[0]();
+
+    expect(mockSendAlertEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendAlertEmail.mock.calls[0][0]).toMatchObject({
+      kind: "LYRICS_PROVIDER_CREDIT_EXHAUSTED",
+    });
+  });
+
+  it("does not alert on a business-rule rejection — only a real provider failure", async () => {
+    capturedAfterCallbacks.length = 0;
+    mockSendAlertEmail.mockClear();
+    const exhausted = Lead.create(
+      {
+        campaignId: "campaign-1",
+        parentName: "Jane Doe",
+        babyName: "Baby Doe",
+        email: "jane@example.com",
+      },
+      1,
+    );
+    exhausted.startGenerating();
+    exhausted.consumeAttempt();
+    mockLeadRepository.findById.mockResolvedValue(exhausted);
+
+    const response = await POST(postRequest(validPayload));
+
+    expect(response.status).toBe(422);
+    expect(capturedAfterCallbacks).toHaveLength(0);
+    expect(mockSendAlertEmail).not.toHaveBeenCalled();
   });
 
   it("returns 400 for an invalid payload without calling the use case", async () => {

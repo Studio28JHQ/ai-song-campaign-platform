@@ -1,11 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
+import { OperationalAlertService } from "@/application/alerting/services/OperationalAlertService";
 import { GenerateLyricsForLeadUseCase } from "@/application/lyrics/use-cases/GenerateLyricsForLeadUseCase";
 import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { SecurityEventRecorder } from "@/application/security/services/SecurityEventRecorder";
 import { appConfig } from "@/config/app";
 import { VOICE_OPTIONS } from "@/domain/lyrics/types";
 import { ClaudeClient } from "@/infrastructure/ai/claude/ClaudeClient";
+import { toClaudeOperationalAlert } from "@/infrastructure/ai/claude/claudeAlert";
 import { ClaudeLyricsService } from "@/infrastructure/ai/claude/ClaudeLyricsService";
 import { getLeadSession } from "@/infrastructure/auth/getLeadSession";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
@@ -14,6 +16,7 @@ import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/P
 import { PrismaLyricsAttemptRecorder } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsAttemptRecorder";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
 import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
+import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { TurnstileClient } from "@/infrastructure/security/turnstile/TurnstileClient";
 import { TurnstileVerifier } from "@/infrastructure/security/turnstile/TurnstileVerifier";
 import {
@@ -68,6 +71,14 @@ const generateLyricsUseCase = new GenerateLyricsForLeadUseCase(
 const rateLimiter = new RateLimiter(new PrismaRateLimitRepository());
 const securityEventRecorder = new SecurityEventRecorder(new PrismaAuditLogRepository());
 const turnstileVerifier = new TurnstileVerifier(new TurnstileClient());
+
+// Operational Alerting. Shares the one `RateLimiter` this route already
+// builds — the alert cooldown is a rate limit, under its own `alert:` key
+// namespace, so there is no second throttling mechanism to keep in step.
+const alertService = new OperationalAlertService(
+  new ResendEmailService(),
+  new RateLimiter(new PrismaRateLimitRepository()),
+);
 
 // Structural validation (shape/type/presence) plus the shared Sprint 8.1
 // input-hardening rules for `parentMessage` (trim, collapse whitespace,
@@ -203,7 +214,39 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 200 },
     );
   } catch (error) {
+    // Operational Alerting. Scheduled before the error is mapped, so the
+    // mapper stays a pure error-to-response function and this route keeps
+    // the decision about who gets told.
+    if (error instanceof ExternalApiError) {
+      scheduleClaudeAlert(error, classifyExternalApiError(error));
+    }
+
     return handleUseCaseError(error);
+  }
+}
+
+/**
+ * Operational Alerting. Hands the alert to `after()` so it is sent once
+ * the response is already on its way — the same backgrounding the welcome
+ * email in `POST /api/leads` uses. A parent on a failing request must not
+ * also wait for an outbound email.
+ *
+ * `raise()` is itself throttled (one email per hour per kind) and never
+ * throws, which is what makes it safe on a path that fired 530 times in
+ * five hours during the 2026-11-21 Claude billing outage. The try/catch
+ * here guards only the *scheduling*: `after()` throws when there is no
+ * request scope, and an unavailable scheduler must never be able to turn
+ * this route's 503 into a 500.
+ */
+function scheduleClaudeAlert(error: ExternalApiError, source: string): void {
+  try {
+    after(async () => {
+      await alertService.raise(toClaudeOperationalAlert(error, source));
+    });
+  } catch (schedulingError) {
+    logger.warn("Could not schedule the Claude operational alert", {
+      error: schedulingError instanceof Error ? schedulingError.message : String(schedulingError),
+    });
   }
 }
 

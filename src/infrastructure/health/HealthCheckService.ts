@@ -1,3 +1,4 @@
+import { appConfig } from "@/config/app";
 import { prisma } from "@/infrastructure/persistence/prisma/client";
 import { CloudflareR2Storage } from "@/infrastructure/storage/CloudflareR2Storage";
 import { ResendClient } from "@/infrastructure/email/ResendClient";
@@ -15,6 +16,19 @@ export interface HealthCheckResult {
   r2: ServiceHealth;
   resend: ServiceHealth;
   mureka: ServiceHealth;
+  /**
+   * Operational Alerting. Not a provider check — a configuration one, and
+   * the only thing here that is not a network call.
+   *
+   * `ALERT_EMAIL_TO` has no default in source (see `src/config/env`), so a
+   * deployment that forgets it gets an alerting system that looks
+   * installed and never fires: every alert would be raised, refused by
+   * `ResendEmailService` and swallowed by `OperationalAlertService`, which
+   * is exactly the silence this feature exists to end. Reporting it here
+   * makes that condition visible on the one endpoint an uptime monitor
+   * already watches, instead of only in a log nobody reads.
+   */
+  alerting: ServiceHealth;
 }
 
 /**
@@ -44,7 +58,21 @@ export class HealthCheckService {
       this.checkMureka(),
     ]);
 
-    return { database, r2, resend, mureka };
+    return { database, r2, resend, mureka, alerting: HealthCheckService.checkAlerting() };
+  }
+
+  /**
+   * Reports *whether* a recipient is configured, never what it is: the
+   * address must not leak into a response body, which is the same reason
+   * it is not written in source.
+   */
+  private static checkAlerting(): ServiceHealth {
+    return appConfig.alerts.recipient
+      ? { status: "ok" }
+      : {
+          status: "error",
+          message: "ALERT_EMAIL_TO is not configured — no operational alert can be delivered.",
+        };
   }
 
   private async checkDatabase(): Promise<ServiceHealth> {

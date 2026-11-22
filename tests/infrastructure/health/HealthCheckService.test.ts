@@ -57,6 +57,9 @@ describe("HealthCheckService", () => {
       r2: { status: "ok" },
       resend: { status: "ok" },
       mureka: { status: "ok" },
+      // Operational Alerting. A configuration check, not a provider one —
+      // `ALERT_EMAIL_TO` is set in this suite's environment.
+      alerting: { status: "ok" },
     });
   });
 

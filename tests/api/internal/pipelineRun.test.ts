@@ -149,7 +149,10 @@ describe("GET /api/internal/pipeline/run", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ dispatcher: null, poller: null });
+    // Operational Alerting added `stalled`: the tick now also reports
+    // whether it found the queue stuck, so the scheduler's own run log
+    // says so without anyone opening the panel.
+    expect(body).toEqual({ dispatcher: null, poller: null, stalled: false });
     expect(mockSongFindGenerating).toHaveBeenCalledTimes(2); // dispatcher + poller's findGenerating call each run once
   });
 

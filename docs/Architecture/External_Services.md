@@ -210,7 +210,7 @@ This was audited in Sprint FINAL-8 and deliberately left as it is. Every availab
 
 - Transactional emails
 
-**Purpose** — Delivers the one-time "song ready" email to the lead once their Song reaches `COMPLETED`. Implemented at `src/infrastructure/email/`.
+**Purpose** — Delivers the one-time "song ready" email to the lead once their Song reaches `COMPLETED`, the post-registration welcome/resume-link email, and the operational alert (see "Operational Alerting" below). Implemented at `src/infrastructure/email/`.
 
 **Classes:**
 
@@ -229,6 +229,46 @@ This was audited in Sprint FINAL-8 and deliberately left as it is. Every availab
 **Failure Scenarios** — Delivery failure, invalid recipient, service outage, an invalid response body.
 
 **Retry Policy** — Transient network failures are retried transparently by the shared `httpRequest` helper, same as Claude/Mureka; on persistent failure the error is logged for admin follow-up rather than blocking or retrying the user-facing flow — and, per the idempotency mechanism above, the claim is not released, so a persistently-failed send is not retried automatically either (this campaign has no queue/worker to schedule such a retry — see "Why This Project Intentionally Avoids" in `docs/Architecture/System_Architecture.md`).
+
+## Operational Alerting
+
+**Responsibilities**
+
+- Telling one person, by email, that the platform has a problem
+
+**Purpose** — Closes the gap both production incidents exposed: on 2026-11-11 and again on 2026-11-21, Anthropic refused every request for a billing reason and the lyrics step was dead for hours while registration kept working normally. Nothing was broken from the outside — families registered, got a 503 on "Generar", and left. The failure was logged 530 times and nobody was told. Implemented at `src/application/alerting/` (ports, service, stall detector) with adapters in `src/infrastructure/email/` and `src/infrastructure/persistence/prisma/alerting/`. No new provider: it rides the existing Resend credential and verified sender domain.
+
+**Alert kinds** — Each one exists because a specific place in the code can detect it; there is deliberately no kind without a call site.
+
+| Kind                               | Raised at                        | Means                                                                                        |
+| ---------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `LYRICS_PROVIDER_CREDIT_EXHAUSTED` | `POST /api/lyrics/generate`      | Anthropic refused for a billing reason — saldo agotado or a spend cap. Never self-resolving. |
+| `LYRICS_PROVIDER_UNAVAILABLE`      | `POST /api/lyrics/generate`      | Any other Claude failure that reached a parent as a 503.                                     |
+| `SONG_PIPELINE_TICK_FAILED`        | `GET /api/internal/pipeline/run` | The scheduled tick threw. While it keeps throwing, no song advances.                         |
+| `SONG_GENERATION_FAILED`           | `GET /api/internal/pipeline/run` | One song reached terminal `FAILED`; only an admin retry moves it.                            |
+| `SONG_GENERATION_STALLED`          | `GET /api/internal/pipeline/run` | Songs are waiting and none are finishing.                                                    |
+
+**Classes:**
+
+- **`OperationalAlertService`** (`src/application/alerting/services/`) — the only way anything reports a problem. Two guarantees: it never throws (every call site is already on a failure path, and a monitor that can turn a 503 into a 500 is a liability), and it is throttled to one email per hour per kind.
+- **`CheckPipelineHealthUseCase`** (`src/application/alerting/use-cases/`) — the proactive check. Requires both that something has been pending longer than 45 minutes and that nothing completed inside that window, so a long but moving queue never alerts.
+- **`PrismaPipelineHealthGate`** — three indexed aggregates (pending count, oldest pending, newest completion). Errors are not caught here: a health check that reports a broken pipeline as healthy is the one outcome a monitor must never produce, and the tick's own `catch` already alerts.
+- **`toClaudeOperationalAlert`** (`src/infrastructure/ai/claude/claudeAlert.ts`) — recognises a billing refusal. 402 is trusted on its status; 400 and 429 are promoted only when the payload names a credit balance, billing or a spend limit, because an exhausted balance arrives as a plain 400 `invalid_request_error`.
+- **`OperationalAlertEmailTemplate`** — deliberately not built on `emailChrome`: that is the campaign's identity and belongs to the two emails a parent receives. This is a plain operational block, timestamped in `America/Guayaquil` like every other date the team reads.
+
+**Throttling** — Reuses `RateLimiter` with `limit: 1` over a 60-minute window under an `alert:<KIND>` key, so there is no second throttling mechanism and no new table. The limiter records an event only when it allows the call, so a suppressed alert cannot extend its own silence. Against the 2026-11-21 incident this turns 530 emails into roughly five.
+
+**Expected Inputs** — An `OperationalAlert`: kind, one-line Spanish summary, what to do, and a flat `details` map of small values (status codes, counts, ages in minutes, song ids). No lyric, prompt, parent message or credential may be put in it — the same rule `toLyricsAttemptFailureReason` applies to the database.
+
+**Expected Outputs** — One email to `appConfig.alerts.recipient` (`ALERT_EMAIL_TO`), from the campaign's verified `EMAIL_FROM`. The recipient is never addressable per call: a detection site deep in the code has no business deciding who gets told.
+
+**Where the recipient lives** — In the environment only. `ALERT_EMAIL_TO` has no default in source, because an address written into a committed file is pushed to GitHub, shipped in every build, and one careless import away from a client bundle; it is also the reason the test suite asserts the _mechanism_ (`appConfig.alerts.recipient === process.env.ALERT_EMAIL_TO`) rather than the value. Unset is tolerated at boot — a monitoring feature must never be what stops the application starting — but `ResendEmailService` then refuses the send with `alerts.recipient_not_configured`, and `GET /api/internal/health` reports `alerting: { status: "error" }` and answers `503`, which is what keeps "configured" from being something nobody checks. The health check reports only _whether_ an address is set, never which.
+
+**Live validation (2026-11-22)** — One real alert email was sent to the configured recipient through the real `ResendEmailService` and `ResendClient` — real credential, real HTTP call — authorized explicitly for this validation, confirming Resend accepts and delivers the message from inside the actual production code path. Sent deliberately _not_ through `OperationalAlertService.raise()`, so the production one-hour cooldown for that alert kind was not consumed and a genuine incident in the following hour could still send.
+
+**Failure Scenarios** — Resend unavailable, the throttle store failing, `after()` called with no request scope. All three are swallowed and logged, and none of them changes what the user receives.
+
+**Not covered** — A `DatabaseError` inside a single route. The lyrics endpoint is one of many places that touch the database, so alerting from it alone would report a fraction of any real outage while implying full coverage. A database-level check belongs with `GET /api/internal/health`.
 
 ## Vercel
 

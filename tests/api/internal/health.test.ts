@@ -23,6 +23,8 @@ const allHealthy = {
   r2: { status: "ok" },
   resend: { status: "ok" },
   mureka: { status: "ok" },
+  // Operational Alerting — whether an alert recipient is configured at all.
+  alerting: { status: "ok" },
 };
 
 describe("GET /api/internal/health", () => {

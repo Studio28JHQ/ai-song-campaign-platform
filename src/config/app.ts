@@ -62,6 +62,14 @@ export const appConfig = {
   internal: {
     cronSecret: env.CRON_SECRET,
   },
+  // Operational Alerting. Who gets told when the platform has a problem.
+  // `undefined` when `ALERT_EMAIL_TO` is unset — see `./env` for why there
+  // is no default address in source. The cooldown between repeats of one
+  // alert kind is policy, not deployment configuration, and lives next to
+  // the code that enforces it (`OperationalAlertService`).
+  alerts: {
+    recipient: env.ALERT_EMAIL_TO,
+  },
   // Sprint 8.2 — Abuse Protection. Every limit lives here, never
   // hardcoded inside a route handler — see PROJECT_MANIFEST.md.
   security: {

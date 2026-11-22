@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { OPERATIONAL_ALERT_KINDS } from "@/application/alerting/contracts/OperationalAlert";
+import { OperationalAlertService } from "@/application/alerting/services/OperationalAlertService";
+import { CheckPipelineHealthUseCase } from "@/application/alerting/use-cases/CheckPipelineHealthUseCase";
+import { RateLimiter } from "@/application/security/services/RateLimiter";
 import { GenerationDispatcher } from "@/application/song/use-cases/GenerationDispatcher";
 import { GenerationPoller } from "@/application/song/use-cases/GenerationPoller";
 import { getClientIp } from "@/infrastructure/http/getClientIp";
@@ -6,6 +10,8 @@ import { verifyInternalSecret } from "@/infrastructure/http/verifyInternalSecret
 import { ResendEmailService } from "@/infrastructure/email/ResendEmailService";
 import { PrismaLeadRepository } from "@/infrastructure/persistence/prisma/lead/PrismaLeadRepository";
 import { PrismaLyricsRepository } from "@/infrastructure/persistence/prisma/lyrics/PrismaLyricsRepository";
+import { PrismaPipelineHealthGate } from "@/infrastructure/persistence/prisma/alerting/PrismaPipelineHealthGate";
+import { PrismaRateLimitRepository } from "@/infrastructure/persistence/prisma/security/PrismaRateLimitRepository";
 import { PrismaCampaignGate } from "@/infrastructure/persistence/prisma/song/PrismaCampaignGate";
 import { PrismaEmailDeliveryTracker } from "@/infrastructure/persistence/prisma/song/PrismaEmailDeliveryTracker";
 import { PrismaMoodSunoPromptProvider } from "@/infrastructure/persistence/prisma/song/PrismaMoodSunoPromptProvider";
@@ -155,6 +161,26 @@ const generationPoller = new GenerationPoller(
   songCompletionService,
 );
 
+/**
+ * Operational Alerting. This tick is the only thing in the system that
+ * runs whether or not anyone is using the site, which makes it the right
+ * place for the one check that looks for a problem rather than reacting
+ * to a thrown error — see `CheckPipelineHealthUseCase`.
+ *
+ * It reuses the `ResendEmailService` already built above for the "song
+ * ready" email, so the alert ships on the same verified sender domain and
+ * needs no new credential.
+ */
+const alertService = new OperationalAlertService(
+  emailSender,
+  new RateLimiter(new PrismaRateLimitRepository()),
+);
+
+const checkPipelineHealthUseCase = new CheckPipelineHealthUseCase(
+  new PrismaPipelineHealthGate(),
+  alertService,
+);
+
 export async function GET(request: Request): Promise<NextResponse> {
   if (!verifyInternalSecret(request)) {
     logger.error("Pipeline tick: rejected an unauthenticated request", {
@@ -167,12 +193,32 @@ export async function GET(request: Request): Promise<NextResponse> {
     const dispatcherResult = await generationDispatcher.execute();
     const pollerResult = await generationPoller.execute();
 
+    // Operational Alerting. A song that reached its terminal `FAILED`
+    // state is the provider's last word on it: no further tick will
+    // advance it, and the family is waiting for an email that will never
+    // be sent unless somebody retries it from the Admin panel.
+    if (pollerResult?.outcome === "failed") {
+      await alertService.raise({
+        kind: OPERATIONAL_ALERT_KINDS.songGenerationFailed,
+        summary: "Una canción terminó en estado FAILED y no volverá a avanzar por sí sola.",
+        action:
+          "Reintenta la canción desde el panel (Canciones → Reintentar). Si fallan varias seguidas, revisa el saldo y el estado de Mureka antes de reintentar.",
+        details: { cancionId: pollerResult.song.id },
+      });
+    }
+
+    // Deliberately after the work, not before: running it first would
+    // report a queue as stalled in the same invocation that was about to
+    // unstall it.
+    const stalled = await checkPipelineHealthUseCase.execute();
+
     return NextResponse.json(
       {
         dispatcher: dispatcherResult ? { songId: dispatcherResult.song.id } : null,
         poller: pollerResult
           ? { songId: pollerResult.song.id, outcome: pollerResult.outcome }
           : null,
+        stalled,
       },
       { status: 200 },
     );
@@ -180,6 +226,20 @@ export async function GET(request: Request): Promise<NextResponse> {
     logger.error("Pipeline tick failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+
+    // Operational Alerting. Awaited rather than backgrounded: there is no
+    // user waiting on this response, and `after()` has already proved
+    // unreliable in this route's execution model (see the note on
+    // self-rescheduling above).
+    await alertService.raise({
+      kind: OPERATIONAL_ALERT_KINDS.songPipelineTickFailed,
+      summary:
+        "El ciclo programado del pipeline de canciones falló. Mientras siga fallando, ninguna canción avanza.",
+      action:
+        "Revisa los logs de /api/internal/pipeline/run en Vercel y el estado de Mureka, R2 y la base de datos. Las canciones en cola no se pierden: se retoman en el siguiente ciclo correcto.",
+      details: { error: error instanceof Error ? error.message : String(error) },
+    });
+
     return NextResponse.json({ error: "pipeline_tick_failed" }, { status: 500 });
   }
 }
