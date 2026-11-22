@@ -2,7 +2,23 @@
 // npm install --save-dev prisma dotenv
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
+import { resolveDirectUrl } from "./prisma/directUrl";
 
+/**
+ * Configuration for the Prisma CLI only — never for the running
+ * application, which builds its own connection through the `pg` driver
+ * adapter in `src/infrastructure/persistence/prisma/client.ts`.
+ *
+ * The two use different connection strings on purpose: the app goes
+ * through the pooler in transaction mode (`DATABASE_URL`, port 6543) and
+ * every CLI command goes through a session-mode or direct connection
+ * (`DIRECT_URL`, port 5432). `prisma/directUrl.ts` explains why, and
+ * refuses the dangerous combinations.
+ *
+ * Note that Prisma 7's `datasource` block takes no `directUrl` — the
+ * property that used to live in `schema.prisma`. Here, `url` *is* the
+ * direct one, because this file is read by nothing but the CLI.
+ */
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -10,6 +26,15 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    /**
+     * A getter, not a value, so the check runs only when a command
+     * actually asks for a database. `prisma generate` does not — and it is
+     * this project's `postinstall`, so an eager check here would fail
+     * every Vercel build that happened to lack the variable, turning a
+     * safety rail into an outage.
+     */
+    get url(): string {
+      return resolveDirectUrl();
+    },
   },
 });

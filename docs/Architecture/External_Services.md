@@ -179,6 +179,27 @@ This was audited in Sprint FINAL-8 and deliberately left as it is. Every availab
 
 **Retry Policy** — Retry transient connection failures a limited number of times; constraint violations (e.g. duplicate email) are not retried — they are translated into the corresponding business error.
 
+**Connection pooling (2026-11-22)** — Two connection strings, because the application and the Prisma CLI need opposite things from the pooler.
+
+|             | Variable       | Mode        | Port | Used by                                                                |
+| ----------- | -------------- | ----------- | ---- | ---------------------------------------------------------------------- |
+| Application | `DATABASE_URL` | Transaction | 6543 | `src/infrastructure/persistence/prisma/client.ts` (`PrismaPg` adapter) |
+| Prisma CLI  | `DIRECT_URL`   | Session     | 5432 | `prisma.config.ts`, `prisma/seed.ts`                                   |
+
+Host and user are identical; only the port differs.
+
+_Why transaction mode for the app._ Session mode gives every checked-out client one dedicated PostgreSQL connection for as long as it is held, against a project ceiling of 15. A serverless deployment has no stable number of processes, so the ceiling was reached twice — 2026-09-29 and 2026-11-22 — both times with all 15 slots taken and nearly all of them idle, every further query failing with `(EMAXCONNSESSION) max clients reached in session mode`. Lowering the per-process pool to 5 was a mitigation that bounded each process's contribution without removing the ceiling. Transaction mode removes it: the pooler hands a backend connection back at every transaction boundary instead of pinning it.
+
+_Why session mode for the CLI._ `migrate`, `db push` and `db seed` depend on session state that transaction mode discards at each transaction boundary — advisory locks above all, which is how `migrate` serialises runs and refuses to apply a migration twice. A migration run through transaction mode does not fail cleanly: it can take the lock, lose it, and leave `_prisma_migrations` recording a state the database is not in.
+
+_The guard._ `prisma/directUrl.ts` resolves the CLI's URL and throws when `DIRECT_URL` is unset or itself points at 6543. There is deliberately **no fallback to `DATABASE_URL`**: that convenience would mean one forgotten variable silently points every migration at the transaction pooler. It also fails closed on anything it cannot read — libpq's keyword form, a multi-host URI, a non-`postgres:` scheme, a URI naming no host — rather than returning it unvalidated, because a string whose port cannot be checked is a string that might be `:6543`; `?port=6543`, which libpq honours over the authority's port, is refused too. It is read through a getter in `prisma.config.ts`, so the check runs only when a command actually needs a database — `prisma generate`, this project's `postinstall`, keeps working without the variable and no build can be failed by the safety rail.
+
+_Nothing in the runtime needs session state._ This codebase has no `$transaction`, no `SET`, no advisory lock, no `LISTEN` and no temporary table; the only raw SQL is three read-only `$queryRaw` calls. That asymmetry is what makes transaction mode safe for the application and unsafe for the CLI.
+
+_`?pgbouncer=true` is not used, and should not be added._ Supabase's Prisma documentation prescribes it, but that parameter is interpreted by Prisma's query engine, and this project has no query engine: the connection string is consumed by node-postgres through the `@prisma/adapter-pg` driver adapter. The adapter issues a named prepared statement only when given a `statementNameGenerator` (its own types: "If not provided, prepared statements are not cached"), which this project does not pass — so the incompatibility the flag exists to work around never arises. Adding it would suggest a protection that the adapter does not read.
+
+_Verified against the live database on 2026-11-22, read-only_, with the project's own adapter and generated client pointed at port 6543: `count`, `findFirst` with `select`, `aggregate`, a parameterised `$queryRaw`, reuse of one client across transactions, and a seven-way `Promise.all` fan-out all behaved identically to session mode.
+
 **Operational health (RC-2 — Production Hardening)** — `HealthCheckService` runs a trivial `SELECT 1` via the shared Prisma client as the database check for `GET /api/internal/health`.
 
 ## Cloudflare R2

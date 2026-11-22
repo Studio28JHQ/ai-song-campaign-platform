@@ -6,53 +6,60 @@ import { PrismaClient } from "@/generated/prisma/client";
 const globalForPrisma = globalThis as unknown as { prismaClient?: PrismaClient };
 
 /**
- * How many PostgreSQL connections a single process may hold.
+ * How many pooler connections a single process may hold.
  *
- * `pg` defaults to 10, which this deployment cannot afford. The database
- * is reached through Supabase's pooler **in session mode** (port 5432),
- * where every checked-out client holds one dedicated PostgreSQL
- * connection for as long as it stays checked out — the pool does not
- * multiplex — and this project's session pool is 15 connections wide.
- * At the default of 10, two processes (a deployed instance and a
- * developer's machine, or two warm serverless instances) exhaust it, and
- * every further query fails with
- * `(EMAXCONNSESSION) max clients reached in session mode`. That is
- * exactly what was observed on 2026-09-29, with all 15 session slots
- * checked out and 14 of them idle.
+ * The database is reached through Supabase's pooler **in transaction
+ * mode** (`DATABASE_URL`, port 6543), where a backend connection is
+ * handed back at every transaction boundary instead of being held for the
+ * life of the client. That is what makes this number cheap, and it is a
+ * change from what this file used to do.
  *
- * Five is a budget, not a measurement of how much concurrency the code
- * needs — it is deliberately lower than that. Parts of this codebase
- * fan out much wider: `PrismaAdminDashboardGate.getSummary` issues
- * roughly seventeen queries in one `Promise.all`, and
- * `GetLeadDetailUseCase` four. Neither breaks. `pg` queues whatever
- * exceeds `max` and never opens extra connections, so the dashboard's
- * queries simply run in several waves instead of one, at the cost of
- * some latency on an admin-only screen.
+ * Until 2026-11-22 the same pool went through session mode (port 5432),
+ * which multiplexes nothing: every checked-out client pinned one
+ * PostgreSQL connection, against a ceiling of 15 for the whole project.
+ * Two incidents came out of that — 2026-09-29 and 2026-11-22, both with
+ * all 15 slots taken and almost all of them idle, every further query
+ * failing with `(EMAXCONNSESSION) max clients reached in session mode`.
+ * Lowering this value to five was the mitigation; transaction mode is the
+ * fix this comment used to say was still owed.
  *
- * That trade is the point: a process waiting a moment for its own
- * connection is recoverable, a process that cannot get one at all is
- * not. Five leaves room for three processes inside the 15.
- *
- * It is a mitigation, not a fix. The 15-slot ceiling is still there and
- * enough concurrent processes will still reach it; this only bounds
- * what each one contributes. Moving to the pooler's transaction mode
- * (port 6543), where connections are multiplexed instead of held, is
- * the structural change, and it is deliberately not part of this one.
+ * Five is kept rather than raised, and deliberately not lowered to the
+ * `connection_limit=1` Supabase suggests as a serverless starting point.
+ * Parts of this codebase fan out much wider —
+ * `PrismaAdminDashboardGate.getSummary` issues roughly seventeen queries
+ * in one `Promise.all`, `GetLeadDetailUseCase` four — and `pg` queues
+ * whatever exceeds `max` rather than opening more connections, so at one
+ * the dashboard would serialise seventeen round trips for no benefit now
+ * that holding a few pooled connections costs the rest of the deployment
+ * nothing.
  */
 const MAX_CONNECTIONS_PER_PROCESS = 5;
 
 /**
  * How long an unused connection is kept before being returned.
  *
- * `pg` defaults to 10 seconds, which is cheap against a real connection
- * pool and expensive against a session-mode one: for those 10 seconds
- * the idle client is still holding a scarce session slot that no other
- * process can use. Two seconds keeps the benefit of reuse for the
- * back-to-back queries a single request makes, and gives the slot back
- * quickly enough that an idle process stops starving the others.
+ * Back to `pg`'s own default of 10 seconds, from the 2 seconds session
+ * mode forced. Under session mode those 10 seconds were expensive: an
+ * idle client went on pinning one of 15 scarce slots that no other
+ * process could use, so the pool was told to let go almost immediately
+ * and pay to reconnect. In transaction mode an idle client holds no
+ * backend connection, so the reason to hurry is gone and the longer
+ * window simply buys back connection reuse across the several requests a
+ * warm serverless instance serves.
  */
-const IDLE_CONNECTION_TIMEOUT_MS = 2_000;
+const IDLE_CONNECTION_TIMEOUT_MS = 10_000;
 
+/**
+ * The application's client, and the only one that uses `DATABASE_URL`.
+ *
+ * Every Prisma CLI command (`migrate`, `db push`, `db seed`) goes through
+ * `DIRECT_URL` instead — see `prisma/directUrl.ts` for why transaction
+ * mode cannot carry a migration, and `prisma.config.ts` for where that is
+ * wired. Nothing here needs session state: this codebase has no
+ * `$transaction`, no `SET`, no advisory lock, no `LISTEN` and no
+ * temporary table, which is what makes transaction mode safe for the
+ * runtime and unsafe for the CLI.
+ */
 function createPrismaClient(): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: appConfig.database.url,

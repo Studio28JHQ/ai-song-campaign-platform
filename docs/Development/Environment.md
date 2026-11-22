@@ -6,28 +6,29 @@ This document describes how environment variables and configuration are managed.
 
 ### Application, database, and provider credentials
 
-| Variable                    | Purpose                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_APP_NAME`      | Public-facing application name.                                                   |
-| `NEXT_PUBLIC_APP_URL`       | Public base URL of the deployed app.                                              |
-| `SUPABASE_URL`              | Supabase project URL.                                                             |
-| `SUPABASE_ANON_KEY`         | Supabase public/anon key.                                                         |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only, full privileges).                         |
-| `DATABASE_URL`              | PostgreSQL connection string used by Prisma.                                      |
-| `RESEND_API_KEY`            | Resend API key for transactional email delivery.                                  |
-| `EMAIL_FROM`                | The "from" address every transactional email is sent as.                          |
-| `R2_ACCOUNT_ID`             | Cloudflare account id (used to construct the R2 endpoint, never hardcoded).       |
-| `R2_ENDPOINT`               | S3-compatible endpoint URL for the Cloudflare R2 bucket.                          |
-| `R2_ACCESS_KEY_ID`          | R2 access key id.                                                                 |
-| `R2_SECRET_ACCESS_KEY`      | R2 secret access key.                                                             |
-| `R2_BUCKET`                 | Name of the private R2 bucket generated audio is stored in.                       |
-| `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics generation).                        |
-| `MUREKA_API_KEY`            | Mureka API key — the active music provider (see `PROJECT_MANIFEST.md`).           |
-| `ADMIN_EMAIL`               | Email address used to access/notify the admin panel.                              |
-| `ADMIN_SESSION_SECRET`      | Long, random secret (32+ chars) used to sign admin session cookies.               |
-| `CAMPAIGN_NAME`             | Display name of the current campaign.                                             |
-| `MAX_LYRIC_ATTEMPTS`        | Number of lyric attempts allowed per lead (see `docs/Product/Business_Rules.md`). |
-| `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.                                                |
+| Variable                    | Purpose                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_APP_NAME`      | Public-facing application name.                                                                                                             |
+| `NEXT_PUBLIC_APP_URL`       | Public base URL of the deployed app.                                                                                                        |
+| `SUPABASE_URL`              | Supabase project URL.                                                                                                                       |
+| `SUPABASE_ANON_KEY`         | Supabase public/anon key.                                                                                                                   |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only, full privileges).                                                                                   |
+| `DATABASE_URL`              | PostgreSQL connection string the **application** uses: the Supabase pooler in **transaction mode**, port 6543.                              |
+| `DIRECT_URL`                | PostgreSQL connection string every **Prisma CLI** command uses: **session mode**, port 5432 (or the project's direct connection). Required. |
+| `RESEND_API_KEY`            | Resend API key for transactional email delivery.                                                                                            |
+| `EMAIL_FROM`                | The "from" address every transactional email is sent as.                                                                                    |
+| `R2_ACCOUNT_ID`             | Cloudflare account id (used to construct the R2 endpoint, never hardcoded).                                                                 |
+| `R2_ENDPOINT`               | S3-compatible endpoint URL for the Cloudflare R2 bucket.                                                                                    |
+| `R2_ACCESS_KEY_ID`          | R2 access key id.                                                                                                                           |
+| `R2_SECRET_ACCESS_KEY`      | R2 secret access key.                                                                                                                       |
+| `R2_BUCKET`                 | Name of the private R2 bucket generated audio is stored in.                                                                                 |
+| `CLAUDE_API_KEY`            | Anthropic Claude API key (moderation + lyrics generation).                                                                                  |
+| `MUREKA_API_KEY`            | Mureka API key — the active music provider (see `PROJECT_MANIFEST.md`).                                                                     |
+| `ADMIN_EMAIL`               | Email address used to access/notify the admin panel.                                                                                        |
+| `ADMIN_SESSION_SECRET`      | Long, random secret (32+ chars) used to sign admin session cookies.                                                                         |
+| `CAMPAIGN_NAME`             | Display name of the current campaign.                                                                                                       |
+| `MAX_LYRIC_ATTEMPTS`        | Number of lyric attempts allowed per lead (see `docs/Product/Business_Rules.md`).                                                           |
+| `CAMPAIGN_MAX_SONGS`        | Campaign-wide song generation cap.                                                                                                          |
 
 ### Song generation pipeline (RC-2 — Production Hardening)
 
@@ -86,7 +87,8 @@ This document describes how environment variables and configuration are managed.
 - Only variables prefixed `NEXT_PUBLIC_` are ever exposed to the browser; every other variable stays server-only, matching how `src/config/env.ts` and `src/config/app.ts` are structured.
 - Rotating a key (Claude, Mureka, Resend, Supabase) only requires updating it in Vercel's environment configuration — no code change.
 - **`CRON_SECRET` (RC-2 — Production Hardening)**: set this in Vercel's project settings like any other secret, so the deployed application can validate it. Deploying without `CRON_SECRET` set fails application startup entirely (see `src/config/env.ts`), so this cannot be silently skipped. The same secret also protects `GET /api/internal/health`.
-- **Database migrations are not applied automatically by any build step or CI workflow** — `prisma generate` (the `postinstall` script) only regenerates the Prisma Client's TypeScript types from `prisma/schema.prisma`; it never touches the database. `npx prisma migrate deploy` must be run manually against `DATABASE_URL` for every deployment that includes new migrations (HOTFIX-DB-1 — a skipped migration is exactly what caused a production `P2021` error). See README.md's "Deployment Checklist" for the full manual procedure.
+- **Database migrations are not applied automatically by any build step or CI workflow** — `prisma generate` (the `postinstall` script) only regenerates the Prisma Client's TypeScript types from `prisma/schema.prisma`; it never touches the database. `npx prisma migrate deploy` must be run manually against **`DIRECT_URL`** for every deployment that includes new migrations (HOTFIX-DB-1 — a skipped migration is exactly what caused a production `P2021` error). See README.md's "Deployment Checklist" for the full manual procedure.
+- **Two connection strings, two pooling modes (2026-11-22).** The application connects through the Supabase pooler in **transaction mode** (`DATABASE_URL`, port 6543), where a backend connection is returned at every transaction boundary — the only mode a serverless deployment can use without exhausting the pool. Every Prisma CLI command connects through **session mode** (`DIRECT_URL`, port 5432), because `migrate`, `db push` and `db seed` depend on session state (advisory locks above all) that transaction mode discards. Host and user are identical in both; only the port differs. `prisma/directUrl.ts` refuses to run a CLI command when `DIRECT_URL` is unset or itself points at 6543 — deliberately with no fallback, since a migration applied through transaction mode can be left half-applied. `prisma generate` needs no database and keeps working without `DIRECT_URL`, so a missing variable can never fail a build.
 
 ### External Scheduler (GitHub Actions)
 

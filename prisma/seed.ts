@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { CampaignStatus, PrismaClient } from "../src/generated/prisma/client";
+import { resolveDirectUrl } from "./directUrl";
 
 /**
  * Production seed for Version 1 — creates only the static catalog records
@@ -56,7 +57,11 @@ const MOODS = [
 ] as const;
 
 async function main(): Promise<void> {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  // The CLI's connection, never the application's: seeding writes, and it
+  // runs through `prisma db seed` alongside `migrate`. `resolveDirectUrl`
+  // refuses a transaction-mode URL for the same reasons it refuses one for
+  // a migration — see prisma/directUrl.ts.
+  const adapter = new PrismaPg({ connectionString: resolveDirectUrl() });
   const prisma = new PrismaClient({ adapter });
 
   const name = process.env.CAMPAIGN_NAME || "Mi primera canción";
